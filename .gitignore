@@ -1,0 +1,95 @@
+# ===================
+# Global Ignores
+# ===================
+.DS_Store
+*.pem
+.env*
+*-debug.log*
+
+# ===================
+# Frontend (Next.js)
+# ===================
+
+# Dependencies
+frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.*
+frontend/.yarn/*
+!frontend/.yarn/patches
+!frontend/.yarn/plugins
+!frontend/.yarn/releases
+!frontend/.yarn/versions
+
+# Testing
+frontend/coverage/
+
+# Next.js
+frontend/.next/
+frontend/out/
+
+# Production
+frontend/build/
+
+# Debug logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+
+# Vercel
+frontend/.vercel
+
+# TypeScript
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+
+# ===================
+# Backend (Django)
+# ===================
+
+# Python bytecode
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.py[cod]
+backend/**/*.py[cod]
+**/backend/__pycache__/
+**/__pycache__/
+*.pyc
+
+# Virtual environment
+backend/.venv/
+backend/venv/
+backend/env/
+
+# Database
+backend/db.sqlite3
+backend/*.sqlite3
+
+# Static and media files
+backend/staticfiles/
+backend/static/
+backend/media/
+
+# Django stuff
+backend/*.log
+backend/local_settings.py
+
+# Celery
+backend/celerybeat-schedule
+backend/celerybeat.pid
+
+# Coverage
+backend/.coverage
+backend/htmlcov/
+
+# pytest
+backend/.pytest_cache/
+
+# mypy
+backend/.mypy_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

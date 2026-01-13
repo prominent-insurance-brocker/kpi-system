@@ -1,43 +1,139 @@
+from datetime import timedelta
+
 from django.conf import settings
-from django.contrib.auth import authenticate
+from django.core.mail import send_mail
 from django.middleware.csrf import get_token
-from rest_framework import status
+from django.utils import timezone
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .serializers import UserSerializer
+from roles.permissions import IsAdminUser
+from .models import CustomUser, MagicLink
+from .serializers import UserSerializer, UserAdminSerializer
 
 
-class LoginView(APIView):
+class RequestMagicLinkView(APIView):
+    """Request a magic link for passwordless authentication."""
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email = request.data.get('email')
-        password = request.data.get('password')
+        email = request.data.get('email', '').lower().strip()
 
-        if not email or not password:
+        if not email:
             return Response(
-                {'error': 'Please provide both email and password'},
+                {'error': 'Email is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        user = authenticate(request, username=email, password=password)
+        # Always return success message to prevent email enumeration
+        success_message = {'message': 'If an account exists with this email, a login link has been sent.'}
 
-        if user is None:
+        try:
+            user = CustomUser.objects.get(email=email)
+        except CustomUser.DoesNotExist:
+            # Don't reveal if email exists
+            return Response(success_message)
+
+        if not user.is_active:
             return Response(
-                {'error': 'Invalid credentials'},
-                status=status.HTTP_401_UNAUTHORIZED
+                {
+                    'error': 'This account has been deactivated. Please contact an administrator.',
+                    'redirect_after': 5
+                },
+                status=status.HTTP_403_FORBIDDEN
             )
 
-        refresh = RefreshToken.for_user(user)
+        # Create magic link
+        magic_link = MagicLink.create_for_user(user)
+
+        # Build magic link URL
+        link_url = f"{settings.FRONTEND_URL}/auth/verify?token={magic_link.token}"
+
+        # Send email
+        try:
+            send_mail(
+                subject='Your login link for KPI System',
+                message=f"""Hi {user.get_short_name()},
+
+Click the link below to login to your account:
+{link_url}
+
+This link expires in 15 minutes.
+
+If you didn't request this, please ignore this email.""",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+        except Exception as e:
+            return Response(
+                {'error': 'Failed to send email. Please try again.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response(success_message)
+
+
+class VerifyMagicLinkView(APIView):
+    """Verify a magic link token and issue JWT tokens."""
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        token = request.query_params.get('token')
+        remember_me = request.query_params.get('remember_me', 'false').lower() == 'true'
+
+        if not token:
+            return Response(
+                {'error': 'Token is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            magic_link = MagicLink.objects.get(token=token)
+        except MagicLink.DoesNotExist:
+            return Response(
+                {'error': 'Invalid or expired link. Please request a new one.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not magic_link.is_valid():
+            return Response(
+                {'error': 'Link expired or already used. Please request a new one.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not magic_link.user.is_active:
+            return Response(
+                {
+                    'error': 'This account has been deactivated. Please contact an administrator.',
+                    'redirect_after': 5
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Mark token as used
+        magic_link.is_used = True
+        magic_link.save()
+
+        # Update last_login
+        magic_link.user.last_login = timezone.now()
+        magic_link.user.save(update_fields=['last_login'])
+
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(magic_link.user)
         access_token = str(refresh.access_token)
         refresh_token = str(refresh)
 
+        # Set token lifetimes based on remember_me
+        refresh_lifetime = 30 if remember_me else 7  # days
+
         response = Response({
             'message': 'Login successful',
-            'user': UserSerializer(user).data
+            'user': UserSerializer(magic_link.user).data
         })
 
         # Set HTTP-only cookies
@@ -45,7 +141,7 @@ class LoginView(APIView):
             key='access_token',
             value=access_token,
             httponly=True,
-            secure=settings.DEBUG is False,  # Secure in production
+            secure=settings.DEBUG is False,
             samesite='Lax',
             max_age=settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds(),
         )
@@ -55,13 +151,14 @@ class LoginView(APIView):
             httponly=True,
             secure=settings.DEBUG is False,
             samesite='Lax',
-            max_age=settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds(),
+            max_age=timedelta(days=refresh_lifetime).total_seconds(),
         )
 
         return response
 
 
 class LogoutView(APIView):
+    """Logout and clear JWT cookies."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -72,6 +169,7 @@ class LogoutView(APIView):
 
 
 class RefreshTokenView(APIView):
+    """Refresh the access token using the refresh token cookie."""
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -105,6 +203,7 @@ class RefreshTokenView(APIView):
 
 
 class UserDetailView(APIView):
+    """Get the current authenticated user's details."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -113,7 +212,59 @@ class UserDetailView(APIView):
 
 
 class CSRFTokenView(APIView):
+    """Get a CSRF token for form submissions."""
     permission_classes = [AllowAny]
 
     def get(self, request):
         return Response({'csrfToken': get_token(request)})
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    """ViewSet for user management (admin only)."""
+    queryset = CustomUser.objects.all().select_related('role')
+    serializer_class = UserAdminSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        # Optional filtering
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+        return queryset.order_by('-date_joined')
+
+    @action(detail=True, methods=['post'])
+    def activate(self, request, pk=None):
+        """Activate a user account."""
+        user = self.get_object()
+        user.is_active = True
+        user.save(update_fields=['is_active'])
+        return Response({'message': 'User activated successfully'})
+
+    @action(detail=True, methods=['post'])
+    def deactivate(self, request, pk=None):
+        """Deactivate a user account."""
+        user = self.get_object()
+
+        # Prevent self-deactivation
+        if user == request.user:
+            return Response(
+                {'error': 'You cannot deactivate your own account'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.is_active = False
+        user.save(update_fields=['is_active'])
+        return Response({'message': 'User deactivated successfully'})
+
+    def destroy(self, request, *args, **kwargs):
+        """Prevent self-deletion."""
+        instance = self.get_object()
+
+        if instance == request.user:
+            return Response(
+                {'error': 'You cannot delete your own account'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return super().destroy(request, *args, **kwargs)

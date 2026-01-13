@@ -63,13 +63,47 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
-// Auth API functions
+// Types
+export interface Role {
+  id: number;
+  name: string;
+  data_visibility: 'all' | 'own';
+  module_permissions: string[];
+}
+
+export interface RoleFull {
+  id: number;
+  name: string;
+  description: string;
+  data_visibility: 'all' | 'own';
+  permissions: { module: string }[];
+  user_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface User {
   id: number;
   email: string;
   first_name: string;
   last_name: string;
   date_joined: string;
+  is_staff: boolean;
+  is_active: boolean;
+  role?: Role;
+}
+
+export interface UserAdmin {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+  is_staff: boolean;
+  is_active: boolean;
+  role_id: number | null;
+  role_name: string | null;
+  date_joined: string;
+  last_login: string | null;
 }
 
 export interface LoginResponse {
@@ -77,10 +111,42 @@ export interface LoginResponse {
   user: User;
 }
 
-export async function login(email: string, password: string): Promise<ApiResponse<LoginResponse>> {
-  return fetchApi<LoginResponse>('/api/auth/login/', {
+export interface MagicLinkResponse {
+  message: string;
+  error?: string;
+  redirect_after?: number;
+}
+
+export interface PaginatedResponse<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
+export interface ModuleInfo {
+  key: string;
+  label: string;
+}
+
+// Magic Link API functions
+export async function requestMagicLink(email: string): Promise<ApiResponse<MagicLinkResponse>> {
+  return fetchApi<MagicLinkResponse>('/api/auth/magic-link/request/', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function verifyMagicLink(
+  token: string,
+  rememberMe: boolean
+): Promise<ApiResponse<LoginResponse>> {
+  const params = new URLSearchParams({
+    token,
+    remember_me: rememberMe.toString(),
+  });
+  return fetchApi<LoginResponse>(`/api/auth/magic-link/verify/?${params}`, {
+    method: 'GET',
   });
 }
 
@@ -93,3 +159,115 @@ export async function logout(): Promise<ApiResponse<{ message: string }>> {
 export async function getCurrentUser(): Promise<ApiResponse<User>> {
   return fetchApi<User>('/api/auth/user/');
 }
+
+// Admin - Users API
+export async function getUsers(params?: URLSearchParams): Promise<ApiResponse<PaginatedResponse<UserAdmin>>> {
+  const query = params ? `?${params.toString()}` : '';
+  return fetchApi<PaginatedResponse<UserAdmin>>(`/api/auth/users/${query}`);
+}
+
+export async function createUser(userData: Partial<UserAdmin>): Promise<ApiResponse<UserAdmin>> {
+  return fetchApi<UserAdmin>('/api/auth/users/', {
+    method: 'POST',
+    body: JSON.stringify(userData),
+  });
+}
+
+export async function updateUser(id: number, userData: Partial<UserAdmin>): Promise<ApiResponse<UserAdmin>> {
+  return fetchApi<UserAdmin>(`/api/auth/users/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(userData),
+  });
+}
+
+export async function deleteUser(id: number): Promise<ApiResponse<void>> {
+  return fetchApi<void>(`/api/auth/users/${id}/`, {
+    method: 'DELETE',
+  });
+}
+
+export async function activateUser(id: number): Promise<ApiResponse<{ message: string }>> {
+  return fetchApi<{ message: string }>(`/api/auth/users/${id}/activate/`, {
+    method: 'POST',
+  });
+}
+
+export async function deactivateUser(id: number): Promise<ApiResponse<{ message: string }>> {
+  return fetchApi<{ message: string }>(`/api/auth/users/${id}/deactivate/`, {
+    method: 'POST',
+  });
+}
+
+// Admin - Roles API
+export async function getRoles(params?: URLSearchParams): Promise<ApiResponse<PaginatedResponse<RoleFull>>> {
+  const query = params ? `?${params.toString()}` : '';
+  return fetchApi<PaginatedResponse<RoleFull>>(`/api/roles/${query}`);
+}
+
+export async function getRolesSimple(): Promise<ApiResponse<{ id: number; name: string }[]>> {
+  const result = await fetchApi<PaginatedResponse<{ id: number; name: string }>>('/api/roles/?simple=true');
+  if (result.data) {
+    return { data: result.data.results };
+  }
+  return { error: result.error };
+}
+
+export async function getRole(id: number): Promise<ApiResponse<RoleFull>> {
+  return fetchApi<RoleFull>(`/api/roles/${id}/`);
+}
+
+export async function createRole(roleData: {
+  name: string;
+  description?: string;
+  data_visibility: 'all' | 'own';
+  module_permissions: string[];
+}): Promise<ApiResponse<RoleFull>> {
+  return fetchApi<RoleFull>('/api/roles/', {
+    method: 'POST',
+    body: JSON.stringify(roleData),
+  });
+}
+
+export async function updateRole(
+  id: number,
+  roleData: {
+    name?: string;
+    description?: string;
+    data_visibility?: 'all' | 'own';
+    module_permissions?: string[];
+  }
+): Promise<ApiResponse<RoleFull>> {
+  return fetchApi<RoleFull>(`/api/roles/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(roleData),
+  });
+}
+
+export async function deleteRole(id: number): Promise<ApiResponse<void>> {
+  return fetchApi<void>(`/api/roles/${id}/`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getModules(): Promise<ApiResponse<{ modules: ModuleInfo[] }>> {
+  return fetchApi<{ modules: ModuleInfo[] }>('/api/roles/modules/');
+}
+
+// Get users for filter dropdown (simple list)
+export async function getUsersForFilter(): Promise<ApiResponse<{ id: number; email: string; first_name: string; last_name: string }[]>> {
+  const result = await fetchApi<PaginatedResponse<UserAdmin>>('/api/auth/users/?page_size=1000');
+  if (result.data) {
+    return {
+      data: result.data.results.map(u => ({
+        id: u.id,
+        email: u.email,
+        first_name: u.first_name,
+        last_name: u.last_name,
+      }))
+    };
+  }
+  return { error: result.error };
+}
+
+// Generic fetch helper for other API calls
+export { fetchApi, API_BASE_URL };

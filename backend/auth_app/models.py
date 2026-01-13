@@ -1,5 +1,8 @@
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
+from django.utils import timezone
+from datetime import timedelta
+import secrets
 
 
 class CustomUserManager(BaseUserManager):
@@ -31,6 +34,13 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)
+    role = models.ForeignKey(
+        'roles.Role',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='users'
+    )
 
     objects = CustomUserManager()
 
@@ -45,3 +55,37 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     def get_short_name(self):
         return self.first_name or self.email.split('@')[0]
+
+
+class MagicLink(models.Model):
+    """Model for passwordless magic link authentication tokens."""
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name='magic_links'
+    )
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"MagicLink for {self.user.email}"
+
+    @classmethod
+    def create_for_user(cls, user):
+        """Create a new magic link for a user, invalidating all previous unused tokens."""
+        # Invalidate all previous unused tokens for this user
+        cls.objects.filter(user=user, is_used=False).update(is_used=True)
+
+        # Create new token with 15-minute expiry
+        token = secrets.token_urlsafe(48)
+        expires_at = timezone.now() + timedelta(minutes=15)
+        return cls.objects.create(user=user, token=token, expires_at=expires_at)
+
+    def is_valid(self):
+        """Check if the token is still valid (not used and not expired)."""
+        return not self.is_used and self.expires_at > timezone.now()

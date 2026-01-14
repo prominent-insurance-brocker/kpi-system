@@ -1,6 +1,8 @@
 services:
   db:
     image: postgres:15-alpine
+    container_name: kpi-db
+    hostname: db
     restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -14,9 +16,13 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    networks:
+      - kpi-network
 
   backend:
     build: ./backend
+    container_name: kpi-backend
+    hostname: backend
     restart: unless-stopped
     expose:
       - "8000"
@@ -38,19 +44,28 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "python manage.py migrate &&
-             gunicorn --bind 0.0.0.0:8000 --workers 2 backend.wsgi:application"
+      sh -c "sleep 5 && python manage.py migrate && gunicorn --bind 0.0.0.0:8000 --workers 2 backend.wsgi:application"
+    networks:
+      - kpi-network
 
   frontend:
     build:
       context: ./frontend
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    container_name: kpi-frontend
+    hostname: frontend
     restart: unless-stopped
     expose:
       - "3000"
     depends_on:
       - backend
+    networks:
+      - kpi-network
+
+networks:
+  kpi-network:
+    driver: bridge
 
 volumes:
   postgres_data:

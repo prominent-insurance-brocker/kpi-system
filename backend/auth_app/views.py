@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from django.conf import settings
@@ -14,6 +15,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from roles.permissions import IsAdminUser
 from .models import CustomUser, MagicLink
 from .serializers import UserSerializer, UserAdminSerializer
+
+logger = logging.getLogger(__name__)
 
 
 class RequestMagicLinkView(APIView):
@@ -55,6 +58,9 @@ class RequestMagicLinkView(APIView):
 
         # Send email
         try:
+            logger.info(f"Attempting to send magic link email to {user.email}")
+            logger.info(f"Using EMAIL_HOST: {settings.EMAIL_HOST}, EMAIL_HOST_USER: {settings.EMAIL_HOST_USER}")
+
             send_mail(
                 subject='Your login link for KPI System',
                 message=f"""Hi {user.get_short_name()},
@@ -69,9 +75,11 @@ If you didn't request this, please ignore this email.""",
                 recipient_list=[user.email],
                 fail_silently=False,
             )
+            logger.info(f"Magic link email sent successfully to {user.email}")
         except Exception as e:
+            logger.error(f"Failed to send email to {user.email}: {str(e)}", exc_info=True)
             return Response(
-                {'error': 'Failed to send email. Please try again.'},
+                {'error': f'Failed to send email: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

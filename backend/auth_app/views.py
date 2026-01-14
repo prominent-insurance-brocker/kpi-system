@@ -79,7 +79,7 @@ If you didn't request this, please ignore this email.""",
         except Exception as e:
             logger.error(f"Failed to send email to {user.email}: {str(e)}", exc_info=True)
             return Response(
-                {'error': f'Failed to send email: {str(e)}'},
+                {'error': f'Failed to send email. Please check email and try again.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

@@ -44,7 +44,7 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "sleep 5 && python manage.py migrate && gunicorn --bind 0.0.0.0:8000 --workers 2 backend.wsgi:application"
+      sh -c "sleep 5 && python manage.py migrate && gunicorn --bind 0.0.0.0:8000 --workers 2 --access-logfile - --error-logfile - --capture-output --log-level info backend.wsgi:application"
     networks:
       - kpi-network
 

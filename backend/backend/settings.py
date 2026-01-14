@@ -246,11 +246,19 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'KPI System <noreply@kpisystem.com>')
 
-# Use SMTP backend if EMAIL_HOST is configured, otherwise use console
-if EMAIL_HOST:
+# EMAIL_CONSOLE_MODE=true  -> Magic links printed to console/logs (for testing)
+# EMAIL_CONSOLE_MODE=false -> Actual emails sent via SMTP (for production)
+EMAIL_CONSOLE_MODE = os.environ.get('EMAIL_CONSOLE_MODE', 'false').lower() == 'true'
+
+if EMAIL_CONSOLE_MODE:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    print("EMAIL MODE: Console (magic links will appear in logs)")
+elif EMAIL_HOST:
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    print(f"EMAIL MODE: SMTP ({EMAIL_HOST})")
 else:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    print("EMAIL MODE: Console (EMAIL_HOST not configured)")
 
 # Frontend URL for magic link generation
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')

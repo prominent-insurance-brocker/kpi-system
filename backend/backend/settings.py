@@ -29,7 +29,12 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dev-key-change-in-pro
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')]
+
+# Trust proxy headers (needed when behind Traefik/nginx)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
 
 
 # Application definition
@@ -176,12 +181,24 @@ SIMPLE_JWT = {
 
 
 # CORS Settings
-CORS_ALLOWED_ORIGINS = [
-    origin.strip() for origin in os.environ.get(
-        'CORS_ALLOWED_ORIGINS',
-        'http://localhost:3000,http://127.0.0.1:3000'
-    ).split(',') if origin.strip()
-]
+_cors_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+
+if _cors_origins:
+    CORS_ALLOWED_ORIGINS = [
+        origin.strip() for origin in _cors_origins.split(',') if origin.strip()
+    ]
+    CORS_ALLOW_ALL_ORIGINS = False
+else:
+    # Fallback for development
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+    ]
+    CORS_ALLOW_ALL_ORIGINS = False
+
+# TEMPORARY: Allow all origins to debug CORS issue
+# TODO: Remove this after confirming CORS works
+CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOW_CREDENTIALS = True  # Allow cookies to be sent with cross-origin requests
 
@@ -205,6 +222,11 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# Log CORS configuration for debugging
+print(f"DEBUG: {DEBUG}")
+print(f"CORS_ALLOWED_ORIGINS: {CORS_ALLOWED_ORIGINS if not CORS_ALLOW_ALL_ORIGINS else 'ALL'}")
+print(f"CORS_ALLOW_ALL_ORIGINS: {CORS_ALLOW_ALL_ORIGINS}")
 
 
 # CSRF Settings for cross-origin requests

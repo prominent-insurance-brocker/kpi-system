@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { MetabaseFrame } from '@/components/metabase-frame';
 import { API_BASE_URL } from '@/app/lib/api';
 
 interface DashboardStats {
@@ -167,6 +168,18 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+      </div>
+      {/* Analytics Section */}
+      <div>
+        <h2 className="text-xl font-semibold mb-4">Analytics</h2>
+        <Card className="shadow-none">
+          <CardContent className="p-0">
+             <MetabaseFrame 
+               dashboardId={parseInt(process.env.NEXT_PUBLIC_METABASE_DASHBOARD_ID || '1')} 
+               className="w-full h-[800px] rounded-lg" 
+             />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

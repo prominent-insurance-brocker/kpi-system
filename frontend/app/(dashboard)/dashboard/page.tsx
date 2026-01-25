@@ -48,7 +48,7 @@ export default function DashboardPage() {
       <div>
         <h2 className="text-xl font-semibold mb-4">General</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
+          <Card className=' shadow-none'>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 General New - Quotations
@@ -58,7 +58,7 @@ export default function DashboardPage() {
               <div className="text-2xl font-bold">{stats?.general_new.total_quotations || 0}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className=' shadow-none'  >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 General New - Converted
@@ -68,7 +68,7 @@ export default function DashboardPage() {
               <div className="text-2xl font-bold">{stats?.general_new.total_converted || 0}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className=' shadow-none'  >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 General Renewal - Quotations
@@ -78,7 +78,7 @@ export default function DashboardPage() {
               <div className="text-2xl font-bold">{stats?.general_renewal.total_quotations || 0}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className=' shadow-none'  >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 General Renewal - Converted
@@ -95,7 +95,7 @@ export default function DashboardPage() {
       <div>
         <h2 className="text-xl font-semibold mb-4">Motor</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
+          <Card className=' shadow-none'  >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Motor New - Quotations
@@ -105,7 +105,7 @@ export default function DashboardPage() {
               <div className="text-2xl font-bold">{stats?.motor_new.total_quotations || 0}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className=' shadow-none'  >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Motor Renewal - Quotations
@@ -115,7 +115,7 @@ export default function DashboardPage() {
               <div className="text-2xl font-bold">{stats?.motor_renewal.total_quotations || 0}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className=' shadow-none'  >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Motor Renewal - Retention
@@ -132,7 +132,7 @@ export default function DashboardPage() {
       <div>
         <h2 className="text-xl font-semibold mb-4">Claims</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
+          <Card className=' shadow-none'  >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Registered Claims
@@ -142,7 +142,7 @@ export default function DashboardPage() {
               <div className="text-2xl font-bold">{stats?.motor_claim.total_registered || 0}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className=' shadow-none'  >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Closed Claims
@@ -154,7 +154,7 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className=' shadow-none'  >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Pending Cases

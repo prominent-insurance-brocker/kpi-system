@@ -15,14 +15,6 @@ import {
 } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -30,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { DataTable } from '@/app/components/DataTable';
 import {
   getRoles,
   createRole,
@@ -70,18 +63,28 @@ export default function RolesPage() {
   const [editingRole, setEditingRole] = useState<RoleFull | null>(null);
   const [error, setError] = useState('');
 
+  // Pagination state
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
   const fetchRoles = async () => {
     setIsLoading(true);
-    const result = await getRoles();
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('page_size', String(pageSize));
+
+    const result = await getRoles(params);
     if (result.data) {
       setRoles(result.data.results || []);
+      setTotalCount(result.data.count || 0);
     }
     setIsLoading(false);
   };
 
   useEffect(() => {
     fetchRoles();
-  }, []);
+  }, [page, pageSize]); // Re-fetch when page or pageSize changes
 
   const handleSave = async (formData: {
     name: string;
@@ -122,6 +125,66 @@ export default function RolesPage() {
     }
   };
 
+  const columns = [
+    { key: 'name', header: 'Name', render: (role: RoleFull) => <div className="font-medium">{role.name}</div> },
+    { 
+      key: 'description', 
+      header: 'Description', 
+      render: (role: RoleFull) => <div className="max-w-xs truncate">{role.description || '-'}</div> 
+    },
+    {
+      key: 'data_visibility',
+      header: 'Data Access',
+      render: (role: RoleFull) => (
+        <Badge variant={role.data_visibility === 'all' ? 'default' : 'secondary'}>
+          {role.data_visibility === 'all' ? 'All Data' : 'Own Data'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'permissions',
+      header: 'Modules',
+      render: (role: RoleFull) => role.permissions.length,
+    },
+    {
+      key: 'user_count',
+      header: 'Users',
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (role: RoleFull) => (
+        <div className="flex justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => {
+                  setEditingRole(role);
+                  setError('');
+                  setIsModalOpen(true);
+                }}
+              >
+                <Pencil className="h-4 w-4 mr-2" /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleDelete(role)}
+                className="text-destructive"
+                disabled={role.user_count > 0}
+              >
+                <Trash2 className="h-4 w-4 mr-2" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -140,76 +203,20 @@ export default function RolesPage() {
         </Button>
       </div>
 
-      <div className="border rounded-lg">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Data Access</TableHead>
-              <TableHead>Modules</TableHead>
-              <TableHead>Users</TableHead>
-              <TableHead className="w-[70px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  Loading...
-                </TableCell>
-              </TableRow>
-            ) : roles.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  No roles found
-                </TableCell>
-              </TableRow>
-            ) : (
-              roles.map((role) => (
-                <TableRow key={role.id}>
-                  <TableCell className="font-medium">{role.name}</TableCell>
-                  <TableCell className="max-w-xs truncate">{role.description || '-'}</TableCell>
-                  <TableCell>
-                    <Badge variant={role.data_visibility === 'all' ? 'default' : 'secondary'}>
-                      {role.data_visibility === 'all' ? 'All Data' : 'Own Data'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{role.permissions.length}</TableCell>
-                  <TableCell>{role.user_count}</TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setEditingRole(role);
-                            setError('');
-                            setIsModalOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4 mr-2" /> Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDelete(role)}
-                          className="text-destructive"
-                          disabled={role.user_count > 0}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" /> Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable
+        columns={columns}
+        data={roles}
+        totalCount={totalCount}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        isLoading={isLoading}
+        height="h-[calc(100vh-190px)]"
+      />
 
       <Dialog
         open={isModalOpen}
@@ -219,8 +226,8 @@ export default function RolesPage() {
           setError('');
         }}
       >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl p-0">
+          <DialogHeader className="p-4 border-b border-[#E4E4E4]">
             <DialogTitle>{editingRole ? 'Edit Role' : 'Add New Role'}</DialogTitle>
           </DialogHeader>
           <RoleForm
@@ -324,7 +331,7 @@ function RoleForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4 px-4">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
           {error}
@@ -351,25 +358,25 @@ function RoleForm({
         />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2 ">
         <Label>Data Visibility</Label>
         <RadioGroup
           value={formData.data_visibility}
           onValueChange={(value: 'all' | 'own') =>
             setFormData({ ...formData, data_visibility: value })
           }
-          className="flex gap-6 mt-2"
+          className="flex flex-col gap-4 mt-4 bg-[#F9F9F9] p-3 rounded-lg border border-[#E4E4E4]"
         >
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="own" id="own" />
             <Label htmlFor="own" className="font-normal">
-              Own data only
+              See only their own data
             </Label>
           </div>
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="all" id="all" />
             <Label htmlFor="all" className="font-normal">
-              All data
+              See all data uploaded by everyone
             </Label>
           </div>
         </RadioGroup>
@@ -377,7 +384,7 @@ function RoleForm({
 
       <div>
         <Label className="mb-3 block">Module Permissions</Label>
-        <div className="border rounded-lg p-4 space-y-4">
+        <div className="border rounded-lg p-4 space-y-4 bg-[#F9F9F9]">
           {MODULE_CATEGORIES.map((category) => {
             const state = getCategoryState(category);
             return (
@@ -414,7 +421,7 @@ function RoleForm({
         </div>
       </div>
 
-      <DialogFooter>
+      <DialogFooter className='py-4'>
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>

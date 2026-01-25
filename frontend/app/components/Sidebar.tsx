@@ -87,7 +87,7 @@ export function Sidebar() {
           <Link
             href={item.href}
             className={cn(
-              'flex items-center gap-2 py-2 pr-4 rounded-md text-sm font-medium h-9',
+              'flex items-center gap-2 py-2 px-3 rounded-md text-sm font-medium h-9',
               isActive
                 ? 'bg-accent text-primary font-semibold'
                 : 'text-[#343434] hover:bg-accent'
@@ -100,7 +100,7 @@ export function Sidebar() {
           <button
             onClick={() => toggleExpand(item.name)}
             className={cn(
-              'flex items-center gap-2 py-2 pr-4 rounded-md text-sm font-medium text-[#343434] hover:bg-accent h-9 w-full'
+              'flex items-center gap-2 py-2 px-3 rounded-md text-sm font-medium text-[#343434] hover:bg-accent h-9 w-full'
             )}
           >
             {Icon && <Icon className="h-4 w-4" />}
@@ -115,7 +115,7 @@ export function Sidebar() {
           </button>
         )}
         {hasChildren && isExpanded && (
-          <div className="flex pl-6 gap-3">
+          <div className="flex pl-5 gap-3">
             {/* Vertical divider line */}
             <div className="w-px bg-[#D4D4D4] self-stretch" />
             {/* Sub-menu items */}
@@ -147,8 +147,8 @@ export function Sidebar() {
   return (
     <aside className="w-[274px] bg-white border-r border-[#E4E4E4] h-screen sticky top-0 flex flex-col pb-12">
       {/* Logo section */}
-      <div className="px-4 py-7">
-        <h1 className="text-xl font-bold text-[#141416]">KPI System</h1>
+      <div className="px-6 py-[0.97rem] border-b border-[#E4E4E4] ">
+        <h1 className="text-2xl font-bold text-[#141416]">KPI System</h1>
       </div>
       {/* Navigation */}
       <nav className="px-4 py-3 flex-1 overflow-y-auto">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,8 @@ function VerifyContent() {
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [error, setError] = useState('');
 
+  const verificationAttempted = useRef(false);
+
   useEffect(() => {
     const verify = async () => {
       if (!token) {
@@ -28,6 +30,10 @@ function VerifyContent() {
         setError('No token provided');
         return;
       }
+
+      // Prevent double execution in Strict Mode
+      if (verificationAttempted.current) return;
+      verificationAttempted.current = true;
 
       // Get rememberMe preference from localStorage
       const rememberMe = JSON.parse(localStorage.getItem('rememberMe') || 'false');

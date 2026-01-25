@@ -154,9 +154,11 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
       <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
         <div className="flex items-center gap-2">
           <Select value={currentPreset} onValueChange={handlePresetChange}>
-            <SelectTrigger className="w-[180px]">
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              <SelectValue>{getDisplayText()}</SelectValue>
+            <SelectTrigger className="w-[180px] shadow-none">
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-4 w-4" />
+                <SelectValue>{getDisplayText()}</SelectValue>
+              </div>
             </SelectTrigger>
             <SelectContent>
               {presets.map((preset) => (

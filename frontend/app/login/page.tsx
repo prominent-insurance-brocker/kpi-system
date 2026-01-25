@@ -103,7 +103,7 @@ export default function LoginPage() {
           <CardDescription>Enter your email to receive a magic link</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
                 {error}
@@ -122,7 +122,7 @@ export default function LoginPage() {
                 autoFocus
               />
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 mb-4">
               <Checkbox
                 id="remember"
                 checked={rememberMe}

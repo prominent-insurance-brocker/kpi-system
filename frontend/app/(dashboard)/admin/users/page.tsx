@@ -20,14 +20,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -35,6 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, MoreHorizontal, Pencil, Trash2, UserCheck, UserX } from 'lucide-react';
+import { DataTable } from '@/app/components/DataTable';
 import {
   getUsers,
   createUser,
@@ -56,11 +49,21 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<UserAdmin | null>(null);
   const [error, setError] = useState('');
 
+  // Pagination state
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
   const fetchUsers = async () => {
     setIsLoading(true);
-    const result = await getUsers();
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('page_size', String(pageSize));
+
+    const result = await getUsers(params);
     if (result.data) {
       setUsers(result.data.results || []);
+      setTotalCount(result.data.count || 0);
     }
     setIsLoading(false);
   };
@@ -75,7 +78,7 @@ export default function UsersPage() {
   useEffect(() => {
     fetchUsers();
     fetchRoles();
-  }, []);
+  }, [page, pageSize]); // Re-fetch when page or pageSize changes
 
   const handleSave = async (formData: Partial<UserAdmin>) => {
     setError('');
@@ -125,6 +128,95 @@ export default function UsersPage() {
     }
   };
 
+  const columns = [
+    {
+      key: 'name',
+      header: 'Name',
+      render: (user: UserAdmin) => (
+        <div className="font-medium">
+          {user.first_name} {user.last_name}
+          {user.is_staff && (
+            <Badge variant="secondary" className="ml-2">
+              Admin
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    { key: 'email', header: 'Email' },
+    {
+      key: 'role_name',
+      header: 'Role',
+      render: (user: UserAdmin) => user.role_name || '-'
+    },
+    {
+      key: 'is_active',
+      header: 'Status',
+      render: (user: UserAdmin) => (
+        <Badge variant={user.is_active ? 'default' : 'destructive'}>
+          {user.is_active ? 'Active' : 'Inactive'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'date_joined',
+      header: 'Joined',
+      render: (user: UserAdmin) => new Date(user.date_joined).toLocaleDateString(),
+    },
+    {
+      key: 'last_login',
+      header: 'Last Login',
+      render: (user: UserAdmin) => user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never',
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (user: UserAdmin) => (
+        <div className="flex justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => {
+                  setEditingUser(user);
+                  setError('');
+                  setIsModalOpen(true);
+                }}
+              >
+                <Pencil className="h-4 w-4 mr-2" /> Edit
+              </DropdownMenuItem>
+              {currentUser?.id !== user.id && (
+                <>
+                  <DropdownMenuItem onClick={() => handleToggleActive(user)}>
+                    {user.is_active ? (
+                      <>
+                        <UserX className="h-4 w-4 mr-2" /> Deactivate
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck className="h-4 w-4 mr-2" /> Activate
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleDelete(user)}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" /> Delete
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -143,101 +235,20 @@ export default function UsersPage() {
         </Button>
       </div>
 
-      <div className="border rounded-lg">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Joined</TableHead>
-              <TableHead>Last Login</TableHead>
-              <TableHead className="w-[70px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                  Loading...
-                </TableCell>
-              </TableRow>
-            ) : users.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                  No users found
-                </TableCell>
-              </TableRow>
-            ) : (
-              users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">
-                    {user.first_name} {user.last_name}
-                    {user.is_staff && (
-                      <Badge variant="secondary" className="ml-2">
-                        Admin
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.role_name || '-'}</TableCell>
-                  <TableCell>
-                    <Badge variant={user.is_active ? 'default' : 'destructive'}>
-                      {user.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{new Date(user.date_joined).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    {user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never'}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setEditingUser(user);
-                            setError('');
-                            setIsModalOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4 mr-2" /> Edit
-                        </DropdownMenuItem>
-                        {currentUser?.id !== user.id && (
-                          <>
-                            <DropdownMenuItem onClick={() => handleToggleActive(user)}>
-                              {user.is_active ? (
-                                <>
-                                  <UserX className="h-4 w-4 mr-2" /> Deactivate
-                                </>
-                              ) : (
-                                <>
-                                  <UserCheck className="h-4 w-4 mr-2" /> Activate
-                                </>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDelete(user)}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" /> Delete
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable
+        columns={columns}
+        data={users}
+        totalCount={totalCount}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        isLoading={isLoading}
+        height="h-[calc(100vh-190px)]"
+      />
 
       <Dialog
         open={isModalOpen}
@@ -246,9 +257,10 @@ export default function UsersPage() {
           setEditingUser(null);
           setError('');
         }}
+
       >
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className='p-0' >
+          <DialogHeader className='border-b border-[#E4E4E4] p-4'>
             <DialogTitle>{editingUser ? 'Edit User' : 'Add New User'}</DialogTitle>
           </DialogHeader>
           <UserForm
@@ -317,7 +329,7 @@ function UserForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4 px-4">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
           {error}
@@ -333,7 +345,7 @@ function UserForm({
           disabled={!!user}
         />
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <div className="space-y-2">
           <Label>First Name</Label>
           <Input
@@ -357,7 +369,7 @@ function UserForm({
             setFormData({ ...formData, role_id: value === 'none' ? null : Number(value) })
           }
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full shadow-none">
             <SelectValue placeholder="Select a role" />
           </SelectTrigger>
           <SelectContent>
@@ -370,7 +382,7 @@ function UserForm({
           </SelectContent>
         </Select>
       </div>
-      <div className="flex items-center space-x-4">
+      {/* <div className="flex items-center space-x-4">
         <div className="flex items-center space-x-2">
           <Checkbox
             id="is_staff"
@@ -387,8 +399,8 @@ function UserForm({
           />
           <Label htmlFor="is_active">Active</Label>
         </div>
-      </div>
-      <DialogFooter>
+      </div> */}
+      <DialogFooter className='py-4'>
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>

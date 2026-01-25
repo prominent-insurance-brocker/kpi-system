@@ -122,16 +122,19 @@ export default function MotorClaimPage() {
         <Button onClick={() => { setEditingEntry(null); setError(''); setIsModalOpen(true); }}><Plus className="h-4 w-4 mr-2" /> Add Entry</Button>
       </div>
       <div className="flex gap-4 items-end flex-wrap">
-        <DateRangeFilter
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          onChange={(from, to) => updateFilters({ dateFrom: from, dateTo: to, page: 1 })}
-        />
+        <div className="flex flex-col gap-2">
+          <Label>Date Range</Label>
+          <DateRangeFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onChange={(from, to) => updateFilters({ dateFrom: from, dateTo: to, page: 1 })}
+          />
+          </div>
         {canSeeAllData() && (
-          <div>
+          <div className="flex flex-col gap-2">
             <Label>User</Label>
             <Select value={userId || 'all'} onValueChange={(value) => updateFilters({ userId: value === 'all' ? '' : value, page: 1 })}>
-              <SelectTrigger className="w-[200px]"><SelectValue placeholder="All Users" /></SelectTrigger>
+              <SelectTrigger className="w-[200px] shadow-none"><SelectValue placeholder="All Users" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Users</SelectItem>
                 {users.map((user) => (
@@ -145,8 +148,8 @@ export default function MotorClaimPage() {
       </div>
       <DataTable columns={columns} data={entries} totalCount={totalCount} page={page} pageSize={pageSize} onPageChange={(p) => updateFilters({ page: p })} onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })} onEdit={(entry) => { setEditingEntry(entry); setError(''); setIsModalOpen(true); }} onDelete={handleDelete} canEdit={(entry) => entry.is_editable} isLoading={isLoading} />
       <Dialog open={isModalOpen} onOpenChange={() => { setIsModalOpen(false); setEditingEntry(null); setError(''); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editingEntry ? 'Edit Entry' : 'Add New Entry'}</DialogTitle></DialogHeader>
+        <DialogContent className='p-0'>
+          <DialogHeader className='border-b border-[#E4E4E4] p-4'><DialogTitle>{editingEntry ? 'Edit Entry' : 'Add New Entry'}</DialogTitle></DialogHeader>
           <EntryForm entry={editingEntry} onSave={handleSave} onClose={() => setIsModalOpen(false)} error={error} />
         </DialogContent>
       </Dialog>
@@ -163,10 +166,10 @@ function EntryForm({ entry, onSave, onClose, error }: { entry: MotorClaimEntry |
   }, [entry]);
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); setIsSubmitting(true); onSave(formData); setIsSubmitting(false); };
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4 p-4">
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">{error}</div>}
       <FormDatePicker label="Date" value={formData.date} onChange={(date) => setFormData({ ...formData, date })} required />
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <div className="space-y-2"><Label>Registered Claims</Label><Input type="number" min="0" value={formData.registered_claims} onChange={(e) => setFormData({ ...formData, registered_claims: Number(e.target.value) })} required /></div>
         <div className="space-y-2"><Label>Claims Closed</Label><Input type="number" min="0" value={formData.claims_closed} onChange={(e) => setFormData({ ...formData, claims_closed: Number(e.target.value) })} required /></div>
         <div className="space-y-2"><Label>Pending Cases</Label><Input type="number" min="0" value={formData.pending_cases} onChange={(e) => setFormData({ ...formData, pending_cases: Number(e.target.value) })} required /></div>

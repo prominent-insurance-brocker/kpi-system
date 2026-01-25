@@ -26,6 +26,7 @@ interface DataTableProps<T> {
   onDelete?: (item: T) => void;
   canEdit?: (item: T) => boolean;
   isLoading?: boolean;
+  height?: string;
 }
 
 export function DataTable<T extends { id: number }>({
@@ -40,6 +41,7 @@ export function DataTable<T extends { id: number }>({
   onDelete,
   canEdit,
   isLoading,
+  height = 'h-[calc(100vh-270px)]',
 }: DataTableProps<T>) {
   const totalPages = Math.ceil(totalCount / pageSize);
 
@@ -53,8 +55,8 @@ export function DataTable<T extends { id: number }>({
   };
 
   return (
-    <div className="bg-white border border-[#E4E4E4] rounded-2xl  h-[calc(100vh-270px)]">
-      <div className="p-4 flex flex-col gap-5 h-full">
+    <div className={`bg-white border border-[#E4E4E4] rounded-2xl  ${height}`}>
+      <div className="p-3 flex flex-col gap-5 h-full">
         {/* Table */}
         <div className="flex flex-col rounded-lg overflow-hidden h-full">
           {/* Table Header */}

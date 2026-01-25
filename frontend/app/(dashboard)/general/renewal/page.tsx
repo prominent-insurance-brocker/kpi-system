@@ -25,6 +25,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { Plus } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
+import { formatDate, formatDateTime } from '@/app/lib/date';
 
 interface GeneralRenewalEntry {
   id: number;
@@ -48,7 +49,7 @@ interface FilterUser {
 }
 
 const columns = [
-  { key: 'date', header: 'Date' },
+  { key: 'date', header: 'Date', render: (item: GeneralRenewalEntry) => formatDate(item.date) },
   { key: 'quotations', header: 'Quotations' },
   { key: 'quotes_revised', header: 'Quotes Revised' },
   { key: 'quotes_converted', header: 'Quotes Converted' },
@@ -62,7 +63,7 @@ const columns = [
   {
     key: 'added_at',
     header: 'Added At',
-    render: (item: GeneralRenewalEntry) => new Date(item.added_at).toLocaleString(),
+    render: (item: GeneralRenewalEntry) => formatDateTime(item.added_at),
   },
 ];
 

@@ -13,6 +13,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { Plus } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
+import { formatDate, formatDateTime } from '@/app/lib/date';
 
 interface MotorClaimEntry {
   id: number;
@@ -35,13 +36,13 @@ interface FilterUser {
 }
 
 const columns = [
-  { key: 'date', header: 'Date' },
+  { key: 'date', header: 'Date', render: (item: MotorClaimEntry) => formatDate(item.date) },
   { key: 'registered_claims', header: 'Registered Claims' },
   { key: 'claims_closed', header: 'Claims Closed' },
   { key: 'pending_cases', header: 'Pending Cases' },
   { key: 'tat', header: 'TAT' },
   { key: 'added_by_name', header: 'Added By' },
-  { key: 'added_at', header: 'Added At', render: (item: MotorClaimEntry) => new Date(item.added_at).toLocaleString() },
+  { key: 'added_at', header: 'Added At', render: (item: MotorClaimEntry) => formatDateTime(item.added_at) },
 ];
 
 export default function MotorClaimPage() {

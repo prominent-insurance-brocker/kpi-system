@@ -38,7 +38,10 @@ const presets: { key: PresetKey; label: string }[] = [
 ]
 
 const formatDate = (d: Date): string => {
-  return d.toISOString().split("T")[0]
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 const getDateRange = (preset: PresetKey): { from: string; to: string } => {
@@ -92,14 +95,17 @@ const detectPreset = (dateFrom: string, dateTo: string): PresetKey => {
 const formatDisplayDate = (dateStr: string): string => {
   if (!dateStr) return ""
   const date = new Date(dateStr + "T00:00:00")
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 }
 
 export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterProps) {
   const [isCalendarOpen, setIsCalendarOpen] = React.useState(false)
   const [tempRange, setTempRange] = React.useState<DateRange | undefined>(undefined)
+  const [isCustomMode, setIsCustomMode] = React.useState(false)
+  const justOpenedRef = React.useRef(false)
 
-  const currentPreset = detectPreset(dateFrom, dateTo)
+  const detectedPreset = detectPreset(dateFrom, dateTo)
+  const currentPreset = isCustomMode ? "custom" : detectedPreset
 
   const handlePresetChange = (value: string) => {
     const preset = value as PresetKey
@@ -114,10 +120,33 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
       } else {
         setTempRange(undefined)
       }
-      setIsCalendarOpen(true)
+      setIsCustomMode(true)
+      // Mark that we're about to open, so onOpenChange doesn't immediately close
+      justOpenedRef.current = true
+      // Delay to ensure the PopoverTrigger button is rendered first
+      setTimeout(() => {
+        setIsCalendarOpen(true)
+        // Reset the flag after a short delay
+        setTimeout(() => {
+          justOpenedRef.current = false
+        }, 100)
+      }, 50)
     } else {
+      setIsCustomMode(false)
       const range = getDateRange(preset)
       onChange(range.from, range.to)
+    }
+  }
+
+  const handleOpenChange = (open: boolean) => {
+    // Prevent closing if we just opened
+    if (!open && justOpenedRef.current) {
+      return
+    }
+    setIsCalendarOpen(open)
+    // Reset custom mode if closing without custom dates applied
+    if (!open && isCustomMode && detectedPreset !== "custom") {
+      setIsCustomMode(false)
     }
   }
 
@@ -136,10 +165,11 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
     setTempRange(undefined)
     onChange("", "")
     setIsCalendarOpen(false)
+    setIsCustomMode(false)
   }
 
   const getDisplayText = (): string => {
-    if (currentPreset === "custom" && (dateFrom || dateTo)) {
+    if (detectedPreset === "custom" && (dateFrom || dateTo)) {
       const from = formatDisplayDate(dateFrom)
       const to = formatDisplayDate(dateTo)
       if (from && to) return `${from} - ${to}`
@@ -149,15 +179,17 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
     return presets.find((p) => p.key === currentPreset)?.label || "All Time"
   }
 
+  const showCustomButton = currentPreset === "custom" || isCustomMode
+
   return (
     <div className="flex items-center gap-2">
-      <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+      <Popover open={isCalendarOpen} onOpenChange={handleOpenChange}>
         <div className="flex items-center gap-2">
           <Select value={currentPreset} onValueChange={handlePresetChange}>
-            <SelectTrigger className="w-[180px] shadow-none">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4" />
-                <SelectValue>{getDisplayText()}</SelectValue>
+            <SelectTrigger className="min-w-[180px] w-fit shadow-none">
+              <div className="flex items-center gap-2 pointer-events-none">
+                <CalendarIcon className="h-4 w-4 flex-shrink-0" />
+                <SelectValue className="whitespace-nowrap">{getDisplayText()}</SelectValue>
               </div>
             </SelectTrigger>
             <SelectContent>
@@ -169,7 +201,7 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
             </SelectContent>
           </Select>
 
-          {currentPreset === "custom" && (
+          {showCustomButton && (
             <PopoverTrigger asChild>
               <Button
                 variant="outline"

@@ -39,6 +39,7 @@ import {
   type UserAdmin,
 } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
+import { formatDateTime } from '@/app/lib/date';
 
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
@@ -161,12 +162,12 @@ export default function UsersPage() {
     {
       key: 'date_joined',
       header: 'Joined',
-      render: (user: UserAdmin) => new Date(user.date_joined).toLocaleDateString(),
+      render: (user: UserAdmin) => formatDateTime(user.date_joined),
     },
     {
       key: 'last_login',
       header: 'Last Login',
-      render: (user: UserAdmin) => user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never',
+      render: (user: UserAdmin) => user.last_login ? formatDateTime(user.last_login) : 'Never',
     },
     {
       key: 'actions',

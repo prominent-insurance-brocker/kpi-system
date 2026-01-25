@@ -56,11 +56,11 @@ export function DataTable<T extends { id: number }>({
 
   return (
     <div className={`bg-white border border-[#E4E4E4] rounded-2xl  ${height}`}>
-      <div className="p-3 flex flex-col gap-5 h-full">
+      <div className="p-3 flex flex-col h-full">
         {/* Table */}
-        <div className="flex flex-col rounded-lg overflow-hidden h-full">
+        <div className="flex-1 flex flex-col min-h-0 rounded-lg overflow-hidden">
           {/* Table Header */}
-          <div className="flex bg-[#F3F3F3] rounded-lg h-12">
+          <div className="flex bg-[#F3F3F3] rounded-t-lg h-12 flex-shrink-0">
             {columns.map((col) => (
               <div
                 key={col.key as string}
@@ -77,7 +77,7 @@ export function DataTable<T extends { id: number }>({
           </div>
 
           {/* Table Body */}
-          <div className="flex flex-col">
+          <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
             {isLoading ? (
               <div className="flex items-center justify-center h-16 border-b border-[#EDEDED]">
                 <div className="flex items-center">
@@ -139,7 +139,7 @@ export function DataTable<T extends { id: number }>({
         </div>
 
         {/* Pagination */}
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center flex-shrink-0 pt-5">
           {/* Rows per page */}
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-[#09090B]">Rows per page</span>

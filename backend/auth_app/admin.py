@@ -19,10 +19,15 @@ class CustomUserAdmin(UserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'password', 'first_name', 'last_name', 'role', 'is_staff', 'is_active'),
+            'fields': (
+                'email', 'password1', 'password2',
+                'first_name', 'last_name', 'role',
+                'is_staff', 'is_active'
+            ),
         }),
     )
     search_fields = ('email', 'first_name', 'last_name')
+    readonly_fields = ('last_login', 'date_joined')
 
 @admin.register(MagicLink)
 class MagicLinkAdmin(admin.ModelAdmin):

@@ -172,7 +172,7 @@ export default function DashboardPage() {
       {/* Analytics Section */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Analytics</h2>
-        <Card className="shadow-none">
+        <Card className="shadow-none border-none p-0">
           <CardContent className="p-0">
              <MetabaseFrame 
                dashboardId={parseInt(process.env.NEXT_PUBLIC_METABASE_DASHBOARD_ID || '1')} 

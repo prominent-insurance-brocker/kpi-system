@@ -73,11 +73,15 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_METABASE_DASHBOARD_ID: ${NEXT_PUBLIC_METABASE_DASHBOARD_ID}
     container_name: kpi-frontend
     hostname: frontend
     restart: unless-stopped
     expose:
       - "3000"
+    environment:
+      - METABASE_SECRET_KEY=${METABASE_SECRET_KEY}
+      - METABASE_SITE_URL=${METABASE_SITE_URL}
     depends_on:
       - backend
     networks:

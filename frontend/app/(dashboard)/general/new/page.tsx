@@ -284,11 +284,11 @@ function EntryModal({
 }) {
   const [formData, setFormData] = useState({
     date: '',
-    quotations: 0,
-    quotes_revised: 0,
-    quotes_converted: 0,
-    tat: 0,
-    accuracy: 0,
+    quotations: '',
+    quotes_revised: '',
+    quotes_converted: '',
+    tat: '',
+    accuracy: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -296,20 +296,20 @@ function EntryModal({
     if (entry) {
       setFormData({
         date: entry.date,
-        quotations: entry.quotations,
-        quotes_revised: entry.quotes_revised,
-        quotes_converted: entry.quotes_converted,
-        tat: entry.tat,
-        accuracy: Number(entry.accuracy),
+        quotations: String(entry.quotations),
+        quotes_revised: String(entry.quotes_revised),
+        quotes_converted: String(entry.quotes_converted),
+        tat: String(entry.tat),
+        accuracy: String(entry.accuracy),
       });
     } else {
       setFormData({
         date: new Date().toISOString().split('T')[0],
-        quotations: 0,
-        quotes_revised: 0,
-        quotes_converted: 0,
-        tat: 0,
-        accuracy: 0,
+        quotations: '',
+        quotes_revised: '',
+        quotes_converted: '',
+        tat: '',
+        accuracy: '',
       });
     }
   }, [entry, isOpen]);
@@ -317,7 +317,14 @@ function EntryModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    await onSave(formData);
+    await onSave({
+      date: formData.date,
+      quotations: Number(formData.quotations),
+      quotes_revised: Number(formData.quotes_revised),
+      quotes_converted: Number(formData.quotes_converted),
+      tat: Number(formData.tat),
+      accuracy: Number(formData.accuracy),
+    });
     setIsSubmitting(false);
   };
 
@@ -345,8 +352,9 @@ function EntryModal({
               <Input
                 type="number"
                 min="0"
+                placeholder="Enter quotations"
                 value={formData.quotations}
-                onChange={(e) => setFormData({ ...formData, quotations: Number(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, quotations: e.target.value })}
                 required
               />
             </div>
@@ -355,8 +363,9 @@ function EntryModal({
               <Input
                 type="number"
                 min="0"
+                placeholder="Enter quotes revised"
                 value={formData.quotes_revised}
-                onChange={(e) => setFormData({ ...formData, quotes_revised: Number(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, quotes_revised: e.target.value })}
                 required
               />
             </div>
@@ -365,9 +374,10 @@ function EntryModal({
               <Input
                 type="number"
                 min="0"
+                placeholder="Enter quotes converted"
                 value={formData.quotes_converted}
                 onChange={(e) =>
-                  setFormData({ ...formData, quotes_converted: Number(e.target.value) })
+                  setFormData({ ...formData, quotes_converted: e.target.value })
                 }
                 required
               />
@@ -377,8 +387,9 @@ function EntryModal({
               <Input
                 type="number"
                 min="0"
+                placeholder="Enter TAT"
                 value={formData.tat}
-                onChange={(e) => setFormData({ ...formData, tat: Number(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, tat: e.target.value })}
                 required
               />
             </div>
@@ -389,8 +400,9 @@ function EntryModal({
                 min="0"
                 max="100"
                 step="0.01"
+                placeholder="Enter accuracy"
                 value={formData.accuracy}
-                onChange={(e) => setFormData({ ...formData, accuracy: Number(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, accuracy: e.target.value })}
                 required
               />
             </div>

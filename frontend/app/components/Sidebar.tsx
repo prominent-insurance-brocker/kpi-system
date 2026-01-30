@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, LayoutDashboard, FileText, Car, Users } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/app/context/AuthContext';
 
@@ -37,6 +37,14 @@ const navigation: NavItem[] = [
     ],
   },
   {
+    name: 'Sales',
+    icon: TrendingUp,
+    children: [
+      { name: 'Sales Premium Data', href: '/sales/premium-data', moduleKey: 'sales_premium_data' },
+      { name: 'Sales KPI', href: '/sales/kpi', moduleKey: 'sales_kpi' },
+    ],
+  },
+  {
     name: 'User Management',
     icon: Users,
     adminOnly: true,
@@ -50,7 +58,7 @@ const navigation: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const { user, hasModulePermission } = useAuth();
-  const [expandedItems, setExpandedItems] = useState<string[]>(['General', 'Motor', 'User Management']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['General', 'Motor', 'Sales', 'User Management']);
 
   const toggleExpand = (name: string) => {
     setExpandedItems((prev) =>

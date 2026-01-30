@@ -104,3 +104,34 @@ class MotorClaimEntry(BaseEntry):
 
     def __str__(self):
         return f"Motor Claim - {self.date} by {self.added_by}"
+
+
+class SalesPremiumDataEntry(BaseEntry):
+    """Sales Premium Data module entry."""
+    gross_booked_premium = models.DecimalField(max_digits=15, decimal_places=2)
+    target = models.DecimalField(max_digits=15, decimal_places=2)
+
+    class Meta(BaseEntry.Meta):
+        verbose_name = 'Sales Premium Data Entry'
+        verbose_name_plural = 'Sales Premium Data Entries'
+
+    def __str__(self):
+        return f"Sales Premium Data - {self.date} by {self.added_by}"
+
+
+class SalesKPIEntry(BaseEntry):
+    """Sales KPI module entry."""
+    leads_to_ops_team = models.PositiveIntegerField()
+    quotes_from_ops_team = models.PositiveIntegerField()
+    quotes_to_client = models.PositiveIntegerField()
+    total_conversions = models.PositiveIntegerField()
+    existing_clients = models.PositiveIntegerField()
+    existing_clients_closed = models.PositiveIntegerField()
+    new_clients_acquired = models.PositiveIntegerField()
+
+    class Meta(BaseEntry.Meta):
+        verbose_name = 'Sales KPI Entry'
+        verbose_name_plural = 'Sales KPI Entries'
+
+    def __str__(self):
+        return f"Sales KPI - {self.date} by {self.added_by}"

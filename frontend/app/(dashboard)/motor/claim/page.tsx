@@ -159,22 +159,22 @@ export default function MotorClaimPage() {
 }
 
 function EntryForm({ entry, onSave, onClose, error }: { entry: MotorClaimEntry | null; onSave: (data: Partial<MotorClaimEntry>) => void; onClose: () => void; error: string }) {
-  const [formData, setFormData] = useState({ date: '', registered_claims: 0, claims_closed: 0, pending_cases: 0, tat: 0 });
+  const [formData, setFormData] = useState({ date: '', registered_claims: '', claims_closed: '', pending_cases: '', tat: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   useEffect(() => {
-    if (entry) setFormData({ date: entry.date, registered_claims: entry.registered_claims, claims_closed: entry.claims_closed, pending_cases: entry.pending_cases, tat: entry.tat });
-    else setFormData({ date: new Date().toISOString().split('T')[0], registered_claims: 0, claims_closed: 0, pending_cases: 0, tat: 0 });
+    if (entry) setFormData({ date: entry.date, registered_claims: String(entry.registered_claims), claims_closed: String(entry.claims_closed), pending_cases: String(entry.pending_cases), tat: String(entry.tat) });
+    else setFormData({ date: new Date().toISOString().split('T')[0], registered_claims: '', claims_closed: '', pending_cases: '', tat: '' });
   }, [entry]);
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); setIsSubmitting(true); onSave(formData); setIsSubmitting(false); };
+  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); setIsSubmitting(true); onSave({ date: formData.date, registered_claims: Number(formData.registered_claims), claims_closed: Number(formData.claims_closed), pending_cases: Number(formData.pending_cases), tat: Number(formData.tat) }); setIsSubmitting(false); };
   return (
     <form onSubmit={handleSubmit} className="space-y-4 p-4">
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">{error}</div>}
       <FormDatePicker label="Date" value={formData.date} onChange={(date) => setFormData({ ...formData, date })} required />
       <div className="grid grid-cols-1 gap-4">
-        <div className="space-y-2"><Label>Registered Claims</Label><Input type="number" min="0" value={formData.registered_claims} onChange={(e) => setFormData({ ...formData, registered_claims: Number(e.target.value) })} required /></div>
-        <div className="space-y-2"><Label>Claims Closed</Label><Input type="number" min="0" value={formData.claims_closed} onChange={(e) => setFormData({ ...formData, claims_closed: Number(e.target.value) })} required /></div>
-        <div className="space-y-2"><Label>Pending Cases</Label><Input type="number" min="0" value={formData.pending_cases} onChange={(e) => setFormData({ ...formData, pending_cases: Number(e.target.value) })} required /></div>
-        <div className="space-y-2"><Label>TAT</Label><Input type="number" min="0" value={formData.tat} onChange={(e) => setFormData({ ...formData, tat: Number(e.target.value) })} required /></div>
+        <div className="space-y-2"><Label>Registered Claims</Label><Input type="number" min="0" placeholder="Enter registered claims" value={formData.registered_claims} onChange={(e) => setFormData({ ...formData, registered_claims: e.target.value })} required /></div>
+        <div className="space-y-2"><Label>Claims Closed</Label><Input type="number" min="0" placeholder="Enter claims closed" value={formData.claims_closed} onChange={(e) => setFormData({ ...formData, claims_closed: e.target.value })} required /></div>
+        <div className="space-y-2"><Label>Pending Cases</Label><Input type="number" min="0" placeholder="Enter pending cases" value={formData.pending_cases} onChange={(e) => setFormData({ ...formData, pending_cases: e.target.value })} required /></div>
+        <div className="space-y-2"><Label>TAT</Label><Input type="number" min="0" placeholder="Enter TAT" value={formData.tat} onChange={(e) => setFormData({ ...formData, tat: e.target.value })} required /></div>
       </div>
       <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : entry ? 'Update' : 'Create'}</Button></DialogFooter>
     </form>

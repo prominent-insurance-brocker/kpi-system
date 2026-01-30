@@ -54,6 +54,13 @@ const MODULE_CATEGORIES: ModuleCategory[] = [
       { key: 'motor_claim', label: 'Motor Claim' },
     ],
   },
+  {
+    name: 'Sales',
+    modules: [
+      { key: 'sales_premium_data', label: 'Sales Premium Data' },
+      { key: 'sales_kpi', label: 'Sales KPI' },
+    ],
+  },
 ];
 
 export default function RolesPage() {

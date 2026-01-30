@@ -5,6 +5,8 @@ from .models import (
     MotorNewEntry,
     MotorRenewalEntry,
     MotorClaimEntry,
+    SalesPremiumDataEntry,
+    SalesKPIEntry,
 )
 
 
@@ -82,3 +84,25 @@ class MotorClaimEntrySerializer(BaseEntrySerializer):
     def validate_accuracy(self, value):
         # Motor Claim doesn't have accuracy field, skip validation
         return value
+
+
+class SalesPremiumDataEntrySerializer(BaseEntrySerializer):
+    class Meta:
+        model = SalesPremiumDataEntry
+        fields = [
+            'id', 'date', 'gross_booked_premium', 'target',
+            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
+        ]
+        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+
+
+class SalesKPIEntrySerializer(BaseEntrySerializer):
+    class Meta:
+        model = SalesKPIEntry
+        fields = [
+            'id', 'date', 'leads_to_ops_team', 'quotes_from_ops_team',
+            'quotes_to_client', 'total_conversions', 'existing_clients',
+            'existing_clients_closed', 'new_clients_acquired',
+            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
+        ]
+        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']

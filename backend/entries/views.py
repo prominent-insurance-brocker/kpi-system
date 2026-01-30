@@ -10,6 +10,8 @@ from .models import (
     MotorNewEntry,
     MotorRenewalEntry,
     MotorClaimEntry,
+    SalesPremiumDataEntry,
+    SalesKPIEntry,
 )
 from .serializers import (
     GeneralNewEntrySerializer,
@@ -17,6 +19,8 @@ from .serializers import (
     MotorNewEntrySerializer,
     MotorRenewalEntrySerializer,
     MotorClaimEntrySerializer,
+    SalesPremiumDataEntrySerializer,
+    SalesKPIEntrySerializer,
 )
 from .filters import EntryFilter
 
@@ -118,3 +122,15 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
     queryset = MotorClaimEntry.objects.all()
     serializer_class = MotorClaimEntrySerializer
     module_key = 'motor_claim'
+
+
+class SalesPremiumDataEntryViewSet(BaseEntryViewSet):
+    queryset = SalesPremiumDataEntry.objects.all()
+    serializer_class = SalesPremiumDataEntrySerializer
+    module_key = 'sales_premium_data'
+
+
+class SalesKPIEntryViewSet(BaseEntryViewSet):
+    queryset = SalesKPIEntry.objects.all()
+    serializer_class = SalesKPIEntrySerializer
+    module_key = 'sales_kpi'

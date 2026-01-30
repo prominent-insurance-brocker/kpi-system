@@ -27,14 +27,11 @@ import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate, formatDateTime } from '@/app/lib/date';
 
-interface GeneralRenewalEntry {
+interface SalesPremiumDataEntry {
   id: number;
   date: string;
-  quotations: number;
-  quotes_revised: number;
-  quotes_converted: number;
-  tat: number;
-  accuracy: number;
+  gross_booked_premium: number;
+  target: number;
   added_by: number;
   added_by_name: string;
   added_at: string;
@@ -49,34 +46,27 @@ interface FilterUser {
 }
 
 const columns = [
-  { key: 'date', header: 'Date', render: (item: GeneralRenewalEntry) => formatDate(item.date) },
-  { key: 'quotations', header: 'Quotations' },
-  { key: 'quotes_revised', header: 'Quotes Revised' },
-  { key: 'quotes_converted', header: 'Quotes Converted' },
-  { key: 'tat', header: 'TAT' },
-  {
-    key: 'accuracy',
-    header: 'Accuracy',
-    render: (item: GeneralRenewalEntry) => `${item.accuracy}%`,
-  },
+  { key: 'date', header: 'Date', render: (item: SalesPremiumDataEntry) => formatDate(item.date) },
+  { key: 'gross_booked_premium', header: 'Gross Booked Premium' },
+  { key: 'target', header: 'Target' },
   { key: 'added_by_name', header: 'Added By' },
   {
     key: 'added_at',
     header: 'Added At',
-    render: (item: GeneralRenewalEntry) => formatDateTime(item.added_at),
+    render: (item: SalesPremiumDataEntry) => formatDateTime(item.added_at),
   },
 ];
 
-export default function GeneralRenewalPage() {
+export default function SalesPremiumDataPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { canSeeAllData } = useAuth();
 
-  const [entries, setEntries] = useState<GeneralRenewalEntry[]>([]);
+  const [entries, setEntries] = useState<SalesPremiumDataEntry[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<GeneralRenewalEntry | null>(null);
+  const [editingEntry, setEditingEntry] = useState<SalesPremiumDataEntry | null>(null);
   const [error, setError] = useState('');
   const [users, setUsers] = useState<FilterUser[]>([]);
 
@@ -117,7 +107,7 @@ export default function GeneralRenewalPage() {
       if (dateTo) params.set('date_to', dateTo);
       if (userId) params.set('user_id', userId);
 
-      const response = await fetch(`${API_BASE_URL}/api/entries/general-renewal/?${params}`, {
+      const response = await fetch(`${API_BASE_URL}/api/entries/sales-premium-data/?${params}`, {
         credentials: 'include',
       });
       const data = await response.json();
@@ -137,11 +127,11 @@ export default function GeneralRenewalPage() {
     fetchEntries();
   }, [page, pageSize, dateFrom, dateTo, userId]);
 
-  const handleSave = async (formData: Partial<GeneralRenewalEntry>) => {
+  const handleSave = async (formData: Partial<SalesPremiumDataEntry>) => {
     setError('');
     const url = editingEntry
-      ? `${API_BASE_URL}/api/entries/general-renewal/${editingEntry.id}/`
-      : `${API_BASE_URL}/api/entries/general-renewal/`;
+      ? `${API_BASE_URL}/api/entries/sales-premium-data/${editingEntry.id}/`
+      : `${API_BASE_URL}/api/entries/sales-premium-data/`;
 
     const response = await fetch(url, {
       method: editingEntry ? 'PATCH' : 'POST',
@@ -160,10 +150,10 @@ export default function GeneralRenewalPage() {
     }
   };
 
-  const handleDelete = async (entry: GeneralRenewalEntry) => {
+  const handleDelete = async (entry: SalesPremiumDataEntry) => {
     if (!confirm('Are you sure you want to delete this entry?')) return;
 
-    const response = await fetch(`${API_BASE_URL}/api/entries/general-renewal/${entry.id}/`, {
+    const response = await fetch(`${API_BASE_URL}/api/entries/sales-premium-data/${entry.id}/`, {
       method: 'DELETE',
       credentials: 'include',
     });
@@ -182,10 +172,16 @@ export default function GeneralRenewalPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">General Renewal</h1>
-          <p className="text-muted-foreground">Manage general renewal quotations</p>
+          <h1 className="text-2xl font-bold">Sales Premium Data</h1>
+          <p className="text-muted-foreground">Manage sales premium data entries</p>
         </div>
-        <Button onClick={() => { setEditingEntry(null); setError(''); setIsModalOpen(true); }}>
+        <Button
+          onClick={() => {
+            setEditingEntry(null);
+            setError('');
+            setIsModalOpen(true);
+          }}
+        >
           <Plus className="h-4 w-4 mr-2" /> Add Entry
         </Button>
       </div>
@@ -198,7 +194,7 @@ export default function GeneralRenewalPage() {
             dateTo={dateTo}
             onChange={(from, to) => updateFilters({ dateFrom: from, dateTo: to, page: 1 })}
           />
-          </div>
+        </div>
         {canSeeAllData() && (
           <div className="flex flex-col gap-2">
             <Label>User</Label>
@@ -221,7 +217,10 @@ export default function GeneralRenewalPage() {
           </div>
         )}
         {hasActiveFilters && (
-          <Button variant="outline" onClick={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', page: 1 })}>
+          <Button
+            variant="outline"
+            onClick={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', page: 1 })}
+          >
             Clear Filters
           </Button>
         )}
@@ -235,58 +234,132 @@ export default function GeneralRenewalPage() {
         pageSize={pageSize}
         onPageChange={(p) => updateFilters({ page: p })}
         onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })}
-        onEdit={(entry) => { setEditingEntry(entry); setError(''); setIsModalOpen(true); }}
+        onEdit={(entry) => {
+          setEditingEntry(entry);
+          setError('');
+          setIsModalOpen(true);
+        }}
         onDelete={handleDelete}
         canEdit={(entry) => entry.is_editable}
         isLoading={isLoading}
       />
 
-      <Dialog open={isModalOpen} onOpenChange={() => { setIsModalOpen(false); setEditingEntry(null); setError(''); }}>
-        <DialogContent className='p-0'>
-          <DialogHeader className='border-b border-[#E4E4E4] p-4'>
-            <DialogTitle>{editingEntry ? 'Edit Entry' : 'Add New Entry'}</DialogTitle>
-          </DialogHeader>
-          <EntryForm entry={editingEntry} onSave={handleSave} onClose={() => setIsModalOpen(false)} error={error} />
-        </DialogContent>
-      </Dialog>
+      <EntryModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingEntry(null);
+          setError('');
+        }}
+        onSave={handleSave}
+        entry={editingEntry}
+        error={error}
+      />
     </div>
   );
 }
 
-function EntryForm({ entry, onSave, onClose, error }: { entry: GeneralRenewalEntry | null; onSave: (data: Partial<GeneralRenewalEntry>) => void; onClose: () => void; error: string }) {
-  const [formData, setFormData] = useState({ date: '', quotations: '', quotes_revised: '', quotes_converted: '', tat: '', accuracy: '' });
+function EntryModal({
+  isOpen,
+  onClose,
+  onSave,
+  entry,
+  error,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (data: Partial<SalesPremiumDataEntry>) => void;
+  entry: SalesPremiumDataEntry | null;
+  error: string;
+}) {
+  const [formData, setFormData] = useState({
+    date: '',
+    gross_booked_premium: '',
+    target: '',
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (entry) {
-      setFormData({ date: entry.date, quotations: String(entry.quotations), quotes_revised: String(entry.quotes_revised), quotes_converted: String(entry.quotes_converted), tat: String(entry.tat), accuracy: String(entry.accuracy) });
+      setFormData({
+        date: entry.date,
+        gross_booked_premium: String(entry.gross_booked_premium),
+        target: String(entry.target),
+      });
     } else {
-      setFormData({ date: new Date().toISOString().split('T')[0], quotations: '', quotes_revised: '', quotes_converted: '', tat: '', accuracy: '' });
+      setFormData({
+        date: new Date().toISOString().split('T')[0],
+        gross_booked_premium: '',
+        target: '',
+      });
     }
-  }, [entry]);
+  }, [entry, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    await onSave({ date: formData.date, quotations: Number(formData.quotations), quotes_revised: Number(formData.quotes_revised), quotes_converted: Number(formData.quotes_converted), tat: Number(formData.tat), accuracy: Number(formData.accuracy) });
+    await onSave({
+      date: formData.date,
+      gross_booked_premium: Number(formData.gross_booked_premium),
+      target: Number(formData.target),
+    });
     setIsSubmitting(false);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 p-4">
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">{error}</div>}
-      <FormDatePicker label="Date" value={formData.date} onChange={(date) => setFormData({ ...formData, date })} required />
-      <div className="grid grid-cols-1 gap-4">
-        <div className="space-y-2"><Label>Quotations</Label><Input type="number" min="0" placeholder="Enter quotations" value={formData.quotations} onChange={(e) => setFormData({ ...formData, quotations: e.target.value })} required /></div>
-        <div className="space-y-2"><Label>Quotes Revised</Label><Input type="number" min="0" placeholder="Enter quotes revised" value={formData.quotes_revised} onChange={(e) => setFormData({ ...formData, quotes_revised: e.target.value })} required /></div>
-        <div className="space-y-2"><Label>Quotes Converted</Label><Input type="number" min="0" placeholder="Enter quotes converted" value={formData.quotes_converted} onChange={(e) => setFormData({ ...formData, quotes_converted: e.target.value })} required /></div>
-        <div className="space-y-2"><Label>TAT</Label><Input type="number" min="0" placeholder="Enter TAT" value={formData.tat} onChange={(e) => setFormData({ ...formData, tat: e.target.value })} required /></div>
-        <div className="space-y-2"><Label>Accuracy (%)</Label><Input type="number" min="0" max="100" step="0.01" placeholder="Enter accuracy" value={formData.accuracy} onChange={(e) => setFormData({ ...formData, accuracy: e.target.value })} required /></div>
-      </div>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-        <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : entry ? 'Update' : 'Create'}</Button>
-      </DialogFooter>
-    </form>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className='p-0'>
+        <DialogHeader className='border-b border-[#E4E4E4] p-4'>
+          <DialogTitle>{entry ? 'Edit Entry' : 'Add New Entry'}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 p-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+              {error}
+            </div>
+          )}
+          <FormDatePicker
+            label="Date"
+            value={formData.date}
+            onChange={(date) => setFormData({ ...formData, date })}
+            required
+          />
+          <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-2">
+              <Label>Gross Booked Premium</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Enter gross booked premium"
+                value={formData.gross_booked_premium}
+                onChange={(e) => setFormData({ ...formData, gross_booked_premium: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Target</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Enter target"
+                value={formData.target}
+                onChange={(e) => setFormData({ ...formData, target: e.target.value })}
+                required
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving...' : entry ? 'Update' : 'Create'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

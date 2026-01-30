@@ -6,6 +6,8 @@ from .views import (
     MotorNewEntryViewSet,
     MotorRenewalEntryViewSet,
     MotorClaimEntryViewSet,
+    SalesPremiumDataEntryViewSet,
+    SalesKPIEntryViewSet,
 )
 
 router = DefaultRouter()
@@ -14,6 +16,8 @@ router.register(r'general-renewal', GeneralRenewalEntryViewSet, basename='genera
 router.register(r'motor-new', MotorNewEntryViewSet, basename='motor-new')
 router.register(r'motor-renewal', MotorRenewalEntryViewSet, basename='motor-renewal')
 router.register(r'motor-claim', MotorClaimEntryViewSet, basename='motor-claim')
+router.register(r'sales-premium-data', SalesPremiumDataEntryViewSet, basename='sales-premium-data')
+router.register(r'sales-kpi', SalesKPIEntryViewSet, basename='sales-kpi')
 
 urlpatterns = [
     path('', include(router.urls)),

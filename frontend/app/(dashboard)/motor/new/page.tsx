@@ -159,22 +159,22 @@ export default function MotorNewPage() {
 }
 
 function EntryForm({ entry, onSave, onClose, error }: { entry: MotorNewEntry | null; onSave: (data: Partial<MotorNewEntry>) => void; onClose: () => void; error: string }) {
-  const [formData, setFormData] = useState({ date: '', quotations: 0, quotes_revised: 0, tat: 0, accuracy: 0 });
+  const [formData, setFormData] = useState({ date: '', quotations: '', quotes_revised: '', tat: '', accuracy: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   useEffect(() => {
-    if (entry) setFormData({ date: entry.date, quotations: entry.quotations, quotes_revised: entry.quotes_revised, tat: entry.tat, accuracy: Number(entry.accuracy) });
-    else setFormData({ date: new Date().toISOString().split('T')[0], quotations: 0, quotes_revised: 0, tat: 0, accuracy: 0 });
+    if (entry) setFormData({ date: entry.date, quotations: String(entry.quotations), quotes_revised: String(entry.quotes_revised), tat: String(entry.tat), accuracy: String(entry.accuracy) });
+    else setFormData({ date: new Date().toISOString().split('T')[0], quotations: '', quotes_revised: '', tat: '', accuracy: '' });
   }, [entry]);
-  const handleSubmit = async (e: React.FormEvent) => { e.preventDefault(); setIsSubmitting(true); await onSave(formData); setIsSubmitting(false); };
+  const handleSubmit = async (e: React.FormEvent) => { e.preventDefault(); setIsSubmitting(true); await onSave({ date: formData.date, quotations: Number(formData.quotations), quotes_revised: Number(formData.quotes_revised), tat: Number(formData.tat), accuracy: Number(formData.accuracy) }); setIsSubmitting(false); };
   return (
     <form onSubmit={handleSubmit} className="space-y-4 p-4">
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">{error}</div>}
       <FormDatePicker label="Date" value={formData.date} onChange={(date) => setFormData({ ...formData, date })} required />
       <div className="grid grid-cols-1 gap-4">
-        <div className="space-y-2"><Label>Quotations</Label><Input type="number" min="0" value={formData.quotations} onChange={(e) => setFormData({ ...formData, quotations: Number(e.target.value) })} required /></div>
-        <div className="space-y-2"><Label>Quotes Revised</Label><Input type="number" min="0" value={formData.quotes_revised} onChange={(e) => setFormData({ ...formData, quotes_revised: Number(e.target.value) })} required /></div>
-        <div className="space-y-2"><Label>TAT</Label><Input type="number" min="0" value={formData.tat} onChange={(e) => setFormData({ ...formData, tat: Number(e.target.value) })} required /></div>
-        <div className="space-y-2"><Label>Accuracy (%)</Label><Input type="number" min="0" max="100" step="0.01" value={formData.accuracy} onChange={(e) => setFormData({ ...formData, accuracy: Number(e.target.value) })} required /></div>
+        <div className="space-y-2"><Label>Quotations</Label><Input type="number" min="0" placeholder="Enter quotations" value={formData.quotations} onChange={(e) => setFormData({ ...formData, quotations: e.target.value })} required /></div>
+        <div className="space-y-2"><Label>Quotes Revised</Label><Input type="number" min="0" placeholder="Enter quotes revised" value={formData.quotes_revised} onChange={(e) => setFormData({ ...formData, quotes_revised: e.target.value })} required /></div>
+        <div className="space-y-2"><Label>TAT</Label><Input type="number" min="0" placeholder="Enter TAT" value={formData.tat} onChange={(e) => setFormData({ ...formData, tat: e.target.value })} required /></div>
+        <div className="space-y-2"><Label>Accuracy (%)</Label><Input type="number" min="0" max="100" step="0.01" placeholder="Enter accuracy" value={formData.accuracy} onChange={(e) => setFormData({ ...formData, accuracy: e.target.value })} required /></div>
       </div>
       <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : entry ? 'Update' : 'Create'}</Button></DialogFooter>
     </form>

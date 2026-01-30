@@ -13,6 +13,8 @@ from entries.models import (
     MotorNewEntry,
     MotorRenewalEntry,
     MotorClaimEntry,
+    SalesPremiumDataEntry,
+    SalesKPIEntry,
 )
 
 
@@ -43,6 +45,8 @@ class Command(BaseCommand):
         self.stdout.write('Clearing existing data...')
 
         # Clear entries first
+        SalesKPIEntry.objects.all().delete()
+        SalesPremiumDataEntry.objects.all().delete()
         MotorClaimEntry.objects.all().delete()
         MotorRenewalEntry.objects.all().delete()
         MotorNewEntry.objects.all().delete()
@@ -84,6 +88,11 @@ class Command(BaseCommand):
                 'description': 'Handles motor insurance quotations, renewals, and claims',
                 'data_visibility': 'own',
             },
+            {
+                'name': 'Sales Agent',
+                'description': 'Handles sales premium data and KPI tracking',
+                'data_visibility': 'own',
+            },
         ]
 
         roles = {}
@@ -110,16 +119,21 @@ class Command(BaseCommand):
             'Admin': [
                 'general_new', 'general_renewal', 'general_claim',
                 'motor_new', 'motor_renewal', 'motor_claim',
+                'sales_premium_data', 'sales_kpi',
             ],
             'Manager': [
                 'general_new', 'general_renewal', 'general_claim',
                 'motor_new', 'motor_renewal', 'motor_claim',
+                'sales_premium_data', 'sales_kpi',
             ],
             'General Agent': [
                 'general_new', 'general_renewal', 'general_claim',
             ],
             'Motor Agent': [
                 'motor_new', 'motor_renewal', 'motor_claim',
+            ],
+            'Sales Agent': [
+                'sales_premium_data', 'sales_kpi',
             ],
         }
 
@@ -192,6 +206,46 @@ class Command(BaseCommand):
                 'is_staff': False,
                 'role': roles.get('Motor Agent'),
             },
+            {
+                'email': 'emma@kpisystem.com',
+                'first_name': 'Emma',
+                'last_name': 'Edwards',
+                'is_superuser': False,
+                'is_staff': False,
+                'role': roles.get('Sales Agent'),
+            },
+            {
+                'email': 'frank@kpisystem.com',
+                'first_name': 'Frank',
+                'last_name': 'Fisher',
+                'is_superuser': False,
+                'is_staff': False,
+                'role': roles.get('Sales Agent'),
+            },
+            {
+                'email': 'grace@kpisystem.com',
+                'first_name': 'Grace',
+                'last_name': 'Garcia',
+                'is_superuser': False,
+                'is_staff': False,
+                'role': roles.get('Sales Agent'),
+            },
+            {
+                'email': 'henry@kpisystem.com',
+                'first_name': 'Henry',
+                'last_name': 'Harris',
+                'is_superuser': False,
+                'is_staff': False,
+                'role': roles.get('Sales Agent'),
+            },
+            {
+                'email': 'ivy@kpisystem.com',
+                'first_name': 'Ivy',
+                'last_name': 'Ingram',
+                'is_superuser': False,
+                'is_staff': False,
+                'role': roles.get('Sales Agent'),
+            },
         ]
 
         users = {}
@@ -223,8 +277,23 @@ class Command(BaseCommand):
             users.get('diana@kpisystem.com'),
         ]
 
+        # Sales agents create sales entries
+        sales_users = [
+            users.get('emma@kpisystem.com'),
+            users.get('frank@kpisystem.com'),
+            users.get('grace@kpisystem.com'),
+            users.get('henry@kpisystem.com'),
+            users.get('ivy@kpisystem.com'),
+        ]
+
         today = date.today()
         dates = [today - timedelta(days=i) for i in range(30)]
+
+        # Monthly dates for 2025 and 2026 (first day of each month)
+        sales_dates = []
+        for year in [2025, 2026]:
+            for month in range(1, 13):
+                sales_dates.append(date(year, month, 1))
 
         # Seed General New entries
         count = self._seed_general_new_entries(general_users, dates)
@@ -245,6 +314,14 @@ class Command(BaseCommand):
         # Seed Motor Claim entries
         count = self._seed_motor_claim_entries(motor_users, dates)
         self.stdout.write(f'  - Motor Claim entries: {count}')
+
+        # Seed Sales Premium Data entries (monthly for 2025-2026)
+        count = self._seed_sales_premium_data_entries(sales_users, sales_dates)
+        self.stdout.write(f'  - Sales Premium Data entries: {count}')
+
+        # Seed Sales KPI entries (monthly for 2025-2026)
+        count = self._seed_sales_kpi_entries(sales_users, sales_dates)
+        self.stdout.write(f'  - Sales KPI entries: {count}')
 
     def _seed_general_new_entries(self, users, dates):
         """Seed GeneralNewEntry records."""
@@ -351,6 +428,56 @@ class Command(BaseCommand):
                         'claims_closed': closed,
                         'pending_cases': pending,
                         'tat': random.randint(2, 7),
+                    }
+                )
+                if created:
+                    count += 1
+        return count
+
+    def _seed_sales_premium_data_entries(self, users, dates):
+        """Seed SalesPremiumDataEntry records."""
+        count = 0
+        for user in users:
+            if not user:
+                continue
+            for entry_date in dates:
+                # Target between 50000 and 200000
+                target = Decimal(str(random.randint(50000, 200000)))
+                # Gross booked premium is 20-30% more or less than target
+                variance = random.uniform(-0.30, 0.30)
+                gross_booked_premium = target * Decimal(str(1 + variance))
+                gross_booked_premium = gross_booked_premium.quantize(Decimal('0.01'))
+
+                _, created = SalesPremiumDataEntry.objects.get_or_create(
+                    date=entry_date,
+                    added_by=user,
+                    defaults={
+                        'gross_booked_premium': gross_booked_premium,
+                        'target': target,
+                    }
+                )
+                if created:
+                    count += 1
+        return count
+
+    def _seed_sales_kpi_entries(self, users, dates):
+        """Seed SalesKPIEntry records."""
+        count = 0
+        for user in users:
+            if not user:
+                continue
+            for entry_date in dates:
+                _, created = SalesKPIEntry.objects.get_or_create(
+                    date=entry_date,
+                    added_by=user,
+                    defaults={
+                        'leads_to_ops_team': random.randint(10, 99),
+                        'quotes_from_ops_team': random.randint(10, 99),
+                        'quotes_to_client': random.randint(10, 99),
+                        'total_conversions': random.randint(10, 99),
+                        'existing_clients': random.randint(10, 99),
+                        'existing_clients_closed': random.randint(10, 99),
+                        'new_clients_acquired': random.randint(10, 99),
                     }
                 )
                 if created:

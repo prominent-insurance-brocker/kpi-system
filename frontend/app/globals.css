@@ -127,3 +127,36 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* AI Chat markdown rendering */
+.ai-chat-markdown p {
+  margin-bottom: 0.5rem;
+}
+
+.ai-chat-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.ai-chat-markdown strong {
+  font-weight: 600;
+}
+
+.ai-chat-markdown ul {
+  list-style-type: disc;
+  padding-left: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.ai-chat-markdown ol {
+  list-style-type: decimal;
+  padding-left: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.ai-chat-markdown li {
+  margin-bottom: 0.25rem;
+}
+
+.ai-chat-markdown li::marker {
+  color: var(--muted-foreground);
+}

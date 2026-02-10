@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { SqlCollapsible } from './SqlCollapsible';
 import { DataTableModal } from './DataTableModal';
 
@@ -40,7 +41,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {message.isError ? (
           <p className="text-destructive">{message.content}</p>
         ) : (
-          <p>{message.content}</p>
+          <div className="ai-chat-markdown">
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          </div>
         )}
 
         {message.sql && <SqlCollapsible sql={message.sql} />}

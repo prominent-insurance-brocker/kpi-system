@@ -83,40 +83,75 @@ def get_vanna_instance() -> KPIVanna:
 
 
 def _generate_summary(vn: KPIVanna, question: str, sql: str, df: pd.DataFrame) -> str:
-    """Generate a natural language summary of the query results."""
-    # Build a condensed data representation for the LLM
-    columns = list(df.columns)
-    preview_rows = df.head(5).values.tolist()
+    """Generate a rich, conversational analysis of the query results."""
+    # Edge case: empty results
+    if df.empty:
+        return (
+            "No data was found for your query. This could mean there are no "
+            "matching records for the criteria or time period you asked about. "
+            "Try adjusting the date range or filters in your question."
+        )
+
+    # Edge case: all values are null
+    if df.isna().all().all():
+        return (
+            "The query returned results, but all values are empty or null. "
+            "This usually means the data hasn't been recorded yet for the "
+            "period or criteria you're asking about."
+        )
+
+    # Build data preview — up to 50 rows in readable table format
+    preview_df = df.head(50)
+    data_preview = preview_df.to_string(index=False, max_colwidth=40)
 
     # Compute numeric aggregates for context
     numeric_stats = {}
     for col in df.select_dtypes(include=['number']).columns:
+        if df[col].isna().all():
+            continue
         numeric_stats[col] = {
-            'min': float(df[col].min()) if not df[col].isna().all() else None,
-            'max': float(df[col].max()) if not df[col].isna().all() else None,
-            'mean': round(float(df[col].mean()), 2) if not df[col].isna().all() else None,
+            'min': float(df[col].min()),
+            'max': float(df[col].max()),
+            'mean': round(float(df[col].mean()), 2),
+            'median': round(float(df[col].median()), 2),
+            'sum': round(float(df[col].sum()), 2),
         }
 
-    prompt = (
+    system_message = (
+        "You are a helpful data analyst assistant inside a chat interface. "
+        "Write a conversational, insightful response to the user's question "
+        "based on the data provided.\n\n"
+        "Rules:\n"
+        "- Lead with a direct answer to the question\n"
+        "- Use **bold** markdown for key numbers and metrics\n"
+        "- Use bullet points (- ) when presenting multiple metrics or comparisons\n"
+        "- Calculate and mention percentage differences when comparing values\n"
+        "- Identify trends (increasing, decreasing, stable) when time-series data is present\n"
+        "- End with a brief insight or observation when applicable\n"
+        "- Do NOT use headers (# or ##) — keep it conversational\n"
+        "- Do NOT mention SQL, queries, databases, or technical details\n"
+        "- Do NOT say \"based on the data\" or \"according to the results\"\n"
+        "- Keep the response focused and readable — aim for 3-8 sentences\n"
+    )
+
+    user_message = (
         f"The user asked: \"{question}\"\n\n"
-        f"The SQL query was:\n{sql}\n\n"
         f"Results ({len(df)} rows total):\n"
-        f"Columns: {columns}\n"
-        f"First rows: {preview_rows}\n"
+        f"{data_preview}\n"
     )
 
     if numeric_stats:
-        prompt += f"Numeric summaries: {numeric_stats}\n"
+        user_message += f"\nNumeric summaries: {numeric_stats}\n"
 
-    prompt += (
-        "\nProvide a clear, concise 2-4 sentence summary of these results "
-        "in plain English. Focus on the key findings and numbers. "
-        "Do not mention SQL or technical details."
-    )
+    prompt = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": user_message},
+    ]
 
     try:
         summary = vn.submit_prompt(
             prompt=prompt,
+            model="gpt-4o-mini",
         )
         return summary if summary else "Query executed successfully."
     except Exception as e:

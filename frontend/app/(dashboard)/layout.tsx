@@ -6,6 +6,7 @@ import { Sidebar } from '@/app/components/Sidebar';
 import { useAuth } from '@/app/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { LogOut, User } from 'lucide-react';
+import { ChatWidget } from '@/app/components/AiChat/ChatWidget';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
@@ -54,6 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Main content */}
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
+      <ChatWidget />
     </div>
   );
 }

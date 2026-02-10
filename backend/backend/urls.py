@@ -22,4 +22,5 @@ urlpatterns = [
     path('api/auth/', include('auth_app.urls')),
     path('api/entries/', include('entries.urls')),
     path('api/roles/', include('roles.urls')),
+    path('api/ai-chat/', include('ai_chat.urls')),
 ]

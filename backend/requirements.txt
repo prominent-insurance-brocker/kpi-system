@@ -8,3 +8,7 @@ psycopg2-binary
 gunicorn
 dj-database-url
 whitenoise
+python-dotenv
+vanna
+openai
+chromadb

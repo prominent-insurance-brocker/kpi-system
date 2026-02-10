@@ -269,5 +269,23 @@ export async function getUsersForFilter(): Promise<ApiResponse<{ id: number; ema
   return { error: result.error };
 }
 
+// AI Chat
+export interface AiChatResponse {
+  success: boolean;
+  summary?: string;
+  sql?: string | null;
+  columns?: string[] | null;
+  data?: (string | number | null)[][] | null;
+  total_rows?: number;
+  error?: string;
+}
+
+export async function askAiChat(question: string): Promise<ApiResponse<AiChatResponse>> {
+  return fetchApi<AiChatResponse>('/api/ai-chat/ask/', {
+    method: 'POST',
+    body: JSON.stringify({ question }),
+  });
+}
+
 // Generic fetch helper for other API calls
 export { fetchApi, API_BASE_URL };

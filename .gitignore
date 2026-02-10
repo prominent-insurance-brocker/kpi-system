@@ -88,6 +88,9 @@ backend/.pytest_cache/
 # mypy
 backend/.mypy_cache/
 
+# Vanna ChromaDB
+backend/.vanna_chromadb/
+
 # IDE
 .idea/
 .vscode/

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp, Anchor } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/app/context/AuthContext';
 
@@ -45,6 +45,14 @@ const navigation: NavItem[] = [
     ],
   },
   {
+    name: 'Marine',
+    icon: Anchor,
+    children: [
+      { name: 'Marine New', href: '/marine/new', moduleKey: 'marine_new' },
+      { name: 'Marine Renewal', href: '/marine/renewal', moduleKey: 'marine_renewal' },
+    ],
+  },
+  {
     name: 'User Management',
     icon: Users,
     adminOnly: true,
@@ -58,7 +66,7 @@ const navigation: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const { user, hasModulePermission } = useAuth();
-  const [expandedItems, setExpandedItems] = useState<string[]>(['General', 'Motor', 'Sales', 'User Management']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['General', 'Motor', 'Sales', 'Marine', 'User Management']);
 
   const toggleExpand = (name: string) => {
     setExpandedItems((prev) =>

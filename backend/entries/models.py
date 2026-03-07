@@ -135,3 +135,33 @@ class SalesKPIEntry(BaseEntry):
 
     def __str__(self):
         return f"Sales KPI - {self.date} by {self.added_by}"
+
+
+class MarineNewEntry(BaseEntry):
+    """Marine New module entry."""
+    gross_booked_premium = models.DecimalField(max_digits=15, decimal_places=2)
+    quotes_created = models.PositiveIntegerField()
+    new_clients_acquired = models.PositiveIntegerField()
+    new_policies_issued = models.PositiveIntegerField()
+
+    class Meta(BaseEntry.Meta):
+        verbose_name = 'Marine New Entry'
+        verbose_name_plural = 'Marine New Entries'
+
+    def __str__(self):
+        return f"Marine New - {self.date} by {self.added_by}"
+
+
+class MarineRenewalEntry(BaseEntry):
+    """Marine Renewal module entry."""
+    monthly_renewal_quotes_assigned = models.PositiveIntegerField()
+    gross_booked_premium = models.DecimalField(max_digits=15, decimal_places=2)
+    quotes_created = models.PositiveIntegerField()
+    renewal_policies_issued = models.PositiveIntegerField()
+
+    class Meta(BaseEntry.Meta):
+        verbose_name = 'Marine Renewal Entry'
+        verbose_name_plural = 'Marine Renewal Entries'
+
+    def __str__(self):
+        return f"Marine Renewal - {self.date} by {self.added_by}"

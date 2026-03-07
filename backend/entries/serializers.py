@@ -7,6 +7,8 @@ from .models import (
     MotorClaimEntry,
     SalesPremiumDataEntry,
     SalesKPIEntry,
+    MarineNewEntry,
+    MarineRenewalEntry,
 )
 
 
@@ -103,6 +105,28 @@ class SalesKPIEntrySerializer(BaseEntrySerializer):
             'id', 'date', 'leads_to_ops_team', 'quotes_from_ops_team',
             'quotes_to_client', 'total_conversions', 'existing_clients',
             'existing_clients_closed', 'new_clients_acquired',
+            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
+        ]
+        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+
+
+class MarineNewEntrySerializer(BaseEntrySerializer):
+    class Meta:
+        model = MarineNewEntry
+        fields = [
+            'id', 'date', 'gross_booked_premium', 'quotes_created',
+            'new_clients_acquired', 'new_policies_issued',
+            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
+        ]
+        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+
+
+class MarineRenewalEntrySerializer(BaseEntrySerializer):
+    class Meta:
+        model = MarineRenewalEntry
+        fields = [
+            'id', 'date', 'monthly_renewal_quotes_assigned', 'gross_booked_premium',
+            'quotes_created', 'renewal_policies_issued',
             'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
         ]
         read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']

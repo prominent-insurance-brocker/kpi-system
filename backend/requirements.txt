@@ -12,3 +12,4 @@ python-dotenv
 vanna
 openai
 chromadb
+django-crontab==0.7.1

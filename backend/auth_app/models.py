@@ -75,14 +75,13 @@ class MagicLink(models.Model):
         return f"MagicLink for {self.user.email}"
 
     @classmethod
-    def create_for_user(cls, user):
+    def create_for_user(cls, user, expiry_minutes=30):
         """Create a new magic link for a user, invalidating all previous unused tokens."""
         # Invalidate all previous unused tokens for this user
         cls.objects.filter(user=user, is_used=False).update(is_used=True)
 
-        # Create new token with 15-minute expiry
         token = secrets.token_urlsafe(48)
-        expires_at = timezone.now() + timedelta(minutes=15)
+        expires_at = timezone.now() + timedelta(minutes=expiry_minutes)
         return cls.objects.create(user=user, token=token, expires_at=expires_at)
 
     def is_valid(self):

@@ -7,12 +7,12 @@ from .forms import CustomUserCreationForm, CustomUserChangeForm
 class CustomUserAdmin(UserAdmin):
     add_form = CustomUserCreationForm
     form = CustomUserChangeForm
-    list_display = ('email', 'first_name', 'last_name', 'role', 'is_staff', 'is_active')
+    list_display = ('email', 'full_name', 'role', 'is_staff', 'is_active')
     list_filter = ('is_staff', 'is_superuser', 'is_active', 'role')
     ordering = ('email',)
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        ('Personal Info', {'fields': ('first_name', 'last_name', 'role')}),
+        ('Personal Info', {'fields': ('full_name', 'role')}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )
@@ -21,12 +21,12 @@ class CustomUserAdmin(UserAdmin):
             'classes': ('wide',),
             'fields': (
                 'email', 'password1', 'password2',
-                'first_name', 'last_name', 'role',
+                'full_name', 'role',
                 'is_staff', 'is_active'
             ),
         }),
     )
-    search_fields = ('email', 'first_name', 'last_name')
+    search_fields = ('email', 'full_name')
     readonly_fields = ('last_login', 'date_joined')
 
 @admin.register(MagicLink)

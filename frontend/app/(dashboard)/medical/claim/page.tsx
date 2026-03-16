@@ -29,8 +29,7 @@ interface MedicalClaimEntry {
 interface FilterUser {
   id: number;
   email: string;
-  first_name: string;
-  last_name: string;
+  full_name: string;
 }
 
 const STATUS_OPTIONS = [
@@ -146,7 +145,7 @@ export default function MedicalClaimPage() {
               <SelectContent>
                 <SelectItem value="all">All Users</SelectItem>
                 {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id.toString()}>{user.first_name} {user.last_name || user.email}</SelectItem>
+                  <SelectItem key={user.id} value={user.id.toString()}>{user.full_name || user.email}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

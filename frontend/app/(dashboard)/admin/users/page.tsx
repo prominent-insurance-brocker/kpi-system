@@ -135,7 +135,7 @@ export default function UsersPage() {
       header: 'Name',
       render: (user: UserAdmin) => (
         <div className="font-medium">
-          {user.first_name} {user.last_name}
+          {user.full_name}
           {user.is_staff && (
             <Badge variant="secondary" className="ml-2">
               Admin
@@ -292,8 +292,7 @@ function UserForm({
 }) {
   const [formData, setFormData] = useState({
     email: '',
-    first_name: '',
-    last_name: '',
+    full_name: '',
     role_id: null as number | null,
     is_staff: false,
     is_active: true,
@@ -304,8 +303,7 @@ function UserForm({
     if (user) {
       setFormData({
         email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
+        full_name: user.full_name,
         role_id: user.role_id,
         is_staff: user.is_staff,
         is_active: user.is_active,
@@ -313,8 +311,7 @@ function UserForm({
     } else {
       setFormData({
         email: '',
-        first_name: '',
-        last_name: '',
+        full_name: '',
         role_id: null,
         is_staff: false,
         is_active: true,
@@ -346,21 +343,12 @@ function UserForm({
           disabled={!!user}
         />
       </div>
-      <div className="grid grid-cols-1 gap-4">
-        <div className="space-y-2">
-          <Label>First Name</Label>
-          <Input
-            value={formData.first_name}
-            onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Last Name</Label>
-          <Input
-            value={formData.last_name}
-            onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-          />
-        </div>
+      <div className="space-y-2">
+        <Label>Full Name</Label>
+        <Input
+          value={formData.full_name}
+          onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+        />
       </div>
       <div className="space-y-2">
         <Label>Role</Label>

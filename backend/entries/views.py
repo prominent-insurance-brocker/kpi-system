@@ -36,7 +36,7 @@ class BaseEntryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModulePermission]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = EntryFilter
-    search_fields = ['added_by__email', 'added_by__first_name', 'added_by__last_name']
+    search_fields = ['added_by__email', 'added_by__full_name']
     ordering_fields = ['date', 'added_at']
     ordering = ['-date', '-added_at']
     module_key = None  # Override in subclasses for permission checking

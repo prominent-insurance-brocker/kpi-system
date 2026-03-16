@@ -24,8 +24,7 @@ class Command(BaseCommand):
 
         user = CustomUser.objects.create_superuser(
             email=email,
-            first_name='Super',
-            last_name='Admin',
+            full_name='Super Admin',
         )
 
         self.stdout.write(

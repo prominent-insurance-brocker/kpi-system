@@ -21,7 +21,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['id', 'email', 'first_name', 'last_name', 'is_staff', 'is_active', 'role', 'date_joined']
+        fields = ['id', 'email', 'full_name', 'is_staff', 'is_active', 'role', 'date_joined']
         read_only_fields = ['id', 'date_joined', 'is_staff']
 
 
@@ -33,7 +33,7 @@ class UserAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = [
-            'id', 'email', 'first_name', 'last_name',
+            'id', 'email', 'full_name',
             'is_staff', 'is_active', 'role_id', 'role_name',
             'date_joined', 'last_login'
         ]
@@ -59,8 +59,7 @@ class UserAdminSerializer(serializers.ModelSerializer):
         user = CustomUser.objects.create_user(
             email=validated_data['email'],
             password=None,  # No password for magic link auth
-            first_name=validated_data.get('first_name', ''),
-            last_name=validated_data.get('last_name', ''),
+            full_name=validated_data.get('full_name', ''),
             role=role,
             is_staff=validated_data.get('is_staff', False),
             is_active=validated_data.get('is_active', True),

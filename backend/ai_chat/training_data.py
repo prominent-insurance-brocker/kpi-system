@@ -124,8 +124,7 @@ def get_ddl_statements():
             CREATE TABLE auth_app_customuser (
                 id SERIAL PRIMARY KEY,
                 email VARCHAR(254) UNIQUE NOT NULL,
-                first_name VARCHAR(150) NOT NULL,
-                last_name VARCHAR(150) NOT NULL,
+                full_name VARCHAR(100) NOT NULL,
                 is_active BOOLEAN NOT NULL DEFAULT TRUE,
                 is_staff BOOLEAN NOT NULL DEFAULT FALSE,
                 date_joined TIMESTAMPTZ NOT NULL,
@@ -244,8 +243,7 @@ def get_ddl_statements():
             CREATE TABLE auth_app_customuser (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email VARCHAR(254) UNIQUE NOT NULL,
-                first_name VARCHAR(150) NOT NULL,
-                last_name VARCHAR(150) NOT NULL,
+                full_name VARCHAR(100) NOT NULL,
                 is_active BOOLEAN NOT NULL DEFAULT 1,
                 is_staff BOOLEAN NOT NULL DEFAULT 0,
                 date_joined DATETIME NOT NULL,
@@ -383,8 +381,7 @@ def get_example_queries():
                 "sql": """
                     SELECT
                         u.email,
-                        u.first_name,
-                        u.last_name,
+                        u.full_name,
                         COUNT(*) AS total_entries
                     FROM (
                         SELECT added_by_id FROM entries_generalnewentry
@@ -404,7 +401,7 @@ def get_example_queries():
                         SELECT added_by_id FROM entries_medicalclaimentry
                     ) AS all_entries
                     JOIN auth_app_customuser u ON all_entries.added_by_id = u.id
-                    GROUP BY u.id, u.email, u.first_name, u.last_name
+                    GROUP BY u.id, u.email, u.full_name
                     ORDER BY total_entries DESC
                     LIMIT 10;
                 """,
@@ -499,8 +496,7 @@ def get_example_queries():
                 "sql": """
                     SELECT
                         u.email,
-                        u.first_name,
-                        u.last_name,
+                        u.full_name,
                         COUNT(*) AS total_entries
                     FROM (
                         SELECT added_by_id FROM entries_generalnewentry
@@ -520,7 +516,7 @@ def get_example_queries():
                         SELECT added_by_id FROM entries_medicalclaimentry
                     ) AS all_entries
                     JOIN auth_app_customuser u ON all_entries.added_by_id = u.id
-                    GROUP BY u.id, u.email, u.first_name, u.last_name
+                    GROUP BY u.id, u.email, u.full_name
                     ORDER BY total_entries DESC
                     LIMIT 10;
                 """,

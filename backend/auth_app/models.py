@@ -29,8 +29,7 @@ class CustomUserManager(BaseUserManager):
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
-    first_name = models.CharField(max_length=30, blank=True)
-    last_name = models.CharField(max_length=30, blank=True)
+    full_name = models.CharField(max_length=100, blank=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)
@@ -51,10 +50,10 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         return self.email
 
     def get_full_name(self):
-        return f'{self.first_name} {self.last_name}'.strip() or self.email
+        return self.full_name or self.email
 
     def get_short_name(self):
-        return self.first_name or self.email.split('@')[0]
+        return self.full_name.split()[0] if self.full_name else self.email.split('@')[0]
 
 
 class MagicLink(models.Model):
@@ -76,14 +75,13 @@ class MagicLink(models.Model):
         return f"MagicLink for {self.user.email}"
 
     @classmethod
-    def create_for_user(cls, user):
+    def create_for_user(cls, user, expiry_minutes=30):
         """Create a new magic link for a user, invalidating all previous unused tokens."""
         # Invalidate all previous unused tokens for this user
         cls.objects.filter(user=user, is_used=False).update(is_used=True)
 
-        # Create new token with 15-minute expiry
         token = secrets.token_urlsafe(48)
-        expires_at = timezone.now() + timedelta(minutes=15)
+        expires_at = timezone.now() + timedelta(minutes=expiry_minutes)
         return cls.objects.create(user=user, token=token, expires_at=expires_at)
 
     def is_valid(self):

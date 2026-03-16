@@ -10,6 +10,7 @@ from .views import (
     SalesKPIEntryViewSet,
     MarineNewEntryViewSet,
     MarineRenewalEntryViewSet,
+    MedicalClaimEntryViewSet,
 )
 
 router = DefaultRouter()
@@ -22,6 +23,7 @@ router.register(r'sales-premium-data', SalesPremiumDataEntryViewSet, basename='s
 router.register(r'sales-kpi', SalesKPIEntryViewSet, basename='sales-kpi')
 router.register(r'marine-new', MarineNewEntryViewSet, basename='marine-new')
 router.register(r'marine-renewal', MarineRenewalEntryViewSet, basename='marine-renewal')
+router.register(r'medical-claim', MedicalClaimEntryViewSet, basename='medical-claim')
 
 urlpatterns = [
     path('', include(router.urls)),

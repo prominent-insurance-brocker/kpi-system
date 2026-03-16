@@ -165,3 +165,22 @@ class MarineRenewalEntry(BaseEntry):
 
     def __str__(self):
         return f"Marine Renewal - {self.date} by {self.added_by}"
+
+
+class MedicalClaimEntry(BaseEntry):
+    """Medical Claim module entry."""
+    STATUS_CHOICES = [
+        ('claims_opened', 'Claims Opened'),
+        ('claims_pending', 'Claims Pending'),
+        ('claims_resolved', 'Claims Resolved'),
+    ]
+
+    customer_name = models.CharField(max_length=255)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+
+    class Meta(BaseEntry.Meta):
+        verbose_name = 'Medical Claim Entry'
+        verbose_name_plural = 'Medical Claim Entries'
+
+    def __str__(self):
+        return f"Medical Claim - {self.date} by {self.added_by}"

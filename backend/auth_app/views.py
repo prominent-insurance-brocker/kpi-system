@@ -68,7 +68,7 @@ class RequestMagicLinkView(APIView):
 Click the link below to login to your account:
 {link_url}
 
-This link expires in 15 minutes.
+This link expires in 30 minutes.
 
 If you didn't request this, please ignore this email.""",
                 from_email=settings.DEFAULT_FROM_EMAIL,

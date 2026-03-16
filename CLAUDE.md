@@ -43,7 +43,7 @@ Services: PostgreSQL, Metabase (:3001), backend (:8000), frontend (:3000). A rev
 
 ## Key Domain Concepts
 
-- **10 Modules**: general_new, general_renewal, general_claim (placeholder), motor_new, motor_renewal, motor_claim, sales_premium_data, sales_kpi, marine_new, marine_renewal
+- **11 Modules**: general_new, general_renewal, general_claim (placeholder), motor_new, motor_renewal, motor_claim, sales_premium_data, sales_kpi, marine_new, marine_renewal, medical_claim
 - **RBAC**: Each user has one Role. Roles grant per-module access + data visibility (`all` or `own`)
 - **30-minute edit window**: Users can only edit their own entries within 30 minutes of creation
 - **Magic link auth**: No passwords. Users enter email, receive a single-use login link
@@ -54,7 +54,7 @@ Services: PostgreSQL, Metabase (:3001), backend (:8000), frontend (:3000). A rev
 | Prefix | App |
 |--------|-----|
 | `/api/auth/` | auth_app - magic links, login, users CRUD |
-| `/api/entries/` | entries - all 9 module entry endpoints (DRF routers) |
+| `/api/entries/` | entries - all 10 module entry endpoints (DRF routers) |
 | `/api/roles/` | roles - role CRUD + module permissions |
 | `/api/ai-chat/` | ai_chat - natural language query endpoint |
 
@@ -63,7 +63,7 @@ Services: PostgreSQL, Metabase (:3001), backend (:8000), frontend (:3000). A rev
 ```
 backend/
   auth_app/     # CustomUser, MagicLink, CookieJWTAuthentication, UserViewSet
-  entries/      # BaseEntry + 9 concrete models, BaseEntryViewSet + 9 viewsets
+  entries/      # BaseEntry + 10 concrete models, BaseEntryViewSet + 10 viewsets
   roles/        # Role, RoleModulePermission, HasModulePermission
   ai_chat/      # Vanna service, SQL validation, training data
   backend/      # settings.py, urls.py, wsgi.py

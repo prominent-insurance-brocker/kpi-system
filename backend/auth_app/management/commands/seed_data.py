@@ -15,6 +15,7 @@ from entries.models import (
     MotorClaimEntry,
     SalesPremiumDataEntry,
     SalesKPIEntry,
+    MedicalClaimEntry,
 )
 
 
@@ -45,6 +46,7 @@ class Command(BaseCommand):
         self.stdout.write('Clearing existing data...')
 
         # Clear entries first
+        MedicalClaimEntry.objects.all().delete()
         SalesKPIEntry.objects.all().delete()
         SalesPremiumDataEntry.objects.all().delete()
         MotorClaimEntry.objects.all().delete()
@@ -93,6 +95,11 @@ class Command(BaseCommand):
                 'description': 'Handles sales premium data and KPI tracking',
                 'data_visibility': 'own',
             },
+            {
+                'name': 'Medical Agent',
+                'description': 'Handles medical insurance claims processing',
+                'data_visibility': 'own',
+            },
         ]
 
         roles = {}
@@ -120,11 +127,13 @@ class Command(BaseCommand):
                 'general_new', 'general_renewal', 'general_claim',
                 'motor_new', 'motor_renewal', 'motor_claim',
                 'sales_premium_data', 'sales_kpi',
+                'medical_claim',
             ],
             'Manager': [
                 'general_new', 'general_renewal', 'general_claim',
                 'motor_new', 'motor_renewal', 'motor_claim',
                 'sales_premium_data', 'sales_kpi',
+                'medical_claim',
             ],
             'General Agent': [
                 'general_new', 'general_renewal', 'general_claim',
@@ -134,6 +143,9 @@ class Command(BaseCommand):
             ],
             'Sales Agent': [
                 'sales_premium_data', 'sales_kpi',
+            ],
+            'Medical Agent': [
+                'medical_claim',
             ],
         }
 
@@ -160,91 +172,94 @@ class Command(BaseCommand):
         users_data = [
             {
                 'email': 'samadpm01@outlook.com',
-                'first_name': 'Samad',
-                'last_name': 'PM',
+                'full_name': 'Samad PM',
                 'is_superuser': True,
                 'is_staff': True,
                 'role': None,
             },
             {
                 'email': 'amaljith64@gmail.com',
-                'first_name': 'Amaljith',
-                'last_name': 'Admin',
+                'full_name': 'Amaljith Admin',
                 'is_superuser': True,
                 'is_staff': True,
                 'role': None,
             },
             {
                 'email': 'alice@kpisystem.com',
-                'first_name': 'Alice',
-                'last_name': 'Anderson',
+                'full_name': 'Alice Anderson',
                 'is_superuser': False,
                 'is_staff': False,
                 'role': roles.get('General Agent'),
             },
             {
                 'email': 'bob@kpisystem.com',
-                'first_name': 'Bob',
-                'last_name': 'Brown',
+                'full_name': 'Bob Brown',
                 'is_superuser': False,
                 'is_staff': False,
                 'role': roles.get('Motor Agent'),
             },
             {
                 'email': 'charlie@kpisystem.com',
-                'first_name': 'Charlie',
-                'last_name': 'Clark',
+                'full_name': 'Charlie Clark',
                 'is_superuser': False,
                 'is_staff': False,
                 'role': roles.get('General Agent'),
             },
             {
                 'email': 'diana@kpisystem.com',
-                'first_name': 'Diana',
-                'last_name': 'Davis',
+                'full_name': 'Diana Davis',
                 'is_superuser': False,
                 'is_staff': False,
                 'role': roles.get('Motor Agent'),
             },
             {
                 'email': 'emma@kpisystem.com',
-                'first_name': 'Emma',
-                'last_name': 'Edwards',
+                'full_name': 'Emma Edwards',
                 'is_superuser': False,
                 'is_staff': False,
                 'role': roles.get('Sales Agent'),
             },
             {
                 'email': 'frank@kpisystem.com',
-                'first_name': 'Frank',
-                'last_name': 'Fisher',
+                'full_name': 'Frank Fisher',
                 'is_superuser': False,
                 'is_staff': False,
                 'role': roles.get('Sales Agent'),
             },
             {
                 'email': 'grace@kpisystem.com',
-                'first_name': 'Grace',
-                'last_name': 'Garcia',
+                'full_name': 'Grace Garcia',
                 'is_superuser': False,
                 'is_staff': False,
                 'role': roles.get('Sales Agent'),
             },
             {
                 'email': 'henry@kpisystem.com',
-                'first_name': 'Henry',
-                'last_name': 'Harris',
+                'full_name': 'Henry Harris',
                 'is_superuser': False,
                 'is_staff': False,
                 'role': roles.get('Sales Agent'),
             },
             {
                 'email': 'ivy@kpisystem.com',
-                'first_name': 'Ivy',
-                'last_name': 'Ingram',
+                'full_name': 'Ivy Ingram',
                 'is_superuser': False,
                 'is_staff': False,
                 'role': roles.get('Sales Agent'),
+            },
+            {
+                'email': 'jack@kpisystem.com',
+                'full_name': 'Jack Johnson',
+                'is_superuser': False,
+                'is_staff': False,
+                'role': roles.get('Medical Agent'),
+            },
+            {
+                'email': 'karen@kpisystem.com',
+                'full_name': 'Karen King',
+                'is_superuser': False,
+                'is_staff': False,
+                'role': roles.get('Medical Agent'),
             },
         ]
 
@@ -322,6 +337,16 @@ class Command(BaseCommand):
         # Seed Sales KPI entries (monthly for 2025-2026)
         count = self._seed_sales_kpi_entries(sales_users, sales_dates)
         self.stdout.write(f'  - Sales KPI entries: {count}')
+
+        # Medical agents create medical entries
+        medical_users = [
+            users.get('jack@kpisystem.com'),
+            users.get('karen@kpisystem.com'),
+        ]
+
+        # Seed Medical Claim entries
+        count = self._seed_medical_claim_entries(medical_users, dates)
+        self.stdout.write(f'  - Medical Claim entries: {count}')
 
     def _seed_general_new_entries(self, users, dates):
         """Seed GeneralNewEntry records."""
@@ -478,6 +503,31 @@ class Command(BaseCommand):
                         'existing_clients': random.randint(10, 99),
                         'existing_clients_closed': random.randint(10, 99),
                         'new_clients_acquired': random.randint(10, 99),
+                    }
+                )
+                if created:
+                    count += 1
+        return count
+
+    def _seed_medical_claim_entries(self, users, dates):
+        """Seed MedicalClaimEntry records."""
+        customer_names = [
+            'Ahmed Al-Rashid', 'Fatima Hassan', 'Mohammed Al-Sayed',
+            'Sara Ibrahim', 'Khalid Omar', 'Noor Ali', 'Yusuf Mahmoud',
+            'Layla Ahmed', 'Hassan Mustafa', 'Amira Saleh',
+        ]
+        statuses = ['claims_opened', 'claims_pending', 'claims_resolved']
+        count = 0
+        for user in users:
+            if not user:
+                continue
+            for entry_date in dates:
+                _, created = MedicalClaimEntry.objects.get_or_create(
+                    date=entry_date,
+                    added_by=user,
+                    defaults={
+                        'customer_name': random.choice(customer_names),
+                        'status': random.choice(statuses),
                     }
                 )
                 if created:

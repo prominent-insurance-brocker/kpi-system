@@ -43,8 +43,7 @@ interface MarineNewEntry {
 interface FilterUser {
   id: number;
   email: string;
-  first_name: string;
-  last_name: string;
+  full_name: string;
 }
 
 const columns = [
@@ -213,7 +212,7 @@ export default function MarineNewPage() {
                 <SelectItem value="all">All Users</SelectItem>
                 {users.map((user) => (
                   <SelectItem key={user.id} value={user.id.toString()}>
-                    {user.first_name} {user.last_name || user.email}
+                    {user.full_name || user.email}
                   </SelectItem>
                 ))}
               </SelectContent>

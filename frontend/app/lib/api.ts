@@ -85,8 +85,7 @@ export interface RoleFull {
 export interface User {
   id: number;
   email: string;
-  first_name: string;
-  last_name: string;
+  full_name: string;
   date_joined: string;
   is_staff: boolean;
   is_active: boolean;
@@ -96,8 +95,7 @@ export interface User {
 export interface UserAdmin {
   id: number;
   email: string;
-  first_name: string;
-  last_name: string;
+  full_name: string;
   is_staff: boolean;
   is_active: boolean;
   role_id: number | null;
@@ -254,15 +252,14 @@ export async function getModules(): Promise<ApiResponse<{ modules: ModuleInfo[] 
 }
 
 // Get users for filter dropdown (simple list)
-export async function getUsersForFilter(): Promise<ApiResponse<{ id: number; email: string; first_name: string; last_name: string }[]>> {
+export async function getUsersForFilter(): Promise<ApiResponse<{ id: number; email: string; full_name: string }[]>> {
   const result = await fetchApi<PaginatedResponse<UserAdmin>>('/api/auth/users/?page_size=1000');
   if (result.data) {
     return {
       data: result.data.results.map(u => ({
         id: u.id,
         email: u.email,
-        first_name: u.first_name,
-        last_name: u.last_name,
+        full_name: u.full_name,
       }))
     };
   }

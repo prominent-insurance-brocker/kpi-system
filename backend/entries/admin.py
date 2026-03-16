@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     GeneralNewEntry, GeneralRenewalEntry,
-    MotorNewEntry, MotorRenewalEntry, MotorClaimEntry
+    MotorNewEntry, MotorRenewalEntry, MotorClaimEntry,
+    MedicalClaimEntry,
 )
 
 class BaseEntryAdmin(admin.ModelAdmin):
@@ -29,3 +30,7 @@ class MotorRenewalEntryAdmin(BaseEntryAdmin):
 @admin.register(MotorClaimEntry)
 class MotorClaimEntryAdmin(BaseEntryAdmin):
     list_display = BaseEntryAdmin.list_display + ('registered_claims', 'claims_closed', 'tat')
+
+@admin.register(MedicalClaimEntry)
+class MedicalClaimEntryAdmin(BaseEntryAdmin):
+    list_display = BaseEntryAdmin.list_display + ('customer_name', 'status')

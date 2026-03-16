@@ -15,6 +15,7 @@ from entries.models import (
     MotorClaimEntry,
     SalesPremiumDataEntry,
     SalesKPIEntry,
+    MedicalClaimEntry,
 )
 
 
@@ -45,6 +46,7 @@ class Command(BaseCommand):
         self.stdout.write('Clearing existing data...')
 
         # Clear entries first
+        MedicalClaimEntry.objects.all().delete()
         SalesKPIEntry.objects.all().delete()
         SalesPremiumDataEntry.objects.all().delete()
         MotorClaimEntry.objects.all().delete()
@@ -93,6 +95,11 @@ class Command(BaseCommand):
                 'description': 'Handles sales premium data and KPI tracking',
                 'data_visibility': 'own',
             },
+            {
+                'name': 'Medical Agent',
+                'description': 'Handles medical insurance claims processing',
+                'data_visibility': 'own',
+            },
         ]
 
         roles = {}
@@ -120,11 +127,13 @@ class Command(BaseCommand):
                 'general_new', 'general_renewal', 'general_claim',
                 'motor_new', 'motor_renewal', 'motor_claim',
                 'sales_premium_data', 'sales_kpi',
+                'medical_claim',
             ],
             'Manager': [
                 'general_new', 'general_renewal', 'general_claim',
                 'motor_new', 'motor_renewal', 'motor_claim',
                 'sales_premium_data', 'sales_kpi',
+                'medical_claim',
             ],
             'General Agent': [
                 'general_new', 'general_renewal', 'general_claim',
@@ -134,6 +143,9 @@ class Command(BaseCommand):
             ],
             'Sales Agent': [
                 'sales_premium_data', 'sales_kpi',
+            ],
+            'Medical Agent': [
+                'medical_claim',
             ],
         }
 
@@ -246,6 +258,22 @@ class Command(BaseCommand):
                 'is_staff': False,
                 'role': roles.get('Sales Agent'),
             },
+            {
+                'email': 'jack@kpisystem.com',
+                'first_name': 'Jack',
+                'last_name': 'Johnson',
+                'is_superuser': False,
+                'is_staff': False,
+                'role': roles.get('Medical Agent'),
+            },
+            {
+                'email': 'karen@kpisystem.com',
+                'first_name': 'Karen',
+                'last_name': 'King',
+                'is_superuser': False,
+                'is_staff': False,
+                'role': roles.get('Medical Agent'),
+            },
         ]
 
         users = {}
@@ -322,6 +350,16 @@ class Command(BaseCommand):
         # Seed Sales KPI entries (monthly for 2025-2026)
         count = self._seed_sales_kpi_entries(sales_users, sales_dates)
         self.stdout.write(f'  - Sales KPI entries: {count}')
+
+        # Medical agents create medical entries
+        medical_users = [
+            users.get('jack@kpisystem.com'),
+            users.get('karen@kpisystem.com'),
+        ]
+
+        # Seed Medical Claim entries
+        count = self._seed_medical_claim_entries(medical_users, dates)
+        self.stdout.write(f'  - Medical Claim entries: {count}')
 
     def _seed_general_new_entries(self, users, dates):
         """Seed GeneralNewEntry records."""
@@ -478,6 +516,31 @@ class Command(BaseCommand):
                         'existing_clients': random.randint(10, 99),
                         'existing_clients_closed': random.randint(10, 99),
                         'new_clients_acquired': random.randint(10, 99),
+                    }
+                )
+                if created:
+                    count += 1
+        return count
+
+    def _seed_medical_claim_entries(self, users, dates):
+        """Seed MedicalClaimEntry records."""
+        customer_names = [
+            'Ahmed Al-Rashid', 'Fatima Hassan', 'Mohammed Al-Sayed',
+            'Sara Ibrahim', 'Khalid Omar', 'Noor Ali', 'Yusuf Mahmoud',
+            'Layla Ahmed', 'Hassan Mustafa', 'Amira Saleh',
+        ]
+        statuses = ['claims_opened', 'claims_pending', 'claims_resolved']
+        count = 0
+        for user in users:
+            if not user:
+                continue
+            for entry_date in dates:
+                _, created = MedicalClaimEntry.objects.get_or_create(
+                    date=entry_date,
+                    added_by=user,
+                    defaults={
+                        'customer_name': random.choice(customer_names),
+                        'status': random.choice(statuses),
                     }
                 )
                 if created:

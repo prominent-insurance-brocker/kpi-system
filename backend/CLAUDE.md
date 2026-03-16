@@ -18,11 +18,11 @@ backend/
       seed_superadmin.py  # Creates initial admin user
       seed_data.py        # Sample roles, users, entries for development
   entries/            # KPI data entry (core domain)
-    models.py         # BaseEntry (abstract) + 9 concrete entry models
-    views.py          # BaseEntryViewSet + 9 concrete viewsets
+    models.py         # BaseEntry (abstract) + 10 concrete entry models
+    views.py          # BaseEntryViewSet + 10 concrete viewsets
     serializers.py
     filters.py        # EntryFilter (date range, search)
-    urls.py           # DRF router registering all 9 viewsets
+    urls.py           # DRF router registering all 10 viewsets
   roles/              # RBAC system
     models.py         # Role, RoleModulePermission
     permissions.py    # HasModulePermission, IsAdminUser
@@ -63,6 +63,7 @@ Concrete models:
 | SalesKPIEntry | `sales_kpi` | leads_to_ops_team, quotes_from_ops_team, quotes_to_client, total_conversions, existing_clients, existing_clients_closed, new_clients_acquired |
 | MarineNewEntry | `marine_new` | gross_booked_premium, quotes_created, new_clients_acquired, new_policies_issued |
 | MarineRenewalEntry | `marine_renewal` | monthly_renewal_quotes_assigned, gross_booked_premium, quotes_created, renewal_policies_issued |
+| MedicalClaimEntry | `medical_claim` | customer_name, status (claims_opened/claims_pending/claims_resolved) |
 
 ## Viewset Pattern
 
@@ -79,7 +80,7 @@ Concrete models:
 - **HasModulePermission** (`roles/permissions.py`): Checks `view.module_key` against user's `role.permissions`. Staff bypasses.
 - **IsAdminUser**: Simple `is_staff` check for admin-only endpoints.
 - **Data visibility**: Role has `data_visibility` field (`all` | `own`). Enforced in `BaseEntryViewSet.get_queryset()`.
-- **Module permissions**: `RoleModulePermission` links Role to module keys. 10 possible modules defined in `MODULE_CHOICES`.
+- **Module permissions**: `RoleModulePermission` links Role to module keys. 11 possible modules defined in `MODULE_CHOICES`.
 
 ## AI Chat
 
@@ -113,6 +114,7 @@ Concrete models:
 /api/entries/sales-kpi/            (same pattern)
 /api/entries/marine-new/           (same pattern)
 /api/entries/marine-renewal/       (same pattern)
+/api/entries/medical-claim/       (same pattern)
 
 /api/roles/                        GET/POST
 /api/roles/{id}/                   GET/PATCH/DELETE

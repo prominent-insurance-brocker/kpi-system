@@ -22,6 +22,8 @@ frontend/
       marine/
         new/page.tsx          # Marine New entries
         renewal/page.tsx      # Marine Renewal entries
+      medical/
+        claim/page.tsx        # Medical Claim entries
       admin/
         users/page.tsx        # User management (admin only)
         roles/page.tsx        # Role management (admin only)
@@ -79,7 +81,7 @@ All entry module pages (general/new, motor/claim, sales/kpi, etc.) follow the sa
 ## Key Components
 
 - **DataTable** (`app/components/DataTable.tsx`): Generic table supporting pagination, search, date range filtering, user filtering, inline add/edit modals. Each module page configures it with columns and fields.
-- **Sidebar** (`app/components/Sidebar.tsx`): Shows navigation based on user's module permissions from `AuthContext`. Categories (General, Motor, Sales, Marine) shown if user has any child permission.
+- **Sidebar** (`app/components/Sidebar.tsx`): Shows navigation based on user's module permissions from `AuthContext`. Categories (General, Motor, Sales, Marine, Medical) shown if user has any child permission.
 - **AiChat** (`app/components/AiChat/ChatWidget.tsx`): Floating chat widget. Sends questions to `/api/ai-chat/ask/`, displays markdown summaries and SQL result tables.
 
 ## Commands

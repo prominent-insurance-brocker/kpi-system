@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp, Anchor } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp, Anchor, HeartPulse } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/app/context/AuthContext';
 
@@ -53,6 +53,13 @@ const navigation: NavItem[] = [
     ],
   },
   {
+    name: 'Medical',
+    icon: HeartPulse,
+    children: [
+      { name: 'Medical Claim', href: '/medical/claim', moduleKey: 'medical_claim' },
+    ],
+  },
+  {
     name: 'User Management',
     icon: Users,
     adminOnly: true,
@@ -66,7 +73,7 @@ const navigation: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const { user, hasModulePermission } = useAuth();
-  const [expandedItems, setExpandedItems] = useState<string[]>(['General', 'Motor', 'Sales', 'Marine', 'User Management']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['General', 'Motor', 'Sales', 'Marine', 'Medical', 'User Management']);
 
   const toggleExpand = (name: string) => {
     setExpandedItems((prev) =>

@@ -14,6 +14,7 @@ from .models import (
     SalesKPIEntry,
     MarineNewEntry,
     MarineRenewalEntry,
+    MedicalClaimEntry,
 )
 from .serializers import (
     GeneralNewEntrySerializer,
@@ -25,6 +26,7 @@ from .serializers import (
     SalesKPIEntrySerializer,
     MarineNewEntrySerializer,
     MarineRenewalEntrySerializer,
+    MedicalClaimEntrySerializer,
 )
 from .filters import EntryFilter
 
@@ -150,3 +152,9 @@ class MarineRenewalEntryViewSet(BaseEntryViewSet):
     queryset = MarineRenewalEntry.objects.all()
     serializer_class = MarineRenewalEntrySerializer
     module_key = 'marine_renewal'
+
+
+class MedicalClaimEntryViewSet(BaseEntryViewSet):
+    queryset = MedicalClaimEntry.objects.all()
+    serializer_class = MedicalClaimEntrySerializer
+    module_key = 'medical_claim'

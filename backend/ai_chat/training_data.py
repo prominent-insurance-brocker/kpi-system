@@ -110,6 +110,17 @@ def get_ddl_statements():
             );
             """,
             """
+            CREATE TABLE entries_medicalclaimentry (
+                id SERIAL PRIMARY KEY,
+                date DATE NOT NULL,
+                customer_name VARCHAR(255) NOT NULL,
+                status VARCHAR(20) NOT NULL,
+                added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                added_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL
+            );
+            """,
+            """
             CREATE TABLE auth_app_customuser (
                 id SERIAL PRIMARY KEY,
                 email VARCHAR(254) UNIQUE NOT NULL,
@@ -219,6 +230,17 @@ def get_ddl_statements():
             );
             """,
             """
+            CREATE TABLE entries_medicalclaimentry (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date DATE NOT NULL,
+                customer_name VARCHAR(255) NOT NULL,
+                status VARCHAR(20) NOT NULL,
+                added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                added_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            """,
+            """
             CREATE TABLE auth_app_customuser (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email VARCHAR(254) UNIQUE NOT NULL,
@@ -264,6 +286,9 @@ def get_documentation():
         "The 'Sales KPI' module (entries_saleskpientry) tracks sales team performance: "
         "leads_to_ops_team, quotes_from_ops_team, quotes_to_client, total_conversions, "
         "existing_clients, existing_clients_closed, and new_clients_acquired.",
+
+        "The 'Medical Claim' module (entries_medicalclaimentry) tracks medical insurance claims: "
+        "customer_name (name of the customer) and status (one of 'claims_opened', 'claims_pending', 'claims_resolved').",
 
         "All entry tables have an added_by_id foreign key to auth_app_customuser. "
         "To find who entered data, JOIN with auth_app_customuser ON added_by_id = auth_app_customuser.id.",
@@ -334,6 +359,14 @@ def get_example_queries():
                 """,
             },
             {
+                "question": "How many medical claims are currently pending?",
+                "sql": """
+                    SELECT COUNT(*) AS total_pending_medical_claims
+                    FROM entries_medicalclaimentry
+                    WHERE status = 'claims_pending';
+                """,
+            },
+            {
                 "question": "What is the conversion rate for General New entries last month?",
                 "sql": """
                     SELECT
@@ -367,6 +400,8 @@ def get_example_queries():
                         SELECT added_by_id FROM entries_salespremiumdataentry
                         UNION ALL
                         SELECT added_by_id FROM entries_saleskpientry
+                        UNION ALL
+                        SELECT added_by_id FROM entries_medicalclaimentry
                     ) AS all_entries
                     JOIN auth_app_customuser u ON all_entries.added_by_id = u.id
                     GROUP BY u.id, u.email, u.first_name, u.last_name
@@ -440,6 +475,14 @@ def get_example_queries():
                 """,
             },
             {
+                "question": "How many medical claims are currently pending?",
+                "sql": """
+                    SELECT COUNT(*) AS total_pending_medical_claims
+                    FROM entries_medicalclaimentry
+                    WHERE status = 'claims_pending';
+                """,
+            },
+            {
                 "question": "What is the conversion rate for General New entries last month?",
                 "sql": """
                     SELECT
@@ -473,6 +516,8 @@ def get_example_queries():
                         SELECT added_by_id FROM entries_salespremiumdataentry
                         UNION ALL
                         SELECT added_by_id FROM entries_saleskpientry
+                        UNION ALL
+                        SELECT added_by_id FROM entries_medicalclaimentry
                     ) AS all_entries
                     JOIN auth_app_customuser u ON all_entries.added_by_id = u.id
                     GROUP BY u.id, u.email, u.first_name, u.last_name

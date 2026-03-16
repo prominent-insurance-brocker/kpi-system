@@ -38,6 +38,7 @@ class RoleModulePermission(models.Model):
         ('sales_kpi', 'Sales KPI'),
         ('marine_new', 'Marine New'),
         ('marine_renewal', 'Marine Renewal'),
+        ('medical_claim', 'Medical Claim'),
     ]
 
     role = models.ForeignKey(

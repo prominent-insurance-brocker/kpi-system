@@ -93,10 +93,24 @@ class MotorRenewalEntry(BaseEntry):
 
 class MotorClaimEntry(BaseEntry):
     """Motor Claim module entry."""
-    registered_claims = models.PositiveIntegerField()
-    claims_closed = models.PositiveIntegerField()
-    pending_cases = models.PositiveIntegerField()
-    tat = models.PositiveIntegerField(verbose_name='TAT')
+    STATUS_CHOICES = [
+        ('claims_opened', 'Claims Opened'),
+        ('claims_pending', 'Claims Pending'),
+        ('claims_resolved', 'Claims Resolved'),
+        ('claims_rejected', 'Claims Rejected'),
+    ]
+
+    TERMINAL_STATUSES = {'claims_resolved', 'claims_rejected'}
+
+    TRANSITIONS = {
+        'claims_opened': ['claims_pending'],
+        'claims_pending': ['claims_resolved', 'claims_rejected'],
+        'claims_resolved': [],
+        'claims_rejected': [],
+    }
+
+    customer_name = models.CharField(max_length=255)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Motor Claim Entry'
@@ -104,6 +118,70 @@ class MotorClaimEntry(BaseEntry):
 
     def __str__(self):
         return f"Motor Claim - {self.date} by {self.added_by}"
+
+    @classmethod
+    def get_allowed_transitions(cls, current_status):
+        return cls.TRANSITIONS.get(current_status, [])
+
+    @property
+    def is_terminal(self):
+        return self.status in self.TERMINAL_STATUSES
+
+    def get_tat(self):
+        """Calculate turnaround time from creation to terminal status."""
+        if not self.is_terminal:
+            return None
+        terminal_transition = self.status_transitions.filter(
+            to_status__in=self.TERMINAL_STATUSES
+        ).first()
+        if terminal_transition:
+            return terminal_transition.changed_at - self.added_at
+        return None
+
+    def get_tat_display(self):
+        """Return TAT as 'Xd Yh Zm' or 'In progress'."""
+        delta = self.get_tat()
+        if delta is None:
+            return 'In progress'
+        total_seconds = int(delta.total_seconds())
+        days = total_seconds // 86400
+        hours = (total_seconds % 86400) // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        if days > 0:
+            return f"{days}d {hours}h {minutes}m"
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        if minutes > 0:
+            return f"{minutes}m {seconds}s"
+        return f"{seconds}s"
+
+
+class MotorClaimStatusTransition(models.Model):
+    """Records each status change for a motor claim entry."""
+    entry = models.ForeignKey(
+        MotorClaimEntry,
+        on_delete=models.CASCADE,
+        related_name='status_transitions'
+    )
+    from_status = models.CharField(
+        max_length=20, choices=MotorClaimEntry.STATUS_CHOICES, blank=True
+    )
+    to_status = models.CharField(
+        max_length=20, choices=MotorClaimEntry.STATUS_CHOICES
+    )
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='motor_claim_status_changes'
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['changed_at']
+
+    def __str__(self):
+        return f"{self.entry_id}: {self.from_status} -> {self.to_status}"
 
 
 class SalesPremiumDataEntry(BaseEntry):

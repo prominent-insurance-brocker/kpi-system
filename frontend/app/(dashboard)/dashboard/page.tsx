@@ -45,7 +45,7 @@ export default function DashboardPage() {
         <p className="text-muted-foreground mt-1">Overview of KPI metrics</p>
       </div>
 
-      {/* General Section */}
+      {/* General Section - temporarily commented out
       <div>
         <h2 className="text-xl font-semibold mb-4">General</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -92,7 +92,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Motor Section */}
+      Motor Section
       <div>
         <h2 className="text-xl font-semibold mb-4">Motor</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -129,7 +129,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Claims Section */}
+      Claims Section
       <div>
         <h2 className="text-xl font-semibold mb-4">Claims</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -169,6 +169,7 @@ export default function DashboardPage() {
           </Card>
         </div>
       </div>
+      */}
       {/* Analytics Section */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Analytics</h2>

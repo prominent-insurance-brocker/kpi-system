@@ -29,7 +29,7 @@ class MotorRenewalEntryAdmin(BaseEntryAdmin):
 
 @admin.register(MotorClaimEntry)
 class MotorClaimEntryAdmin(BaseEntryAdmin):
-    list_display = BaseEntryAdmin.list_display + ('registered_claims', 'claims_closed', 'tat')
+    list_display = BaseEntryAdmin.list_display + ('customer_name', 'status')
 
 @admin.register(MedicalClaimEntry)
 class MedicalClaimEntryAdmin(BaseEntryAdmin):

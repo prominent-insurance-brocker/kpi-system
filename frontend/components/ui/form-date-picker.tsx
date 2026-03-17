@@ -35,8 +35,11 @@ export function FormDatePicker({
 
   const handleSelect = (date: Date | undefined) => {
     if (date) {
-      // Format to YYYY-MM-DD
-      const formatted = date.toISOString().split("T")[0]
+      // Format to YYYY-MM-DD using local time (toISOString() uses UTC which causes off-by-one in UTC+ timezones)
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const formatted = `${year}-${month}-${day}`
       onChange(formatted)
     } else {
       onChange("")

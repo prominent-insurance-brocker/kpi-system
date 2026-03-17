@@ -5,6 +5,7 @@ from .models import (
     MotorNewEntry,
     MotorRenewalEntry,
     MotorClaimEntry,
+    MotorClaimStatusTransition,
     SalesPremiumDataEntry,
     SalesKPIEntry,
     MarineNewEntry,
@@ -76,16 +77,46 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
 
 
 class MotorClaimEntrySerializer(BaseEntrySerializer):
+    tat_display = serializers.SerializerMethodField()
+    allowed_transitions = serializers.SerializerMethodField()
+    is_terminal = serializers.SerializerMethodField()
+
     class Meta:
         model = MotorClaimEntry
         fields = [
-            'id', 'date', 'registered_claims', 'claims_closed', 'pending_cases',
-            'tat', 'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
+            'id', 'date', 'customer_name', 'status',
+            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable',
+            'tat_display', 'allowed_transitions', 'is_terminal'
         ]
         read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
 
+    def get_tat_display(self, obj):
+        return obj.get_tat_display()
+
+    def get_allowed_transitions(self, obj):
+        return MotorClaimEntry.get_allowed_transitions(obj.status)
+
+    def get_is_terminal(self, obj):
+        return obj.is_terminal
+
     def validate_accuracy(self, value):
-        # Motor Claim doesn't have accuracy field, skip validation
+        return value
+
+
+class MotorClaimStatusUpdateSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=MotorClaimEntry.STATUS_CHOICES)
+
+    def validate_status(self, value):
+        entry = self.context['entry']
+        allowed = MotorClaimEntry.get_allowed_transitions(entry.status)
+        if value not in allowed:
+            current_label = dict(MotorClaimEntry.STATUS_CHOICES).get(entry.status)
+            allowed_labels = [dict(MotorClaimEntry.STATUS_CHOICES).get(s) for s in allowed]
+            raise serializers.ValidationError(
+                f"Cannot transition from '{current_label}' to "
+                f"'{dict(MotorClaimEntry.STATUS_CHOICES).get(value)}'. "
+                f"Allowed: {allowed_labels}"
+            )
         return value
 
 

@@ -58,7 +58,8 @@ Concrete models:
 | GeneralRenewalEntry | `general_renewal` | quotations, quotes_revised, quotes_converted, tat, accuracy |
 | MotorNewEntry | `motor_new` | quotations, quotes_revised, tat, accuracy |
 | MotorRenewalEntry | `motor_renewal` | quotations, retention, tat, accuracy |
-| MotorClaimEntry | `motor_claim` | registered_claims, claims_closed, pending_cases, tat |
+| MotorClaimEntry | `motor_claim` | customer_name, status (claims_opened/claims_pending/claims_resolved/claims_rejected) |
+| MotorClaimStatusTransition | — | entry FK, from_status, to_status, changed_by, changed_at |
 | SalesPremiumDataEntry | `sales_premium_data` | gross_booked_premium, target |
 | SalesKPIEntry | `sales_kpi` | leads_to_ops_team, quotes_from_ops_team, quotes_to_client, total_conversions, existing_clients, existing_clients_closed, new_clients_acquired |
 | MarineNewEntry | `marine_new` | gross_booked_premium, quotes_created, new_clients_acquired, new_policies_issued |
@@ -110,6 +111,8 @@ Concrete models:
 /api/entries/motor-new/            (same pattern)
 /api/entries/motor-renewal/        (same pattern)
 /api/entries/motor-claim/          (same pattern)
+/api/entries/motor-claim/stats/    GET    - Per-status counts (claims_opened, claims_pending, claims_resolved, claims_rejected)
+/api/entries/motor-claim/{id}/update-status/  PATCH  - Transition status (bypasses 30-min window)
 /api/entries/sales-premium-data/   (same pattern)
 /api/entries/sales-kpi/            (same pattern)
 /api/entries/marine-new/           (same pattern)

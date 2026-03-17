@@ -215,16 +215,22 @@ class MedicalClaimEntry(BaseEntry):
         return None
 
     def get_tat_display(self):
-        """Return TAT as 'Xd Yh' or 'In progress'."""
+        """Return TAT as 'Xd Yh Zm' or 'In progress'."""
         delta = self.get_tat()
         if delta is None:
             return 'In progress'
-        total_hours = int(delta.total_seconds() // 3600)
-        days = total_hours // 24
-        hours = total_hours % 24
+        total_seconds = int(delta.total_seconds())
+        days = total_seconds // 86400
+        hours = (total_seconds % 86400) // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
         if days > 0:
-            return f"{days}d {hours}h"
-        return f"{hours}h"
+            return f"{days}d {hours}h {minutes}m"
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        if minutes > 0:
+            return f"{minutes}m {seconds}s"
+        return f"{seconds}s"
 
 
 class MedicalClaimStatusTransition(models.Model):

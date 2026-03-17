@@ -14,6 +14,7 @@ import { Plus } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate, formatDateTime } from '@/app/lib/date';
+import { toast } from 'sonner';
 
 interface MedicalClaimEntry {
   id: number;
@@ -157,6 +158,7 @@ export default function MedicalClaimPage() {
       );
       if (response.ok) {
         fetchEntries();
+        toast.success(`Status updated to ${getStatusLabel(newStatus)}`);
       } else {
         const data = await response.json();
         alert(data.error || data.status?.[0] || 'Failed to update status');
@@ -280,12 +282,10 @@ function EntryForm({ entry, onSave, onClose, error }: { entry: MedicalClaimEntry
         {!isEditing && (
           <div className="space-y-2">
             <Label>Status</Label>
-            <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-              <SelectTrigger className="shadow-none"><SelectValue placeholder="Select status" /></SelectTrigger>
+            <Select value="claims_opened" disabled>
+              <SelectTrigger className="shadow-none"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {STATUS_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                ))}
+                <SelectItem value="claims_opened">Claims Opened</SelectItem>
               </SelectContent>
             </Select>
           </div>

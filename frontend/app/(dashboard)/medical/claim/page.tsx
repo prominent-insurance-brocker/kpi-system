@@ -24,6 +24,9 @@ interface MedicalClaimEntry {
   added_by_name: string;
   added_at: string;
   is_editable: boolean;
+  tat_display: string;
+  allowed_transitions: string[];
+  is_terminal: boolean;
 }
 
 interface FilterUser {
@@ -36,6 +39,7 @@ const STATUS_OPTIONS = [
   { value: 'claims_opened', label: 'Claims Opened' },
   { value: 'claims_pending', label: 'Claims Pending' },
   { value: 'claims_resolved', label: 'Claims Resolved' },
+  { value: 'claims_rejected', label: 'Claims Rejected' },
 ];
 
 const getStatusLabel = (value: string) => {
@@ -43,13 +47,48 @@ const getStatusLabel = (value: string) => {
   return option ? option.label : value;
 };
 
-const columns = [
-  { key: 'date', header: 'Date', render: (item: MedicalClaimEntry) => formatDate(item.date) },
-  { key: 'added_by_name', header: 'Added By' },
-  { key: 'added_at', header: 'Added At', render: (item: MedicalClaimEntry) => formatDateTime(item.added_at) },
-  { key: 'customer_name', header: 'Customer Name' },
-  { key: 'status', header: 'Status', render: (item: MedicalClaimEntry) => getStatusLabel(item.status) },
-];
+const STATUS_COLORS: Record<string, string> = {
+  claims_opened: 'bg-blue-100 text-blue-800',
+  claims_pending: 'bg-yellow-100 text-yellow-800',
+  claims_resolved: 'bg-green-100 text-green-800',
+  claims_rejected: 'bg-red-100 text-red-800',
+};
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[status] || ''}`}>
+      {getStatusLabel(status)}
+    </span>
+  );
+}
+
+function InlineStatusSelect({
+  currentStatus,
+  allowedTransitions,
+  onStatusChange,
+}: {
+  currentStatus: string;
+  allowedTransitions: string[];
+  onStatusChange: (status: string) => void;
+}) {
+  return (
+    <Select value={currentStatus} onValueChange={onStatusChange}>
+      <SelectTrigger className="h-8 w-[170px] text-xs shadow-none">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={currentStatus} disabled>
+          {getStatusLabel(currentStatus)}
+        </SelectItem>
+        {allowedTransitions.map((s) => (
+          <SelectItem key={s} value={s}>
+            {getStatusLabel(s)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 export default function MedicalClaimPage() {
   const router = useRouter();
@@ -105,6 +144,29 @@ export default function MedicalClaimPage() {
   useEffect(() => { fetchUsers(); }, []);
   useEffect(() => { fetchEntries(); }, [page, pageSize, dateFrom, dateTo, userId]);
 
+  const updateStatus = async (entryId: number, newStatus: string) => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/entries/medical-claim/${entryId}/update-status/`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ status: newStatus }),
+        }
+      );
+      if (response.ok) {
+        fetchEntries();
+      } else {
+        const data = await response.json();
+        alert(data.error || data.status?.[0] || 'Failed to update status');
+      }
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      alert('Failed to update status');
+    }
+  };
+
   const handleSave = async (formData: Partial<MedicalClaimEntry>) => {
     setError('');
     const url = editingEntry ? `${API_BASE_URL}/api/entries/medical-claim/${editingEntry.id}/` : `${API_BASE_URL}/api/entries/medical-claim/`;
@@ -119,6 +181,30 @@ export default function MedicalClaimPage() {
     if (response.ok) fetchEntries();
     else { const data = await response.json(); alert(data.error || 'Failed to delete entry'); }
   };
+
+  const columns = [
+    { key: 'date', header: 'Date', render: (item: MedicalClaimEntry) => formatDate(item.date) },
+    { key: 'added_by_name', header: 'Added By' },
+    { key: 'added_at', header: 'Added At', render: (item: MedicalClaimEntry) => formatDateTime(item.added_at) },
+    { key: 'customer_name', header: 'Customer Name' },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (item: MedicalClaimEntry) => {
+        if (item.is_terminal || item.allowed_transitions.length === 0) {
+          return <StatusBadge status={item.status} />;
+        }
+        return (
+          <InlineStatusSelect
+            currentStatus={item.status}
+            allowedTransitions={item.allowed_transitions}
+            onStatusChange={(newStatus) => updateStatus(item.id, newStatus)}
+          />
+        );
+      },
+    },
+    { key: 'tat_display', header: 'TAT' },
+  ];
 
   const hasActiveFilters = dateFrom || dateTo || userId;
 
@@ -165,30 +251,45 @@ export default function MedicalClaimPage() {
 }
 
 function EntryForm({ entry, onSave, onClose, error }: { entry: MedicalClaimEntry | null; onSave: (data: Partial<MedicalClaimEntry>) => void; onClose: () => void; error: string }) {
-  const [formData, setFormData] = useState({ date: '', customer_name: '', status: '' });
+  const [formData, setFormData] = useState({ date: '', customer_name: '', status: 'claims_opened' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   useEffect(() => {
     if (entry) setFormData({ date: entry.date, customer_name: entry.customer_name, status: entry.status });
-    else setFormData({ date: new Date().toISOString().split('T')[0], customer_name: '', status: '' });
+    else setFormData({ date: new Date().toISOString().split('T')[0], customer_name: '', status: 'claims_opened' });
   }, [entry]);
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); setIsSubmitting(true); onSave({ date: formData.date, customer_name: formData.customer_name, status: formData.status }); setIsSubmitting(false); };
+
+  const isEditing = !!entry;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    if (isEditing) {
+      onSave({ date: formData.date, customer_name: formData.customer_name });
+    } else {
+      onSave({ date: formData.date, customer_name: formData.customer_name, status: formData.status });
+    }
+    setIsSubmitting(false);
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4 p-4">
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">{error}</div>}
       <FormDatePicker label="Date" value={formData.date} onChange={(date) => setFormData({ ...formData, date })} required />
       <div className="grid grid-cols-1 gap-4">
         <div className="space-y-2"><Label>Customer Name</Label><Input type="text" placeholder="Enter customer name" value={formData.customer_name} onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })} required /></div>
-        <div className="space-y-2">
-          <Label>Status</Label>
-          <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-            <SelectTrigger className="shadow-none"><SelectValue placeholder="Select status" /></SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {!isEditing && (
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+              <SelectTrigger className="shadow-none"><SelectValue placeholder="Select status" /></SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
       <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : entry ? 'Update' : 'Create'}</Button></DialogFooter>
     </form>

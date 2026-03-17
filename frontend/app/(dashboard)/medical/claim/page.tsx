@@ -15,6 +15,7 @@ import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate, formatDateTime } from '@/app/lib/date';
 import { toast } from 'sonner';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 interface MedicalClaimEntry {
   id: number;
@@ -34,6 +35,13 @@ interface FilterUser {
   id: number;
   email: string;
   full_name: string;
+}
+
+interface MedicalClaimStats {
+  claims_opened: number;
+  claims_pending: number;
+  claims_resolved: number;
+  claims_rejected: number;
 }
 
 const STATUS_OPTIONS = [
@@ -102,6 +110,7 @@ export default function MedicalClaimPage() {
   const [editingEntry, setEditingEntry] = useState<MedicalClaimEntry | null>(null);
   const [error, setError] = useState('');
   const [users, setUsers] = useState<FilterUser[]>([]);
+  const [stats, setStats] = useState<MedicalClaimStats | null>(null);
 
   const page = Number(searchParams.get('page')) || 1;
   const pageSize = Number(searchParams.get('pageSize')) || 20;
@@ -142,8 +151,22 @@ export default function MedicalClaimPage() {
     setIsLoading(false);
   };
 
+  const fetchStats = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo) params.set('date_to', dateTo);
+      if (userId) params.set('user_id', userId);
+      const response = await fetch(`${API_BASE_URL}/api/entries/medical-claim/stats/?${params}`, { credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      }
+    } catch (err) { console.error('Failed to fetch stats:', err); }
+  };
+
   useEffect(() => { fetchUsers(); }, []);
-  useEffect(() => { fetchEntries(); }, [page, pageSize, dateFrom, dateTo, userId]);
+  useEffect(() => { fetchEntries(); fetchStats(); }, [page, pageSize, dateFrom, dateTo, userId]);
 
   const updateStatus = async (entryId: number, newStatus: string) => {
     try {
@@ -158,6 +181,7 @@ export default function MedicalClaimPage() {
       );
       if (response.ok) {
         fetchEntries();
+        fetchStats();
         toast.success(`Status updated to ${getStatusLabel(newStatus)}`);
       } else {
         const data = await response.json();
@@ -241,6 +265,42 @@ export default function MedicalClaimPage() {
         )}
         {hasActiveFilters && <Button variant="outline" onClick={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', page: 1 })}>Clear Filters</Button>}
       </div>
+      {stats && (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Claims Opened</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-700">{stats.claims_opened}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Claims Pending</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-yellow-600">{stats.claims_pending}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Claims Resolved</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-700">{stats.claims_resolved}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Claims Rejected</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-700">{stats.claims_rejected}</div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
       <DataTable columns={columns} data={entries} totalCount={totalCount} page={page} pageSize={pageSize} onPageChange={(p) => updateFilters({ page: p })} onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })} onEdit={(entry) => { setEditingEntry(entry); setError(''); setIsModalOpen(true); }} onDelete={handleDelete} canEdit={(entry) => entry.is_editable} isLoading={isLoading} />
       <Dialog open={isModalOpen} onOpenChange={() => { setIsModalOpen(false); setEditingEntry(null); setError(''); }}>
         <DialogContent className='p-0'>

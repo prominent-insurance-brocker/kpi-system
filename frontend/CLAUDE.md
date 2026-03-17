@@ -15,7 +15,7 @@ frontend/
       motor/
         new/page.tsx          # Motor New entries
         renewal/page.tsx      # Motor Renewal entries
-        claim/page.tsx        # Motor Claim entries
+        claim/page.tsx        # Motor Claim entries (per-customer status tracking, same pattern as medical)
       sales/
         premium-data/page.tsx # Sales Premium Data entries
         kpi/page.tsx          # Sales KPI entries
@@ -23,7 +23,7 @@ frontend/
         new/page.tsx          # Marine New entries
         renewal/page.tsx      # Marine Renewal entries
       medical/
-        claim/page.tsx        # Medical Claim entries
+        claim/page.tsx        # Medical Claim entries (per-customer status tracking, stat cards)
       admin/
         users/page.tsx        # User management (admin only)
         roles/page.tsx        # Role management (admin only)
@@ -77,6 +77,14 @@ All entry module pages (general/new, motor/claim, sales/kpi, etc.) follow the sa
 1. Define column config and form fields for that module
 2. Use `DataTable` component with the module's API endpoint
 3. DataTable handles: fetching, pagination, search, date range filter, user filter (if `canSeeAllData`), add/edit dialog with form validation
+
+### Claim Module Pattern (motor_claim, medical_claim)
+Claim modules extend the base pattern with:
+- **Status state machine**: `claims_opened → claims_pending → claims_resolved / claims_rejected`
+- **Inline status select**: Non-terminal rows show a dropdown to transition status (calls `PATCH /{id}/update-status/`)
+- **Status badge**: Terminal rows (resolved/rejected) show a read-only colored badge
+- **Calculated TAT**: Backend computes turnaround time from creation to terminal status; shown as `"Xd Yh Zm"` or `"In progress"`
+- **Stat cards**: 4 summary cards (Claims Opened/Pending/Resolved/Rejected) fetched from `GET /stats/`, updated on filter change, status update, create, and delete
 
 ## Key Components
 

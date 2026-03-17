@@ -1,4 +1,5 @@
 from rest_framework import viewsets, status, filters
+from django.db.models import Count
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -11,6 +12,7 @@ from .models import (
     MotorNewEntry,
     MotorRenewalEntry,
     MotorClaimEntry,
+    MotorClaimStatusTransition,
     SalesPremiumDataEntry,
     SalesKPIEntry,
     MarineNewEntry,
@@ -24,6 +26,7 @@ from .serializers import (
     MotorNewEntrySerializer,
     MotorRenewalEntrySerializer,
     MotorClaimEntrySerializer,
+    MotorClaimStatusUpdateSerializer,
     SalesPremiumDataEntrySerializer,
     SalesKPIEntrySerializer,
     MarineNewEntrySerializer,
@@ -132,6 +135,75 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
     serializer_class = MotorClaimEntrySerializer
     module_key = 'motor_claim'
 
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related('status_transitions')
+
+    def perform_create(self, serializer):
+        instance = serializer.save(added_by=self.request.user)
+        MotorClaimStatusTransition.objects.create(
+            entry=instance,
+            from_status='',
+            to_status=instance.status,
+            changed_by=self.request.user,
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        """Update status with transition validation. Bypasses 30-min window and ownership check."""
+        entry = self.get_object()
+
+        if entry.is_terminal:
+            return Response(
+                {'error': 'Cannot change status of a resolved or rejected claim.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = MotorClaimStatusUpdateSerializer(
+            data=request.data,
+            context={'entry': entry}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        old_status = entry.status
+        new_status = serializer.validated_data['status']
+
+        entry.status = new_status
+        entry.save(update_fields=['status', 'updated_at'])
+
+        MotorClaimStatusTransition.objects.create(
+            entry=entry,
+            from_status=old_status,
+            to_status=new_status,
+            changed_by=request.user,
+        )
+
+        return Response(
+            MotorClaimEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Return per-status counts respecting RBAC and date filters."""
+        queryset = self.get_queryset()
+
+        date_params = {k: v for k, v in request.query_params.items() if k in ('date_from', 'date_to')}
+        filterset = self.filterset_class(date_params, queryset=queryset)
+        queryset = filterset.qs
+
+        rows = queryset.values('status').annotate(count=Count('id'))
+
+        counts = {
+            'claims_opened': 0,
+            'claims_pending': 0,
+            'claims_resolved': 0,
+            'claims_rejected': 0,
+        }
+        for row in rows:
+            if row['status'] in counts:
+                counts[row['status']] = row['count']
+
+        return Response(counts)
+
 
 class SalesPremiumDataEntryViewSet(BaseEntryViewSet):
     queryset = SalesPremiumDataEntry.objects.all()
@@ -207,3 +279,27 @@ class MedicalClaimEntryViewSet(BaseEntryViewSet):
         return Response(
             MedicalClaimEntrySerializer(entry, context={'request': request}).data
         )
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Return per-status counts respecting RBAC and date filters."""
+        queryset = self.get_queryset()
+
+        # Apply only date filters (user_id already handled by get_queryset RBAC logic)
+        date_params = {k: v for k, v in request.query_params.items() if k in ('date_from', 'date_to')}
+        filterset = self.filterset_class(date_params, queryset=queryset)
+        queryset = filterset.qs
+
+        rows = queryset.values('status').annotate(count=Count('id'))
+
+        counts = {
+            'claims_opened': 0,
+            'claims_pending': 0,
+            'claims_resolved': 0,
+            'claims_rejected': 0,
+        }
+        for row in rows:
+            if row['status'] in counts:
+                counts[row['status']] = row['count']
+
+        return Response(counts)

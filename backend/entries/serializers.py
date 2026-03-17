@@ -134,13 +134,44 @@ class MarineRenewalEntrySerializer(BaseEntrySerializer):
 
 
 class MedicalClaimEntrySerializer(BaseEntrySerializer):
+    tat_display = serializers.SerializerMethodField()
+    allowed_transitions = serializers.SerializerMethodField()
+    is_terminal = serializers.SerializerMethodField()
+
     class Meta:
         model = MedicalClaimEntry
         fields = [
             'id', 'date', 'customer_name', 'status',
-            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
+            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable',
+            'tat_display', 'allowed_transitions', 'is_terminal'
         ]
         read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
 
+    def get_tat_display(self, obj):
+        return obj.get_tat_display()
+
+    def get_allowed_transitions(self, obj):
+        return MedicalClaimEntry.get_allowed_transitions(obj.status)
+
+    def get_is_terminal(self, obj):
+        return obj.is_terminal
+
     def validate_accuracy(self, value):
+        return value
+
+
+class MedicalClaimStatusUpdateSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=MedicalClaimEntry.STATUS_CHOICES)
+
+    def validate_status(self, value):
+        entry = self.context['entry']
+        allowed = MedicalClaimEntry.get_allowed_transitions(entry.status)
+        if value not in allowed:
+            current_label = dict(MedicalClaimEntry.STATUS_CHOICES).get(entry.status)
+            allowed_labels = [dict(MedicalClaimEntry.STATUS_CHOICES).get(s) for s in allowed]
+            raise serializers.ValidationError(
+                f"Cannot transition from '{current_label}' to "
+                f"'{dict(MedicalClaimEntry.STATUS_CHOICES).get(value)}'. "
+                f"Allowed: {allowed_labels}"
+            )
         return value

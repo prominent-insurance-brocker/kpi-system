@@ -1,4 +1,5 @@
 from rest_framework import viewsets, status, filters
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
@@ -15,6 +16,7 @@ from .models import (
     MarineNewEntry,
     MarineRenewalEntry,
     MedicalClaimEntry,
+    MedicalClaimStatusTransition,
 )
 from .serializers import (
     GeneralNewEntrySerializer,
@@ -27,6 +29,7 @@ from .serializers import (
     MarineNewEntrySerializer,
     MarineRenewalEntrySerializer,
     MedicalClaimEntrySerializer,
+    MedicalClaimStatusUpdateSerializer,
 )
 from .filters import EntryFilter
 
@@ -158,3 +161,49 @@ class MedicalClaimEntryViewSet(BaseEntryViewSet):
     queryset = MedicalClaimEntry.objects.all()
     serializer_class = MedicalClaimEntrySerializer
     module_key = 'medical_claim'
+
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related('status_transitions')
+
+    def perform_create(self, serializer):
+        instance = serializer.save(added_by=self.request.user)
+        MedicalClaimStatusTransition.objects.create(
+            entry=instance,
+            from_status='',
+            to_status=instance.status,
+            changed_by=self.request.user,
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        """Update status with transition validation. Bypasses 30-min window and ownership check."""
+        entry = self.get_object()
+
+        if entry.is_terminal:
+            return Response(
+                {'error': 'Cannot change status of a resolved or rejected claim.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = MedicalClaimStatusUpdateSerializer(
+            data=request.data,
+            context={'entry': entry}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        old_status = entry.status
+        new_status = serializer.validated_data['status']
+
+        entry.status = new_status
+        entry.save(update_fields=['status', 'updated_at'])
+
+        MedicalClaimStatusTransition.objects.create(
+            entry=entry,
+            from_status=old_status,
+            to_status=new_status,
+            changed_by=request.user,
+        )
+
+        return Response(
+            MedicalClaimEntrySerializer(entry, context={'request': request}).data
+        )

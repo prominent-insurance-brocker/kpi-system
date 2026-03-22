@@ -37,7 +37,9 @@ class RequestMagicLinkView(APIView):
 
         try:
             user = CustomUser.objects.get(email=email)
+            logger.info(f"User found for email: {email}, is_active: {user.is_active}")
         except CustomUser.DoesNotExist:
+            logger.warning(f"Magic link requested for non-existent email: {email}")
             # Don't reveal if email exists
             return Response(success_message)
 
@@ -59,9 +61,15 @@ class RequestMagicLinkView(APIView):
         # Send email
         try:
             logger.info(f"Attempting to send magic link email to {user.email}")
-            logger.info(f"Using EMAIL_HOST: {settings.EMAIL_HOST}, EMAIL_HOST_USER: {settings.EMAIL_HOST_USER}")
+            logger.info(
+                f"Email config - BACKEND: {settings.EMAIL_BACKEND}, "
+                f"HOST: {settings.EMAIL_HOST}, PORT: {settings.EMAIL_PORT}, "
+                f"TLS: {settings.EMAIL_USE_TLS}, USER: {settings.EMAIL_HOST_USER}, "
+                f"FROM: {settings.DEFAULT_FROM_EMAIL}, "
+                f"CONSOLE_MODE: {getattr(settings, 'EMAIL_CONSOLE_MODE', 'not set')}"
+            )
 
-            send_mail(
+            result = send_mail(
                 subject='Your login link for KPI System',
                 message=f"""Hi {user.get_short_name()},
 
@@ -75,9 +83,9 @@ If you didn't request this, please ignore this email.""",
                 recipient_list=[user.email],
                 fail_silently=False,
             )
-            logger.info(f"Magic link email sent successfully to {user.email}")
+            logger.info(f"Magic link email sent to {user.email}, send_mail returned: {result}")
         except Exception as e:
-            logger.error(f"Failed to send email to {user.email}: {str(e)}", exc_info=True)
+            logger.error(f"Failed to send email to {user.email}: {type(e).__name__}: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'Failed to send email. Please check email and try again.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

@@ -34,8 +34,8 @@ class GeneralNewEntry(BaseEntry):
     quotations = models.PositiveIntegerField()
     quotes_revised = models.PositiveIntegerField()
     quotes_converted = models.PositiveIntegerField()
-    tat = models.PositiveIntegerField(verbose_name='TAT')
-    accuracy = models.DecimalField(max_digits=5, decimal_places=2)
+    tat = models.PositiveIntegerField(verbose_name='TAT', null=True, blank=True)
+    accuracy = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'General New Entry'

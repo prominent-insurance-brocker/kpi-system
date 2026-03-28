@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,17 +13,14 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { DataTable } from '@/app/components/DataTable';
-import { API_BASE_URL, getUsersForFilter } from '@/app/lib/api';
-import { useAuth } from '@/app/context/AuthContext';
-import { Plus } from 'lucide-react';
-import { DateRangeFilter } from '@/components/ui/date-range-filter';
+import { API_BASE_URL } from '@/app/lib/api';
+import { CalendarDays, ChevronLeft, ChevronRight, Plus, MoreHorizontal } from 'lucide-react';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate, formatDateTime } from '@/app/lib/date';
 
@@ -33,252 +30,708 @@ interface GeneralNewEntry {
   quotations: number;
   quotes_revised: number;
   quotes_converted: number;
-  tat: number;
-  accuracy: number;
+  tat: number | null;
+  accuracy: number | null;
   added_by: number;
   added_by_name: string;
   added_at: string;
   is_editable: boolean;
 }
 
-interface FilterUser {
-  id: number;
-  email: string;
-  full_name: string;
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+function toLocalDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
-const columns = [
-  { key: 'date', header: 'Date', render: (item: GeneralNewEntry) => formatDate(item.date) },
-  { key: 'quotations', header: 'Quotations' },
-  { key: 'quotes_revised', header: 'Quotes Revised' },
-  { key: 'quotes_converted', header: 'Quotes Converted' },
-  { key: 'tat', header: 'TAT' },
+function startOfWeek(d: Date): Date {
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const mon = new Date(d);
+  mon.setDate(d.getDate() + diff);
+  mon.setHours(0, 0, 0, 0);
+  return mon;
+}
+
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const SHORT_DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+// ─── Status Badge ─────────────────────────────────────────────────────────────
+
+function StatusBadge({ type }: { type: 'submitted' | 'not_submitted' | 'upcoming' }) {
+  if (type === 'submitted') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[#16A34A]">
+        <span className="w-2 h-2 rounded-full bg-[#16A34A] shrink-0" />
+        Submitted
+      </span>
+    );
+  }
+  if (type === 'not_submitted') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[#DC2626]">
+        <span className="w-2 h-2 rounded-full bg-[#DC2626] shrink-0" />
+        Not submitted
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[#71717A]">
+      <span className="w-2 h-2 rounded-full bg-[#D4D4D4] shrink-0" />
+      Upcoming
+    </span>
+  );
+}
+
+// ─── Weekly View ─────────────────────────────────────────────────────────────
+
+function WeeklyView({
+  weekStart,
+  monthEntries,
+  today,
+  onPrevWeek,
+  onNextWeek,
+  onAddRecord,
+  onEdit,
+  onDelete,
+}: {
+  weekStart: Date;
+  monthEntries: GeneralNewEntry[];
+  today: Date;
+  onPrevWeek: () => void;
+  onNextWeek: () => void;
+  onAddRecord: (date: string) => void;
+  onEdit: (entry: GeneralNewEntry) => void;
+  onDelete: (entry: GeneralNewEntry) => void;
+}) {
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+  const getEntriesForDay = (d: Date): GeneralNewEntry[] => {
+    const ds = toLocalDateString(d);
+    return monthEntries
+      .filter((e) => e.date === ds)
+      .sort((a, b) => new Date(b.added_at).getTime() - new Date(a.added_at).getTime());
+  };
+
+  const isFutureDay = (d: Date) => {
+    const s = new Date(d); s.setHours(0, 0, 0, 0);
+    const t = new Date(today); t.setHours(0, 0, 0, 0);
+    return s > t;
+  };
+  const isPastDay = (d: Date) => {
+    const s = new Date(d); s.setHours(0, 0, 0, 0);
+    const t = new Date(today); t.setHours(0, 0, 0, 0);
+    return s < t;
+  };
+
+  const weekEndDay = addDays(weekStart, 6);
+  const weekMonthLabel =
+    weekStart.getMonth() === weekEndDay.getMonth()
+      ? `${MONTH_NAMES[weekStart.getMonth()]} ${weekStart.getFullYear()}`
+      : `${MONTH_NAMES[weekStart.getMonth()]} – ${MONTH_NAMES[weekEndDay.getMonth()]} ${weekEndDay.getFullYear()}`;
+
+  return (
+    <div className="space-y-4">
+      {/* Week navigation bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onPrevWeek}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4 text-[#71717A]" />
+          </button>
+          <span className="text-sm font-medium text-[#09090B] px-1">This Week</span>
+          <button
+            onClick={onNextWeek}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
+          >
+            <ChevronRight className="h-4 w-4 text-[#71717A]" />
+          </button>
+        </div>
+        <span className="text-sm font-semibold text-[#09090B]">{weekMonthLabel}</span>
+      </div>
+
+      {/* Table */}
+      <div className="rounded-xl border border-[#E4E4E4] overflow-hidden">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-[#F9F9F9] border-b border-[#E4E4E4]">
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide w-[140px]">
+                Day
+              </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
+                Quotations
+              </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
+                Quotes revised
+              </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
+                Quotes converted
+              </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
+                Added by
+              </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide w-[180px]">
+                Status
+              </th>
+              <th className="w-12" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#F3F3F3]">
+            {weekDays.map((d, idx) => {
+              const isSun = d.getDay() === 0;
+              const isToday = sameDay(d, today);
+              const entries = getEntriesForDay(d);
+              const latestEntry = entries[0] ?? null;
+              const hasEntry = entries.length > 0;
+              const future = isFutureDay(d);
+              const past = isPastDay(d);
+
+              let statusType: 'submitted' | 'not_submitted' | 'upcoming' = 'upcoming';
+              if (hasEntry) statusType = 'submitted';
+              else if (past) statusType = 'not_submitted';
+
+              return (
+                <tr
+                  key={toLocalDateString(d)}
+                  className={`h-[64px] transition-colors ${
+                    isSun
+                      ? 'bg-[#FAFAFA] opacity-60'
+                      : isToday && hasEntry
+                      ? 'bg-[#F0FDF4] hover:bg-[#ECFDF5]'
+                      : isToday
+                      ? 'bg-[#F5F3FF] hover:bg-[#EEF2FF]'
+                      : 'bg-white hover:bg-[#FAFAFA]'
+                  }`}
+                >
+                  {/* Day */}
+                  <td className="px-5 py-3">
+                    <div className="flex flex-col gap-0.5">
+                      <span
+                        className={`text-sm font-semibold leading-tight ${
+                          isToday ? 'text-[#4F46E5]' : 'text-[#09090B]'
+                        }`}
+                      >
+                        {WEEKDAY_NAMES[idx]}
+                      </span>
+                      <span className="text-xs text-[#9CA3AF] leading-tight">
+                        {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* Quotations */}
+                  <td className="px-5 py-3 text-sm font-medium text-[#374151]">
+                    {latestEntry ? (
+                      latestEntry.quotations
+                    ) : isSun ? (
+                      ''
+                    ) : (
+                      <span className="text-[#D1D5DB]">—</span>
+                    )}
+                  </td>
+
+                  {/* Quotes revised */}
+                  <td className="px-5 py-3 text-sm font-medium text-[#374151]">
+                    {latestEntry ? (
+                      latestEntry.quotes_revised
+                    ) : isSun ? (
+                      ''
+                    ) : (
+                      <span className="text-[#D1D5DB]">—</span>
+                    )}
+                  </td>
+
+                  {/* Quotes converted */}
+                  <td className="px-5 py-3 text-sm font-medium text-[#374151]">
+                    {latestEntry ? (
+                      latestEntry.quotes_converted
+                    ) : isSun ? (
+                      ''
+                    ) : (
+                      <span className="text-[#D1D5DB]">—</span>
+                    )}
+                  </td>
+
+                  {/* Added by */}
+                  <td className="px-5 py-3">
+                    {latestEntry && !isSun ? (
+                      <div className="flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-full bg-[#6366F1] text-white text-xs flex items-center justify-center font-semibold uppercase shrink-0">
+                          {latestEntry.added_by_name.charAt(0)}
+                        </span>
+                        <span className="text-sm font-medium text-[#374151] truncate max-w-[120px]">
+                          {latestEntry.added_by_name}
+                        </span>
+                      </div>
+                    ) : null}
+                  </td>
+
+                  {/* Status */}
+                  <td className="px-5 py-3">
+                    {!isSun && (
+                      <>
+                        {isToday && !hasEntry ? (
+                          <Button
+                            size="sm"
+                            className="h-8 px-3 text-xs font-medium bg-[#09090B] hover:bg-[#1a1a1a] text-white rounded-lg gap-1"
+                            onClick={() => onAddRecord(toLocalDateString(d))}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add record
+                          </Button>
+                        ) : (
+                          <StatusBadge type={statusType} />
+                        )}
+                      </>
+                    )}
+                  </td>
+
+                  {/* Three-dot menu */}
+                  <td className="px-3 py-3">
+                    {!isSun && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="w-8 h-8 flex items-center justify-center rounded-md text-[#9CA3AF] hover:text-[#09090B] hover:bg-[#F3F3F3] transition-colors">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className="w-[149px] bg-white border border-[#E4E4E4] rounded-lg p-1 shadow-md"
+                        >
+                          {!hasEntry && (
+                            <DropdownMenuItem
+                              onClick={() => onAddRecord(toLocalDateString(d))}
+                              className="cursor-pointer px-3 py-2 text-sm text-[#09090B] rounded-md"
+                            >
+                              Add record
+                            </DropdownMenuItem>
+                          )}
+                          {hasEntry && latestEntry && (
+                            <>
+                              {latestEntry.is_editable && (
+                                <DropdownMenuItem
+                                  onClick={() => onEdit(latestEntry)}
+                                  className="cursor-pointer px-3 py-2 text-sm text-[#09090B] rounded-md"
+                                >
+                                  Edit
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                onClick={() => onDelete(latestEntry)}
+                                className="cursor-pointer px-3 py-2 text-sm text-red-600 rounded-md"
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Data View columns ───────────────────────────────────────────────────────
+
+const dataColumns = [
   {
-    key: 'accuracy',
-    header: 'Accuracy',
-    render: (item: GeneralNewEntry) => `${item.accuracy}%`,
+    key: 'date',
+    header: 'Record date',
+    render: (item: GeneralNewEntry) => formatDate(item.date),
   },
-  { key: 'added_by_name', header: 'Added By' },
+  { key: 'quotations', header: 'Quotations' },
+  { key: 'quotes_revised', header: 'Quotes revised' },
+  { key: 'quotes_converted', header: 'Quotes converted' },
+  { key: 'added_by_name', header: 'Added by' },
   {
     key: 'added_at',
-    header: 'Added At',
+    header: 'Added on',
     render: (item: GeneralNewEntry) => formatDateTime(item.added_at),
   },
 ];
 
+// ─── Main Page ───────────────────────────────────────────────────────────────
+
 export default function GeneralNewPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { canSeeAllData } = useAuth();
 
-  const [entries, setEntries] = useState<GeneralNewEntry[]>([]);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const [calMonth, setCalMonth] = useState(today.getMonth());
+  const [weekStart, setWeekStart] = useState<Date>(startOfWeek(today));
+  const [activeTab, setActiveTab] = useState<'weekly' | 'data'>('weekly');
+
+  const [monthEntries, setMonthEntries] = useState<GeneralNewEntry[]>([]);
+
+  const [dataEntries, setDataEntries] = useState<GeneralNewEntry[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<GeneralNewEntry | null>(null);
-  const [error, setError] = useState('');
-  const [users, setUsers] = useState<FilterUser[]>([]);
+  const [modalDate, setModalDate] = useState('');
+  const [modalError, setModalError] = useState('');
 
   const page = Number(searchParams.get('page')) || 1;
-  const pageSize = Number(searchParams.get('pageSize')) || 20;
-  const dateFrom = searchParams.get('dateFrom') || '';
-  const dateTo = searchParams.get('dateTo') || '';
-  const userId = searchParams.get('userId') || '';
+  const pageSize = Number(searchParams.get('pageSize')) || 10;
 
-  const updateFilters = (updates: Record<string, string | number>) => {
+  const updateParams = (updates: Record<string, string | number>) => {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(updates).forEach(([key, value]) => {
-      if (value) {
-        params.set(key, String(value));
-      } else {
-        params.delete(key);
-      }
+      if (value) params.set(key, String(value));
+      else params.delete(key);
     });
     router.push(`?${params.toString()}`);
   };
 
-  const fetchUsers = async () => {
-    if (canSeeAllData()) {
-      const result = await getUsersForFilter();
-      if (result.data) {
-        setUsers(result.data);
-      }
-    }
-  };
-
-  const fetchEntries = async () => {
-    setIsLoading(true);
+  const fetchMonthEntries = useCallback(async (year: number, month: number) => {
     try {
-      const params = new URLSearchParams();
-      params.set('page', String(page));
-      params.set('page_size', String(pageSize));
-      if (dateFrom) params.set('date_from', dateFrom);
-      if (dateTo) params.set('date_to', dateTo);
-      if (userId) params.set('user_id', userId);
-
-      const response = await fetch(`${API_BASE_URL}/api/entries/general-new/?${params}`, {
-        credentials: 'include',
-      });
-      const data = await response.json();
-      setEntries(data.results || []);
-      setTotalCount(data.count || 0);
-    } catch (err) {
-      console.error('Failed to fetch entries:', err);
+      const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const lastDay = toLocalDateString(new Date(year, month + 1, 0));
+      const params = new URLSearchParams({ date_from: firstDay, date_to: lastDay, page_size: '1000' });
+      const res = await fetch(`${API_BASE_URL}/api/entries/general-new/?${params}`, { credentials: 'include' });
+      const data = await res.json();
+      setMonthEntries(data.results || []);
+    } catch {
+      setMonthEntries([]);
     }
-    setIsLoading(false);
-  };
-
-  useEffect(() => {
-    fetchUsers();
   }, []);
 
-  useEffect(() => {
-    fetchEntries();
-  }, [page, pageSize, dateFrom, dateTo, userId]);
+  const fetchDataEntries = useCallback(async () => {
+    setDataLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+      const res = await fetch(`${API_BASE_URL}/api/entries/general-new/?${params}`, { credentials: 'include' });
+      const data = await res.json();
+      setDataEntries(data.results || []);
+      setTotalCount(data.count || 0);
+    } catch {
+      setDataEntries([]);
+    }
+    setDataLoading(false);
+  }, [page, pageSize]);
+
+  useEffect(() => { fetchMonthEntries(calYear, calMonth); }, [calYear, calMonth, fetchMonthEntries]);
+  useEffect(() => { if (activeTab === 'data') fetchDataEntries(); }, [activeTab, page, pageSize, fetchDataEntries]);
+
+  const entryDates = new Set(monthEntries.map((e) => e.date));
+
+  const prevMonth = () => {
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
+    else setCalMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
+    else setCalMonth(m => m + 1);
+  };
+  const goToday = () => { setCalYear(today.getFullYear()); setCalMonth(today.getMonth()); };
 
   const handleSave = async (formData: Partial<GeneralNewEntry>) => {
-    setError('');
+    setModalError('');
     const url = editingEntry
       ? `${API_BASE_URL}/api/entries/general-new/${editingEntry.id}/`
       : `${API_BASE_URL}/api/entries/general-new/`;
-
-    const response = await fetch(url, {
+    const res = await fetch(url, {
       method: editingEntry ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(formData),
     });
-
-    if (response.ok) {
+    if (res.ok) {
       setIsModalOpen(false);
       setEditingEntry(null);
-      fetchEntries();
+      setModalDate('');
+      fetchMonthEntries(calYear, calMonth);
+      if (activeTab === 'data') fetchDataEntries();
     } else {
-      const data = await response.json();
-      setError(data.error || 'Failed to save entry');
+      const data = await res.json();
+      setModalError(data.error || Object.values(data).flat().join(', ') || 'Failed to save entry');
     }
   };
 
   const handleDelete = async (entry: GeneralNewEntry) => {
     if (!confirm('Are you sure you want to delete this entry?')) return;
-
-    const response = await fetch(`${API_BASE_URL}/api/entries/general-new/${entry.id}/`, {
+    const res = await fetch(`${API_BASE_URL}/api/entries/general-new/${entry.id}/`, {
       method: 'DELETE',
       credentials: 'include',
     });
-
-    if (response.ok) {
-      fetchEntries();
+    if (res.ok) {
+      fetchMonthEntries(calYear, calMonth);
+      if (activeTab === 'data') fetchDataEntries();
     } else {
-      const data = await response.json();
+      const data = await res.json();
       alert(data.error || 'Failed to delete entry');
     }
   };
 
-  const hasActiveFilters = dateFrom || dateTo || userId;
+  const openAddModal = (date?: string) => {
+    setEditingEntry(null);
+    setModalError('');
+    setModalDate(date || toLocalDateString(today));
+    setIsModalOpen(true);
+  };
+  const openEditModal = (entry: GeneralNewEntry) => {
+    setEditingEntry(entry);
+    setModalError('');
+    setModalDate('');
+    setIsModalOpen(true);
+  };
+
+  // ── Calendar days ──
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const calDays: Date[] = Array.from({ length: daysInMonth }, (_, i) => new Date(calYear, calMonth, i + 1));
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">General New</h1>
-          <p className="text-muted-foreground">Manage general new quotations</p>
-        </div>
-        <Button
-          onClick={() => {
-            setEditingEntry(null);
-            setError('');
-            setIsModalOpen(true);
-          }}
-        >
-          <Plus className="h-4 w-4 mr-2" /> Add Entry
-        </Button>
-      </div>
+    <div className="p-6 space-y-5">
+      <h1 className="text-2xl font-bold text-[#09090B]">General New</h1>
 
-      <div className="flex gap-4 items-end flex-wrap">
-        <div className="flex flex-col gap-2">
-          <Label>Date Range</Label>
-          <DateRangeFilter
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onChange={(from, to) => updateFilters({ dateFrom: from, dateTo: to, page: 1 })}
-          />
-        </div>
-        {canSeeAllData() && (
-          <div className="flex flex-col gap-2">
-            <Label>User</Label>
-            <Select
-              value={userId || 'all'}
-              onValueChange={(value) => updateFilters({ userId: value === 'all' ? '' : value, page: 1 })}
-            >
-              <SelectTrigger className="w-[200px] shadow-none">
-                <SelectValue placeholder="All Users" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Users</SelectItem>
-                {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id.toString()}>
-                    {user.full_name || user.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      {/* ── Unified Daily Tracker Card ── */}
+      <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
+
+        {/* Card header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4]">
+          {/* Left: icon + title */}
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-[#71717A]" />
+            <span className="text-sm font-semibold text-[#09090B]">Daily Tracker</span>
           </div>
-        )}
-        {hasActiveFilters && (
-          <Button
-            variant="outline"
-            onClick={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', page: 1 })}
+
+          {/* Right: Month/Year toggle + navigation */}
+          <div className="flex items-center gap-4">
+            {/* Month / Year pill */}
+            <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
+              <button className="px-3 py-1.5 bg-white text-[#09090B] border-r border-[#E4E4E4]">
+                Month
+              </button>
+              <button className="px-3 py-1.5 text-[#71717A] hover:bg-[#F9F9F9] transition-colors">
+                Year
+              </button>
+            </div>
+
+            {/* Nav arrows + Today */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={prevMonth}
+                className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4 text-[#71717A]" />
+              </button>
+              <button
+                onClick={goToday}
+                className="text-sm font-medium text-[#09090B] px-2 py-1 rounded-md hover:bg-[#F3F3F3] transition-colors"
+              >
+                Today
+              </button>
+              <button
+                onClick={nextMonth}
+                className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
+              >
+                <ChevronRight className="h-4 w-4 text-[#71717A]" />
+              </button>
+            </div>
+
+            {/* Month label */}
+            <span className="text-sm font-semibold text-[#09090B] min-w-[110px] text-right">
+              {MONTH_NAMES[calMonth]} {calYear}
+            </span>
+          </div>
+        </div>
+
+        {/* Calendar strip */}
+        <div className="px-5 py-4 border-b border-[#E4E4E4] overflow-x-auto">
+          <div className="flex gap-1 min-w-max">
+            {calDays.map((d) => {
+              const ds = toLocalDateString(d);
+              const isSunday = d.getDay() === 0;
+              const isToday = sameDay(d, today);
+              const isPast = d < today && !isToday;
+              const hasEntry = entryDates.has(ds);
+
+              let cellBg = '';
+              let cellStyle: React.CSSProperties | undefined;
+
+              if (isSunday) {
+                cellStyle = {
+                  backgroundImage:
+                    'repeating-linear-gradient(135deg,#D1D5DB 0,#D1D5DB 1px,transparent 1px,transparent 6px)',
+                  backgroundColor: '#F9FAFB',
+                };
+              } else if (hasEntry) {
+                // Green when entry exists — even for today
+                cellBg = 'bg-[#DCFCE7]';
+              } else if (isToday) {
+                // Blue/indigo only when today has no entry yet
+                cellBg = 'bg-[#EEF2FF]';
+              } else if (isPast) {
+                cellBg = 'bg-[#FEE2E2]';
+              }
+
+              return (
+                <div
+                  key={d.getDate()}
+                  className={`flex flex-col items-center justify-center w-9 h-12 rounded-lg select-none ${cellBg}`}
+                  style={cellStyle}
+                >
+                  <span
+                    className={`text-sm font-semibold leading-none ${
+                      isToday
+                        ? 'w-6 h-6 flex items-center justify-center rounded-full bg-[#4F46E5] text-white text-xs'
+                        : isSunday
+                        ? 'text-[#9CA3AF]'
+                        : 'text-[#09090B]'
+                    }`}
+                  >
+                    {d.getDate()}
+                  </span>
+                  <span
+                    className={`text-[10px] mt-0.5 ${
+                      isSunday ? 'text-[#9CA3AF]' : 'text-[#71717A]'
+                    }`}
+                  >
+                    {SHORT_DAY[d.getDay()]}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex items-center gap-1 px-5 pt-4 pb-1">
+          <button
+            onClick={() => setActiveTab('weekly')}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              activeTab === 'weekly'
+                ? 'bg-[#F3F4F6] text-[#09090B]'
+                : 'text-[#6B7280] hover:text-[#09090B] hover:bg-[#F9FAFB]'
+            }`}
           >
-            Clear Filters
-          </Button>
-        )}
+            Weekly View
+          </button>
+          <button
+            onClick={() => setActiveTab('data')}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              activeTab === 'data'
+                ? 'bg-[#F3F4F6] text-[#09090B]'
+                : 'text-[#6B7280] hover:text-[#09090B] hover:bg-[#F9FAFB]'
+            }`}
+          >
+            Data View
+          </button>
+        </div>
+
+        {/* Tab content */}
+        <div className="px-5 pb-5 pt-3">
+          {activeTab === 'weekly' && (
+            <WeeklyView
+              weekStart={weekStart}
+              monthEntries={monthEntries}
+              today={today}
+              onPrevWeek={() => setWeekStart(d => addDays(d, -7))}
+              onNextWeek={() => setWeekStart(d => addDays(d, 7))}
+              onAddRecord={openAddModal}
+              onEdit={openEditModal}
+              onDelete={handleDelete}
+            />
+          )}
+
+          {activeTab === 'data' && (
+            <div className="space-y-3">
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => openAddModal()}
+                  className="h-9 px-4 text-sm font-medium bg-[#09090B] hover:bg-[#1a1a1a] text-white rounded-lg gap-1.5"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add record
+                </Button>
+              </div>
+              <DataTable
+                columns={dataColumns}
+                data={dataEntries}
+                totalCount={totalCount}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={(p) => updateParams({ page: p })}
+                onPageSizeChange={(s) => updateParams({ pageSize: s, page: 1 })}
+                onEdit={openEditModal}
+                onDelete={handleDelete}
+                canEdit={(entry) => entry.is_editable}
+                isLoading={dataLoading}
+                height="h-auto min-h-[200px]"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={entries}
-        totalCount={totalCount}
-        page={page}
-        pageSize={pageSize}
-        onPageChange={(p) => updateFilters({ page: p })}
-        onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })}
-        onEdit={(entry) => {
-          setEditingEntry(entry);
-          setError('');
-          setIsModalOpen(true);
-        }}
-        onDelete={handleDelete}
-        canEdit={(entry) => entry.is_editable}
-        isLoading={isLoading}
-      />
-
+      {/* Modal */}
       <EntryModal
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
           setEditingEntry(null);
-          setError('');
+          setModalDate('');
+          setModalError('');
         }}
         onSave={handleSave}
         entry={editingEntry}
-        error={error}
+        initialDate={modalDate}
+        error={modalError}
       />
     </div>
   );
 }
+
+// ─── Entry Modal ─────────────────────────────────────────────────────────────
 
 function EntryModal({
   isOpen,
   onClose,
   onSave,
   entry,
+  initialDate,
   error,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: Partial<GeneralNewEntry>) => void;
   entry: GeneralNewEntry | null;
+  initialDate: string;
   error: string;
 }) {
   const [formData, setFormData] = useState({
@@ -286,8 +739,6 @@ function EntryModal({
     quotations: '',
     quotes_revised: '',
     quotes_converted: '',
-    tat: '',
-    accuracy: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -298,20 +749,16 @@ function EntryModal({
         quotations: String(entry.quotations),
         quotes_revised: String(entry.quotes_revised),
         quotes_converted: String(entry.quotes_converted),
-        tat: String(entry.tat),
-        accuracy: String(entry.accuracy),
       });
     } else {
       setFormData({
-        date: new Date().toISOString().split('T')[0],
+        date: initialDate || new Date().toISOString().split('T')[0],
         quotations: '',
         quotes_revised: '',
         quotes_converted: '',
-        tat: '',
-        accuracy: '',
       });
     }
-  }, [entry, isOpen]);
+  }, [entry, isOpen, initialDate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -321,21 +768,21 @@ function EntryModal({
       quotations: Number(formData.quotations),
       quotes_revised: Number(formData.quotes_revised),
       quotes_converted: Number(formData.quotes_converted),
-      tat: Number(formData.tat),
-      accuracy: Number(formData.accuracy),
     });
     setIsSubmitting(false);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className='p-0'>
-        <DialogHeader className='border-b border-[#E4E4E4] p-4'>
-          <DialogTitle>{entry ? 'Edit Entry' : 'Add New Entry'}</DialogTitle>
+      <DialogContent className="p-0 gap-0">
+        <DialogHeader className="border-b border-[#E4E4E4] px-5 py-4">
+          <DialogTitle className="text-base font-semibold text-[#09090B]">
+            {entry ? 'Edit Entry' : 'Add New Entry'}
+          </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 p-4">
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
               {error}
             </div>
           )}
@@ -345,73 +792,49 @@ function EntryModal({
             onChange={(date) => setFormData({ ...formData, date })}
             required
           />
-          <div className="grid grid-cols-1 gap-4">
-            <div className="space-y-2">
-              <Label>Quotations</Label>
-              <Input
-                type="number"
-                min="0"
-                placeholder="Enter quotations"
-                value={formData.quotations}
-                onChange={(e) => setFormData({ ...formData, quotations: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Quotes Revised</Label>
-              <Input
-                type="number"
-                min="0"
-                placeholder="Enter quotes revised"
-                value={formData.quotes_revised}
-                onChange={(e) => setFormData({ ...formData, quotes_revised: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Quotes Converted</Label>
-              <Input
-                type="number"
-                min="0"
-                placeholder="Enter quotes converted"
-                value={formData.quotes_converted}
-                onChange={(e) =>
-                  setFormData({ ...formData, quotes_converted: e.target.value })
-                }
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>TAT</Label>
-              <Input
-                type="number"
-                min="0"
-                placeholder="Enter TAT"
-                value={formData.tat}
-                onChange={(e) => setFormData({ ...formData, tat: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Accuracy (%)</Label>
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                placeholder="Enter accuracy"
-                value={formData.accuracy}
-                onChange={(e) => setFormData({ ...formData, accuracy: e.target.value })}
-                required
-              />
-            </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-[#374151]">Quotations</Label>
+            <Input
+              type="number"
+              min="0"
+              placeholder="0"
+              value={formData.quotations}
+              onChange={(e) => setFormData({ ...formData, quotations: e.target.value })}
+              required
+            />
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-[#374151]">Quotes Revised</Label>
+            <Input
+              type="number"
+              min="0"
+              placeholder="0"
+              value={formData.quotes_revised}
+              onChange={(e) => setFormData({ ...formData, quotes_revised: e.target.value })}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-[#374151]">Quotes Converted</Label>
+            <Input
+              type="number"
+              min="0"
+              placeholder="0"
+              value={formData.quotes_converted}
+              onChange={(e) => setFormData({ ...formData, quotes_converted: e.target.value })}
+              required
+            />
+          </div>
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="outline" onClick={onClose} className="rounded-lg">
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : entry ? 'Update' : 'Create'}
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="bg-[#09090B] hover:bg-[#1a1a1a] text-white rounded-lg"
+            >
+              {isSubmitting ? 'Saving…' : entry ? 'Update' : 'Create'}
             </Button>
           </DialogFooter>
         </form>

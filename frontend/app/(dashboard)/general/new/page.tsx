@@ -374,13 +374,13 @@ function TrackerView({
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="overflow-x-auto scrollbar-hide">
+      {/* Grid — scrollable independently so sticky thead works */}
+      <div className="overflow-auto max-h-[calc(100vh-15rem)] scrollbar-hide">
         <table className="border-collapse w-full min-w-max">
-          <thead>
+          <thead className="sticky top-0 z-20">
             <tr className="border-b border-[#E4E4E4]">
               {/* Dept header spanning user column */}
-              <th className="sticky left-0 z-10 bg-[#F9F9F9] px-4 py-3 text-left min-w-[180px]">
+              <th className="sticky left-0 z-30 bg-[#F9F9F9] px-4 py-3 text-left min-w-[180px]">
                 <div className="text-sm font-semibold text-[#09090B]">General New DEPT.</div>
                 <div className="text-xs text-[#71717A]">{visibleUsers.length} members</div>
               </th>
@@ -498,6 +498,7 @@ function WeeklyView({
   isAdmin,
   currentUserId,
   navStickyTop = 'top-16',
+  tableMaxHeight = 'calc(100vh - 15rem)',
 }: {
   weekStart: Date;
   monthEntries: GeneralNewEntry[];
@@ -513,6 +514,7 @@ function WeeklyView({
   isAdmin: boolean;
   currentUserId: number | undefined;
   navStickyTop?: string;
+  tableMaxHeight?: string;
 }) {
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -589,10 +591,10 @@ function WeeklyView({
         </div>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto scrollbar-hide">
+      {/* Table — scrollable container so sticky thead works relative to it */}
+      <div className="overflow-auto scrollbar-hide" style={{ maxHeight: tableMaxHeight }}>
         <table className="w-full border-collapse">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="bg-[#F9F9F9] border-b border-[#E4E4E4]">
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide w-[140px]">
                 Day
@@ -1074,7 +1076,7 @@ export default function GeneralNewPage() {
           onDelete={handleDelete}
           canEdit={(entry) => entry.is_editable}
           isLoading={dataLoading}
-          height="h-auto min-h-[200px]"
+          height="max-h-[calc(100vh-15rem)] min-h-[200px]"
         />
       </div>
     </div>

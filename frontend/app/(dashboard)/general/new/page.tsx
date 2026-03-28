@@ -131,6 +131,128 @@ function UserAvatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 'md' })
   );
 }
 
+// ─── Personal Daily Tracker ───────────────────────────────────────────────────
+
+function PersonalDailyTracker({
+  calYear,
+  calMonth,
+  today,
+  monthEntries,
+  currentUserId,
+  onPrevMonth,
+  onNextMonth,
+  onGoToday,
+}: {
+  calYear: number;
+  calMonth: number;
+  today: Date;
+  monthEntries: GeneralNewEntry[];
+  currentUserId: number | undefined;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+  onGoToday: () => void;
+}) {
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
+      {/* Card header */}
+      <div className="flex items-center gap-2 px-5 pt-4 pb-3 border-b border-[#E4E4E4]">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#6366F1]">
+          <rect x="1" y="2" width="14" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M1 6h14" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M5 1v2M11 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+        <span className="text-sm font-semibold text-[#09090B]">Daily Tracker</span>
+      </div>
+
+      {/* Controls row */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-[#F3F3F3]">
+        <div className="flex items-center gap-3">
+          {/* Month/Year toggle */}
+          <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
+            <button className="px-3 py-1.5 bg-white text-[#09090B] border-r border-[#E4E4E4]">Month</button>
+            <button className="px-3 py-1.5 text-[#71717A] hover:bg-[#F9F9F9] transition-colors">Year</button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onPrevMonth}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4 text-[#71717A]" />
+          </button>
+          <button
+            onClick={onGoToday}
+            className="text-sm font-medium text-[#09090B] px-3 py-1 rounded-lg border border-[#E4E4E4] hover:bg-[#F3F3F3] transition-colors"
+          >
+            Today
+          </button>
+          <button
+            onClick={onNextMonth}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
+          >
+            <ChevronRight className="h-4 w-4 text-[#71717A]" />
+          </button>
+          <span className="text-sm font-semibold text-[#09090B] ml-1">
+            {MONTH_NAMES[calMonth]} {calYear}
+          </span>
+        </div>
+      </div>
+
+      {/* Day cells strip */}
+      <div className="px-4 py-3 overflow-x-auto">
+        <div className="flex gap-1 min-w-max">
+          {Array.from({ length: daysInMonth }, (_, i) => new Date(calYear, calMonth, i + 1)).map((d) => {
+            const ds = toLocalDateString(d);
+            const isSunday = d.getDay() === 0;
+            const isToday = sameDay(d, today);
+            const isPast = d < today && !isToday;
+            const hasEntry = monthEntries.some((e) => e.date === ds && e.added_by === currentUserId);
+
+            let cellBg = '';
+            let cellStyle: React.CSSProperties | undefined;
+            if (isSunday) {
+              cellStyle = {
+                backgroundImage: 'repeating-linear-gradient(135deg,#D1D5DB 0,#D1D5DB 1px,transparent 1px,transparent 6px)',
+                backgroundColor: '#F9FAFB',
+              };
+            } else if (hasEntry) {
+              cellBg = 'bg-[#DCFCE7]';
+            } else if (isToday) {
+              cellBg = 'bg-[#EEF2FF]';
+            } else if (isPast) {
+              cellBg = 'bg-[#FEE2E2]';
+            }
+
+            return (
+              <div
+                key={d.getDate()}
+                className={`flex flex-col items-center justify-center w-9 h-12 rounded-lg select-none ${cellBg}`}
+                style={cellStyle}
+              >
+                <span className={`text-xs font-semibold leading-none ${
+                  isToday
+                    ? 'w-5 h-5 flex items-center justify-center rounded-full bg-[#4F46E5] text-white'
+                    : isSunday
+                    ? 'text-[#9CA3AF]'
+                    : 'text-[#09090B]'
+                }`}>
+                  {d.getDate()}
+                </span>
+                <span className={`text-[10px] mt-0.5 leading-none ${isSunday ? 'text-[#9CA3AF]' : 'text-[#71717A]'}`}>
+                  {SHORT_DAY[d.getDay()]}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tracker View ─────────────────────────────────────────────────────────────
 
 function TrackerView({
@@ -375,6 +497,7 @@ function WeeklyView({
   onWeeklyUserFilterChange,
   isAdmin,
   currentUserId,
+  navStickyTop = 'top-16',
 }: {
   weekStart: Date;
   monthEntries: GeneralNewEntry[];
@@ -389,6 +512,7 @@ function WeeklyView({
   onWeeklyUserFilterChange: (v: string) => void;
   isAdmin: boolean;
   currentUserId: number | undefined;
+  navStickyTop?: string;
 }) {
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -425,7 +549,7 @@ function WeeklyView({
   return (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
       {/* Sticky week nav bar */}
-      <div className="sticky top-16 z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4]">
+      <div className={`sticky ${navStickyTop} z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4]`}>
         <div className="flex items-center gap-2">
           {isAdmin && (
             <Select value={weeklyUserFilter} onValueChange={onWeeklyUserFilterChange}>
@@ -881,21 +1005,169 @@ export default function GeneralNewPage() {
     setIsModalOpen(true);
   };
 
-  const tabs: { key: typeof activeView; label: string }[] = [
-    ...(isAdmin ? [{ key: 'tracker' as const, label: 'Tracker View' }] : []),
+  const agentTabs: { key: 'weekly' | 'data'; label: string }[] = [
     { key: 'weekly', label: 'Weekly View' },
     { key: 'data', label: 'Data View' },
   ];
 
+  const adminTabs: { key: typeof activeView; label: string }[] = [
+    { key: 'tracker', label: 'Tracker View' },
+    { key: 'weekly', label: 'Weekly View' },
+    { key: 'data', label: 'Data View' },
+  ];
+
+  const dataViewContent = (
+    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
+      <div className="sticky top-16 z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <Select value={dataDateRange} onValueChange={(v) => { setDataDateRange(v as DateRangeOption); updateParams({ page: 1 }); }}>
+            <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 w-auto min-w-[120px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Time</SelectItem>
+              <SelectItem value="this_month">This Month</SelectItem>
+              <SelectItem value="last_month">Last Month</SelectItem>
+              <SelectItem value="this_year">This Year</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {isAdmin && (
+            <Select value={dataUserFilter} onValueChange={(v) => { setDataUserFilter(v); updateParams({ page: 1 }); }}>
+              <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 gap-1.5 w-auto min-w-[130px]">
+                <Users className="h-3.5 w-3.5 text-[#71717A]" />
+                <SelectValue placeholder="All Users" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Users</SelectItem>
+                {moduleUsers.map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>
+                    {u.full_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        <Button
+          onClick={() => openAddModal()}
+          disabled={todaySubmitted}
+          title={todaySubmitted ? 'Already submitted today' : undefined}
+          className="h-9 px-4 text-sm font-medium bg-[#09090B] hover:bg-[#1a1a1a] text-white rounded-lg gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Plus className="h-4 w-4" />
+          Add record
+        </Button>
+      </div>
+
+      <div className="px-5 pb-5 pt-4">
+        <DataTable
+          columns={dataColumns}
+          data={dataEntries}
+          totalCount={totalCount}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={(p) => updateParams({ page: p })}
+          onPageSizeChange={(s) => updateParams({ pageSize: s, page: 1 })}
+          onEdit={openEditModal}
+          onDelete={handleDelete}
+          canEdit={(entry) => entry.is_editable}
+          isLoading={dataLoading}
+          height="h-auto min-h-[200px]"
+        />
+      </div>
+    </div>
+  );
+
+  const weeklyViewContent = (isAgentLayout: boolean) => (
+    <WeeklyView
+      weekStart={weekStart}
+      monthEntries={monthEntries}
+      today={today}
+      onPrevWeek={() => setWeekStart(d => addDays(d, -7))}
+      onNextWeek={() => setWeekStart(d => addDays(d, 7))}
+      onAddRecord={openAddModal}
+      onEdit={openEditModal}
+      onDelete={handleDelete}
+      moduleUsers={moduleUsers}
+      weeklyUserFilter={weeklyUserFilter}
+      onWeeklyUserFilterChange={setWeeklyUserFilter}
+      isAdmin={isAdmin}
+      currentUserId={currentUserId}
+      navStickyTop={isAgentLayout ? 'top-[7.5rem]' : 'top-16'}
+    />
+  );
+
+  const modal = (
+    <EntryModal
+      isOpen={isModalOpen}
+      onClose={() => {
+        setIsModalOpen(false);
+        setEditingEntry(null);
+        setModalDate('');
+        setModalError('');
+      }}
+      onSave={handleSave}
+      entry={editingEntry}
+      initialDate={modalDate}
+      error={modalError}
+    />
+  );
+
+  // ── Agent layout ─────────────────────────────────────────────────────────────
+  if (!isAdmin) {
+    const agentView = activeView === 'data' ? 'data' : 'weekly';
+    return (
+      <div className="p-6 space-y-4">
+        <h1 className="text-2xl font-bold text-[#09090B]">General New</h1>
+
+        {/* Always-visible personal Daily Tracker card */}
+        <PersonalDailyTracker
+          calYear={calYear}
+          calMonth={calMonth}
+          today={today}
+          monthEntries={monthEntries}
+          currentUserId={currentUserId}
+          onPrevMonth={prevMonth}
+          onNextMonth={nextMonth}
+          onGoToday={goToday}
+        />
+
+        {/* Sticky tabs: Weekly View | Data View */}
+        <div className="sticky top-16 z-20 bg-white py-2 border-b border-[#E4E4E4]">
+          <div className="flex items-center gap-1">
+            {agentTabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveView(tab.key)}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  agentView === tab.key
+                    ? 'bg-[#F3F4F6] text-[#09090B]'
+                    : 'text-[#6B7280] hover:text-[#09090B] hover:bg-[#F9FAFB]'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {agentView === 'weekly' && weeklyViewContent(true)}
+        {agentView === 'data' && dataViewContent}
+        {modal}
+      </div>
+    );
+  }
+
+  // ── Admin layout ──────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-5">
-      {/* Sticky page header */}
-      <div className="sticky top-16 z-20 bg-background pt-0 pb-2 -mx-6 px-6 border-b border-[#E4E4E4]">
+      {/* Sticky page header: title + tabs */}
+      <div className="sticky top-16 z-20 bg-white pt-0 pb-2 border-b border-[#E4E4E4]">
         <h1 className="text-2xl font-bold text-[#09090B] pb-3">General New</h1>
-
-        {/* Page-level tabs */}
         <div className="flex items-center gap-1 pb-1">
-          {tabs.map((tab) => (
+          {adminTabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveView(tab.key)}
@@ -911,8 +1183,7 @@ export default function GeneralNewPage() {
         </div>
       </div>
 
-      {/* ── Tracker View ── */}
-      {activeView === 'tracker' && isAdmin && (
+      {activeView === 'tracker' && (
         <TrackerView
           calYear={calYear}
           calMonth={calMonth}
@@ -925,108 +1196,9 @@ export default function GeneralNewPage() {
           onGoToday={goToday}
         />
       )}
-
-      {/* ── Weekly View ── */}
-      {activeView === 'weekly' && (
-        <WeeklyView
-          weekStart={weekStart}
-          monthEntries={monthEntries}
-          today={today}
-          onPrevWeek={() => setWeekStart(d => addDays(d, -7))}
-          onNextWeek={() => setWeekStart(d => addDays(d, 7))}
-          onAddRecord={openAddModal}
-          onEdit={openEditModal}
-          onDelete={handleDelete}
-          moduleUsers={moduleUsers}
-          weeklyUserFilter={weeklyUserFilter}
-          onWeeklyUserFilterChange={setWeeklyUserFilter}
-          isAdmin={isAdmin}
-          currentUserId={currentUserId}
-        />
-      )}
-
-      {/* ── Data View ── */}
-      {activeView === 'data' && (
-        <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
-          <div className="sticky top-16 z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
-            <div className="flex items-center gap-2">
-              {/* Date range filter */}
-              <Select value={dataDateRange} onValueChange={(v) => { setDataDateRange(v as DateRangeOption); updateParams({ page: 1 }); }}>
-                <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 w-auto min-w-[120px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Time</SelectItem>
-                  <SelectItem value="this_month">This Month</SelectItem>
-                  <SelectItem value="last_month">Last Month</SelectItem>
-                  <SelectItem value="this_year">This Year</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* User filter (admin only) */}
-              {isAdmin && (
-                <Select value={dataUserFilter} onValueChange={(v) => { setDataUserFilter(v); updateParams({ page: 1 }); }}>
-                  <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 gap-1.5 w-auto min-w-[130px]">
-                    <Users className="h-3.5 w-3.5 text-[#71717A]" />
-                    <SelectValue placeholder="All Users" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Users</SelectItem>
-                    {moduleUsers.map((u) => (
-                      <SelectItem key={u.id} value={String(u.id)}>
-                        {u.full_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            {/* Add record */}
-            <Button
-              onClick={() => openAddModal()}
-              disabled={todaySubmitted}
-              title={todaySubmitted ? 'Already submitted today' : undefined}
-              className="h-9 px-4 text-sm font-medium bg-[#09090B] hover:bg-[#1a1a1a] text-white rounded-lg gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Plus className="h-4 w-4" />
-              Add record
-            </Button>
-          </div>
-
-          <div className="px-5 pb-5 pt-4">
-            <DataTable
-              columns={dataColumns}
-              data={dataEntries}
-              totalCount={totalCount}
-              page={page}
-              pageSize={pageSize}
-              onPageChange={(p) => updateParams({ page: p })}
-              onPageSizeChange={(s) => updateParams({ pageSize: s, page: 1 })}
-              onEdit={openEditModal}
-              onDelete={handleDelete}
-              canEdit={(entry) => entry.is_editable}
-              isLoading={dataLoading}
-              height="h-auto min-h-[200px]"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Modal */}
-      <EntryModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingEntry(null);
-          setModalDate('');
-          setModalError('');
-        }}
-        onSave={handleSave}
-        entry={editingEntry}
-        initialDate={modalDate}
-        error={modalError}
-      />
+      {activeView === 'weekly' && weeklyViewContent(false)}
+      {activeView === 'data' && dataViewContent}
+      {modal}
     </div>
   );
 }

@@ -298,8 +298,8 @@ function TrackerView({
 
   return (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
-      {/* Sticky controls row */}
-      <div className="sticky top-16 z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
+      {/* Sticky controls row — offset below the admin sticky page header (~92px) */}
+      <div className="sticky top-39 z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
         <div className="flex items-center gap-3">
           {/* Month/Year toggle */}
           <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
@@ -1018,7 +1018,7 @@ export default function GeneralNewPage() {
 
   const dataViewContent = (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
-      <div className="sticky top-16 z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
+      <div className="sticky top-39 z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <Select value={dataDateRange} onValueChange={(v) => { setDataDateRange(v as DateRangeOption); updateParams({ page: 1 }); }}>
             <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 w-auto min-w-[120px]">
@@ -1095,7 +1095,7 @@ export default function GeneralNewPage() {
       onWeeklyUserFilterChange={setWeeklyUserFilter}
       isAdmin={isAdmin}
       currentUserId={currentUserId}
-      navStickyTop={isAgentLayout ? 'top-[7.5rem]' : 'top-16'}
+      navStickyTop={isAgentLayout ? 'top-[7.5rem]' : 'top-39'}
     />
   );
 

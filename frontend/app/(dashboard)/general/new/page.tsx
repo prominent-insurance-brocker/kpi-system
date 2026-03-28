@@ -175,9 +175,9 @@ function TrackerView({
       : moduleUsers.filter((u) => String(u.id) === trackerUserFilter);
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
-      {/* Controls row */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
+    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
+      {/* Sticky controls row */}
+      <div className="sticky top-16 z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
         <div className="flex items-center gap-3">
           {/* Month/Year toggle */}
           <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
@@ -423,9 +423,9 @@ function WeeklyView({
   const effectiveUserId = weeklyUserFilter !== 'all' ? Number(weeklyUserFilter) : currentUserId;
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
-      {/* Week nav bar */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4]">
+    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
+      {/* Sticky week nav bar */}
+      <div className="sticky top-16 z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4]">
         <div className="flex items-center gap-2">
           {isAdmin && (
             <Select value={weeklyUserFilter} onValueChange={onWeeklyUserFilterChange}>
@@ -889,23 +889,26 @@ export default function GeneralNewPage() {
 
   return (
     <div className="p-6 space-y-5">
-      <h1 className="text-2xl font-bold text-[#09090B]">General New</h1>
+      {/* Sticky page header */}
+      <div className="sticky top-16 z-20 bg-background pt-0 pb-2 -mx-6 px-6 border-b border-[#E4E4E4]">
+        <h1 className="text-2xl font-bold text-[#09090B] pb-3">General New</h1>
 
-      {/* Page-level tabs */}
-      <div className="flex items-center gap-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveView(tab.key)}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-              activeView === tab.key
-                ? 'bg-[#F3F4F6] text-[#09090B]'
-                : 'text-[#6B7280] hover:text-[#09090B] hover:bg-[#F9FAFB]'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {/* Page-level tabs */}
+        <div className="flex items-center gap-1 pb-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveView(tab.key)}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                activeView === tab.key
+                  ? 'bg-[#F3F4F6] text-[#09090B]'
+                  : 'text-[#6B7280] hover:text-[#09090B] hover:bg-[#F9FAFB]'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Tracker View ── */}
@@ -944,8 +947,8 @@ export default function GeneralNewPage() {
 
       {/* ── Data View ── */}
       {activeView === 'data' && (
-        <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
+        <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
+          <div className="sticky top-16 z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
             <div className="flex items-center gap-2">
               {/* Date range filter */}
               <Select value={dataDateRange} onValueChange={(v) => { setDataDateRange(v as DateRangeOption); updateParams({ page: 1 }); }}>

@@ -23,6 +23,15 @@ import { API_BASE_URL } from '@/app/lib/api';
 import { CalendarDays, ChevronLeft, ChevronRight, Plus, MoreHorizontal } from 'lucide-react';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate, formatDateTime } from '@/app/lib/date';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '@/components/ui/table';
 
 interface GeneralNewEntry {
   id: number;
@@ -175,38 +184,37 @@ function WeeklyView({
 
       {/* Table */}
       <div className="rounded-xl border border-[#E4E4E4] overflow-hidden">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-[#F9F9F9] border-b border-[#E4E4E4]">
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide w-[140px]">
+        <Table>
+          <TableHeader className="bg-[#F9F9F9] [&_tr]:border-b [&_tr]:border-[#E4E4E4]">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="px-5 py-3 text-xs font-medium text-[#71717A] uppercase tracking-wide w-[140px]">
                 Day
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
+              </TableHead>
+              <TableHead className="px-5 py-3 text-xs font-medium text-[#71717A] uppercase tracking-wide">
                 Quotations
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
+              </TableHead>
+              <TableHead className="px-5 py-3 text-xs font-medium text-[#71717A] uppercase tracking-wide">
                 Quotes revised
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
+              </TableHead>
+              <TableHead className="px-5 py-3 text-xs font-medium text-[#71717A] uppercase tracking-wide">
                 Quotes converted
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
+              </TableHead>
+              <TableHead className="px-5 py-3 text-xs font-medium text-[#71717A] uppercase tracking-wide">
                 Added by
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide w-[180px]">
+              </TableHead>
+              <TableHead className="px-5 py-3 text-xs font-medium text-[#71717A] uppercase tracking-wide w-[180px]">
                 Status
-              </th>
-              <th className="w-12" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#F3F3F3]">
+              </TableHead>
+              <TableHead className="w-12" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {weekDays.map((d, idx) => {
               const isSun = d.getDay() === 0;
               const isToday = sameDay(d, today);
               const entries = getEntriesForDay(d);
               const latestEntry = entries[0] ?? null;
               const hasEntry = entries.length > 0;
-              const future = isFutureDay(d);
               const past = isPastDay(d);
 
               let statusType: 'submitted' | 'not_submitted' | 'upcoming' = 'upcoming';
@@ -214,11 +222,11 @@ function WeeklyView({
               else if (past) statusType = 'not_submitted';
 
               return (
-                <tr
+                <TableRow
                   key={toLocalDateString(d)}
-                  className={`h-[64px] transition-colors ${
+                  className={`h-[64px] border-b border-[#F3F3F3] last:border-0 ${
                     isSun
-                      ? 'bg-[#FAFAFA] opacity-60'
+                      ? 'bg-[#FAFAFA] opacity-60 hover:bg-[#FAFAFA]'
                       : isToday && hasEntry
                       ? 'bg-[#F0FDF4] hover:bg-[#ECFDF5]'
                       : isToday
@@ -227,57 +235,35 @@ function WeeklyView({
                   }`}
                 >
                   {/* Day */}
-                  <td className="px-5 py-3">
+                  <TableCell className="px-5 py-3">
                     <div className="flex flex-col gap-0.5">
-                      <span
-                        className={`text-sm font-semibold leading-tight ${
-                          isToday ? 'text-[#4F46E5]' : 'text-[#09090B]'
-                        }`}
-                      >
+                      <span className={`text-sm font-semibold leading-tight ${isToday ? 'text-[#4F46E5]' : 'text-[#09090B]'}`}>
                         {WEEKDAY_NAMES[idx]}
                       </span>
                       <span className="text-xs text-[#9CA3AF] leading-tight">
                         {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </span>
                     </div>
-                  </td>
+                  </TableCell>
 
                   {/* Quotations */}
-                  <td className="px-5 py-3 text-sm font-medium text-[#374151]">
-                    {latestEntry ? (
-                      latestEntry.quotations
-                    ) : isSun ? (
-                      ''
-                    ) : (
-                      <span className="text-[#D1D5DB]">—</span>
-                    )}
-                  </td>
+                  <TableCell className="px-5 py-3 text-sm font-medium text-[#374151]">
+                    {latestEntry ? latestEntry.quotations : <span className="text-[#D1D5DB]">—</span>}
+                  </TableCell>
 
                   {/* Quotes revised */}
-                  <td className="px-5 py-3 text-sm font-medium text-[#374151]">
-                    {latestEntry ? (
-                      latestEntry.quotes_revised
-                    ) : isSun ? (
-                      ''
-                    ) : (
-                      <span className="text-[#D1D5DB]">—</span>
-                    )}
-                  </td>
+                  <TableCell className="px-5 py-3 text-sm font-medium text-[#374151]">
+                    {latestEntry ? latestEntry.quotes_revised : <span className="text-[#D1D5DB]">—</span>}
+                  </TableCell>
 
                   {/* Quotes converted */}
-                  <td className="px-5 py-3 text-sm font-medium text-[#374151]">
-                    {latestEntry ? (
-                      latestEntry.quotes_converted
-                    ) : isSun ? (
-                      ''
-                    ) : (
-                      <span className="text-[#D1D5DB]">—</span>
-                    )}
-                  </td>
+                  <TableCell className="px-5 py-3 text-sm font-medium text-[#374151]">
+                    {latestEntry ? latestEntry.quotes_converted : <span className="text-[#D1D5DB]">—</span>}
+                  </TableCell>
 
                   {/* Added by */}
-                  <td className="px-5 py-3">
-                    {latestEntry && !isSun ? (
+                  <TableCell className="px-5 py-3">
+                    {latestEntry ? (
                       <div className="flex items-center gap-2">
                         <span className="w-7 h-7 rounded-full bg-[#6366F1] text-white text-xs flex items-center justify-center font-semibold uppercase shrink-0">
                           {latestEntry.added_by_name.charAt(0)}
@@ -286,31 +272,29 @@ function WeeklyView({
                           {latestEntry.added_by_name}
                         </span>
                       </div>
-                    ) : null}
-                  </td>
+                    ) : <span className="text-[#D1D5DB]">—</span>}
+                  </TableCell>
 
                   {/* Status */}
-                  <td className="px-5 py-3">
+                  <TableCell className="px-5 py-3">
                     {!isSun && (
-                      <>
-                        {isToday && !hasEntry ? (
-                          <Button
-                            size="sm"
-                            className="h-8 px-3 text-xs font-medium bg-[#09090B] hover:bg-[#1a1a1a] text-white rounded-lg gap-1"
-                            onClick={() => onAddRecord(toLocalDateString(d))}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                            Add record
-                          </Button>
-                        ) : (
-                          <StatusBadge type={statusType} />
-                        )}
-                      </>
+                      isToday && !hasEntry ? (
+                        <Button
+                          size="sm"
+                          className="h-8 px-3 text-xs font-medium bg-[#09090B] hover:bg-[#1a1a1a] text-white rounded-lg gap-1"
+                          onClick={() => onAddRecord(toLocalDateString(d))}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Add record
+                        </Button>
+                      ) : (
+                        <StatusBadge type={statusType} />
+                      )
                     )}
-                  </td>
+                  </TableCell>
 
                   {/* Three-dot menu */}
-                  <td className="px-3 py-3">
+                  <TableCell className="px-3 py-3">
                     {!isSun && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -351,12 +335,12 @@ function WeeklyView({
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
@@ -631,32 +615,17 @@ export default function GeneralNewPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 px-5 pt-4 pb-1">
-          <button
-            onClick={() => setActiveTab('weekly')}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-              activeTab === 'weekly'
-                ? 'bg-[#F3F4F6] text-[#09090B]'
-                : 'text-[#6B7280] hover:text-[#09090B] hover:bg-[#F9FAFB]'
-            }`}
-          >
-            Weekly View
-          </button>
-          <button
-            onClick={() => setActiveTab('data')}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-              activeTab === 'data'
-                ? 'bg-[#F3F4F6] text-[#09090B]'
-                : 'text-[#6B7280] hover:text-[#09090B] hover:bg-[#F9FAFB]'
-            }`}
-          >
-            Data View
-          </button>
-        </div>
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as 'weekly' | 'data')}
+          className="px-5 pb-5 pt-3 gap-3"
+        >
+          <TabsList className="gap-1">
+            <TabsTrigger value="weekly">Weekly View</TabsTrigger>
+            <TabsTrigger value="data">Data View</TabsTrigger>
+          </TabsList>
 
-        {/* Tab content */}
-        <div className="px-5 pb-5 pt-3">
-          {activeTab === 'weekly' && (
+          <TabsContent value="weekly">
             <WeeklyView
               weekStart={weekStart}
               monthEntries={monthEntries}
@@ -667,9 +636,9 @@ export default function GeneralNewPage() {
               onEdit={openEditModal}
               onDelete={handleDelete}
             />
-          )}
+          </TabsContent>
 
-          {activeTab === 'data' && (
+          <TabsContent value="data">
             <div className="space-y-3">
               <div className="flex justify-end">
                 <Button
@@ -695,8 +664,8 @@ export default function GeneralNewPage() {
                 height="h-auto min-h-[200px]"
               />
             </div>
-          )}
-        </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Modal */}

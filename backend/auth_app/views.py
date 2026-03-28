@@ -242,11 +242,17 @@ class UserViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
 
     def get_queryset(self):
+        from django.db import models as db_models
         queryset = super().get_queryset()
-        # Optional filtering
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             queryset = queryset.filter(is_active=is_active.lower() == 'true')
+        module = self.request.query_params.get('module')
+        if module:
+            queryset = queryset.filter(
+                db_models.Q(is_staff=True) |
+                db_models.Q(role__permissions__module=module)
+            ).distinct()
         return queryset.order_by('-date_joined')
 
     @action(detail=True, methods=['post'])

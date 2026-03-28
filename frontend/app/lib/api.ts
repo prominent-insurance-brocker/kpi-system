@@ -266,6 +266,25 @@ export async function getUsersForFilter(): Promise<ApiResponse<{ id: number; ema
   return { error: result.error };
 }
 
+// Get active users who have a specific module permission (for tracker views)
+export async function getUsersForModule(
+  moduleKey: string
+): Promise<ApiResponse<{ id: number; email: string; full_name: string }[]>> {
+  const result = await fetchApi<PaginatedResponse<UserAdmin>>(
+    `/api/auth/users/?module=${encodeURIComponent(moduleKey)}&is_active=true&page_size=1000`
+  );
+  if (result.data) {
+    return {
+      data: result.data.results.map(u => ({
+        id: u.id,
+        email: u.email,
+        full_name: u.full_name,
+      })),
+    };
+  }
+  return { error: result.error };
+}
+
 // AI Chat
 export interface AiChatResponse {
   success: boolean;

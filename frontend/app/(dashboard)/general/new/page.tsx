@@ -30,7 +30,8 @@ import { API_BASE_URL, getUsersForModule } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
 import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users } from 'lucide-react';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
-import { formatDate, formatDateTime } from '@/app/lib/date';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { formatDate } from '@/app/lib/date';
 
 interface GeneralNewEntry {
   id: number;
@@ -89,7 +90,7 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 const SHORT_DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 
@@ -489,6 +490,7 @@ function WeeklyView({
   today,
   onPrevWeek,
   onNextWeek,
+  onGoToCurrentWeek,
   onAddRecord,
   onEdit,
   onDelete,
@@ -505,6 +507,7 @@ function WeeklyView({
   today: Date;
   onPrevWeek: () => void;
   onNextWeek: () => void;
+  onGoToCurrentWeek: () => void;
   onAddRecord: (date: string) => void;
   onEdit: (entry: GeneralNewEntry) => void;
   onDelete: (entry: GeneralNewEntry) => void;
@@ -541,10 +544,11 @@ function WeeklyView({
   };
 
   const weekEndDay = addDays(weekStart, 6);
-  const weekMonthLabel =
-    weekStart.getMonth() === weekEndDay.getMonth()
-      ? `${MONTH_NAMES[weekStart.getMonth()]} ${weekStart.getFullYear()}`
-      : `${MONTH_NAMES[weekStart.getMonth()]} – ${MONTH_NAMES[weekEndDay.getMonth()]} ${weekEndDay.getFullYear()}`;
+  const formatShortDate = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const weekDateRangeLabel =
+    weekStart.getFullYear() === weekEndDay.getFullYear()
+      ? `${formatShortDate(weekStart)} – ${formatShortDate(weekEndDay)}, ${weekEndDay.getFullYear()}`
+      : `${formatShortDate(weekStart)}, ${weekStart.getFullYear()} – ${formatShortDate(weekEndDay)}, ${weekEndDay.getFullYear()}`;
 
   const effectiveUserId = weeklyUserFilter !== 'all' ? Number(weeklyUserFilter) : currentUserId;
 
@@ -579,7 +583,12 @@ function WeeklyView({
             >
               <ChevronLeft className="h-4 w-4 text-[#71717A]" />
             </button>
-            <span className="text-sm font-medium text-[#09090B] px-1">This Week</span>
+            <button
+              onClick={onGoToCurrentWeek}
+              className="text-sm font-medium text-[#09090B] px-3 py-1 rounded-lg border border-[#E4E4E4] hover:bg-[#F3F3F3] transition-colors"
+            >
+              This Week
+            </button>
             <button
               onClick={onNextWeek}
               className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
@@ -587,7 +596,7 @@ function WeeklyView({
               <ChevronRight className="h-4 w-4 text-[#71717A]" />
             </button>
           </div>
-          <span className="text-sm font-semibold text-[#09090B]">{weekMonthLabel}</span>
+          <span className="text-sm font-semibold text-[#09090B]">{weekDateRangeLabel}</span>
         </div>
       </div>
 
@@ -600,13 +609,13 @@ function WeeklyView({
                 Day
               </th>
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
-                Quotations
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
-                Quotes revised
+                Quotes created
               </th>
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
                 Quotes converted
+              </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
+                Quotes revised
               </th>
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
                 Added by
@@ -654,9 +663,15 @@ function WeeklyView({
                   >
                     <td className="px-5 py-3">
                       <div className="flex flex-col gap-0.5">
-                        <span className={`text-sm font-semibold leading-tight ${isToday ? 'text-[#4F46E5]' : 'text-[#09090B]'}`}>
-                          {WEEKDAY_NAMES[idx]}
-                        </span>
+                        {isToday ? (
+                          <span className="inline-flex items-center justify-center bg-[#4F46E5] text-white text-xs font-semibold px-2 py-0.5 rounded-md w-fit">
+                            {WEEKDAY_NAMES[idx]}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold leading-tight text-[#09090B]">
+                            {WEEKDAY_NAMES[idx]}
+                          </span>
+                        )}
                         <span className="text-xs text-[#9CA3AF] leading-tight">
                           {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         </span>
@@ -724,9 +739,15 @@ function WeeklyView({
                     {eIdx === 0 && (
                       <td className="px-5 py-3">
                         <div className="flex flex-col gap-0.5">
-                          <span className={`text-sm font-semibold leading-tight ${isToday ? 'text-[#4F46E5]' : 'text-[#09090B]'}`}>
-                            {WEEKDAY_NAMES[idx]}
-                          </span>
+                          {isToday ? (
+                            <span className="inline-flex items-center justify-center bg-[#4F46E5] text-white text-xs font-semibold px-2 py-0.5 rounded-md w-fit">
+                              {WEEKDAY_NAMES[idx]}
+                            </span>
+                          ) : (
+                            <span className="text-sm font-semibold leading-tight text-[#09090B]">
+                              {WEEKDAY_NAMES[idx]}
+                            </span>
+                          )}
                           <span className="text-xs text-[#9CA3AF] leading-tight">
                             {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                           </span>
@@ -735,8 +756,8 @@ function WeeklyView({
                     )}
                     {eIdx > 0 && <td className="px-5 py-3" />}
                     <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.quotations}</td>
-                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.quotes_revised}</td>
                     <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.quotes_converted}</td>
+                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.quotes_revised}</td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <UserAvatar name={entry.added_by_name} />
@@ -794,14 +815,25 @@ const dataColumns = [
     header: 'Record date',
     render: (item: GeneralNewEntry) => formatDate(item.date),
   },
-  { key: 'quotations', header: 'Quotations' },
-  { key: 'quotes_revised', header: 'Quotes revised' },
+  { key: 'quotations', header: 'Quotes created' },
   { key: 'quotes_converted', header: 'Quotes converted' },
-  { key: 'added_by_name', header: 'Added by' },
+  { key: 'quotes_revised', header: 'Quotes revised' },
+  {
+    key: 'added_by_name',
+    header: 'Added by',
+    render: (item: GeneralNewEntry) => (
+      <div className="flex items-center gap-2">
+        <UserAvatar name={item.added_by_name} />
+        <span className="text-sm font-medium text-[#374151] truncate max-w-[120px]">
+          {item.added_by_name}
+        </span>
+      </div>
+    ),
+  },
   {
     key: 'added_at',
     header: 'Added on',
-    render: (item: GeneralNewEntry) => formatDateTime(item.added_at),
+    render: (item: GeneralNewEntry) => formatDate(item.added_at.split('T')[0]),
   },
 ];
 
@@ -1007,11 +1039,6 @@ export default function GeneralNewPage() {
     setIsModalOpen(true);
   };
 
-  const agentTabs: { key: 'weekly' | 'data'; label: string }[] = [
-    { key: 'weekly', label: 'Weekly View' },
-    { key: 'data', label: 'Data View' },
-  ];
-
   const adminTabs: { key: typeof activeView; label: string }[] = [
     { key: 'tracker', label: 'Tracker View' },
     { key: 'weekly', label: 'Weekly View' },
@@ -1020,21 +1047,21 @@ export default function GeneralNewPage() {
 
   const dataViewContent = (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
-      <div className="sticky top-39 z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <Select value={dataDateRange} onValueChange={(v) => { setDataDateRange(v as DateRangeOption); updateParams({ page: 1 }); }}>
-            <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 w-auto min-w-[120px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Time</SelectItem>
-              <SelectItem value="this_month">This Month</SelectItem>
-              <SelectItem value="last_month">Last Month</SelectItem>
-              <SelectItem value="this_year">This Year</SelectItem>
-            </SelectContent>
-          </Select>
+      <div className="sticky top-39 z-10 bg-white rounded-t-2xl flex items-center justify-end px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
+        {isAdmin && (
+          <div className="flex items-center gap-2 mr-auto">
+            <Select value={dataDateRange} onValueChange={(v) => { setDataDateRange(v as DateRangeOption); updateParams({ page: 1 }); }}>
+              <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 w-auto min-w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="this_month">This Month</SelectItem>
+                <SelectItem value="last_month">Last Month</SelectItem>
+                <SelectItem value="this_year">This Year</SelectItem>
+              </SelectContent>
+            </Select>
 
-          {isAdmin && (
             <Select value={dataUserFilter} onValueChange={(v) => { setDataUserFilter(v); updateParams({ page: 1 }); }}>
               <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 gap-1.5 w-auto min-w-[130px]">
                 <Users className="h-3.5 w-3.5 text-[#71717A]" />
@@ -1049,8 +1076,8 @@ export default function GeneralNewPage() {
                 ))}
               </SelectContent>
             </Select>
-          )}
-        </div>
+          </div>
+        )}
 
         <Button
           onClick={() => openAddModal()}
@@ -1089,6 +1116,7 @@ export default function GeneralNewPage() {
       today={today}
       onPrevWeek={() => setWeekStart(d => addDays(d, -7))}
       onNextWeek={() => setWeekStart(d => addDays(d, 7))}
+      onGoToCurrentWeek={() => setWeekStart(startOfWeek(today))}
       onAddRecord={openAddModal}
       onEdit={openEditModal}
       onDelete={handleDelete}
@@ -1137,26 +1165,32 @@ export default function GeneralNewPage() {
         />
 
         {/* Sticky tabs: Weekly View | Data View */}
-        <div className="sticky top-16 z-20 bg-white py-2 border-b border-[#E4E4E4]">
-          <div className="flex items-center gap-1">
-            {agentTabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveView(tab.key)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  agentView === tab.key
-                    ? 'bg-[#F3F4F6] text-[#09090B]'
-                    : 'text-[#6B7280] hover:text-[#09090B] hover:bg-[#F9FAFB]'
-                }`}
+        <Tabs value={agentView} onValueChange={(v) => setActiveView(v as typeof activeView)} className="gap-0">
+          <div className="sticky top-16 z-20 bg-white py-2 border-b border-[#E4E4E4]">
+            <TabsList className="border border-[#E4E4E4] rounded-lg gap-0 p-0 bg-transparent">
+              <TabsTrigger
+                value="weekly"
+                className="rounded-none rounded-l-lg border-r border-[#E4E4E4] px-4 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:shadow-none data-[state=inactive]:bg-[#F9FAFB] data-[state=inactive]:text-[#6B7280]"
               >
-                {tab.label}
-              </button>
-            ))}
+                Weekly View
+              </TabsTrigger>
+              <TabsTrigger
+                value="data"
+                className="rounded-none rounded-r-lg px-4 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:shadow-none data-[state=inactive]:bg-[#F9FAFB] data-[state=inactive]:text-[#6B7280]"
+              >
+                Data View
+              </TabsTrigger>
+            </TabsList>
           </div>
-        </div>
 
-        {agentView === 'weekly' && weeklyViewContent(true)}
-        {agentView === 'data' && dataViewContent}
+          <TabsContent value="weekly" className="mt-4">
+            {weeklyViewContent(true)}
+          </TabsContent>
+          <TabsContent value="data" className="mt-4">
+            {dataViewContent}
+          </TabsContent>
+        </Tabs>
+
         {modal}
       </div>
     );

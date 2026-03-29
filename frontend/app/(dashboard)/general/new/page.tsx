@@ -306,8 +306,18 @@ function TrackerView({
 
   return (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
-      {/* Sticky controls row — offset below the admin sticky page header (~92px) */}
-      <div className="sticky top-39 z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
+      {/* Card header */}
+      <div className="flex items-center gap-2 px-5 py-2.5 border-b border-[#E4E4E4]">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#6366F1]">
+          <rect x="1" y="2" width="14" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M1 6h14" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M5 1v2M11 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+        <span className="text-sm font-semibold text-[#09090B]">Daily Tracker</span>
+      </div>
+
+      {/* Controls row */}
+      <div className="sticky top-39 z-10 bg-white flex items-center justify-between px-5 py-2 border-b border-[#E4E4E4] flex-wrap gap-3">
         <div className="flex items-center gap-3">
           {/* Month/Year toggle */}
           <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
@@ -316,39 +326,6 @@ function TrackerView({
             </button>
             <button className="px-3 py-1.5 text-[#71717A] hover:bg-[#F9F9F9] transition-colors">
               Year
-            </button>
-          </div>
-
-          {/* Month navigation */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={onPrevMonth}
-              className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
-            >
-              <ChevronLeft className="h-4 w-4 text-[#71717A]" />
-            </button>
-            <Select value={`${calYear}-${calMonth}`} onValueChange={(v) => {
-              const [y, m] = v.split('-').map(Number);
-              onTrackerUserFilterChange(trackerUserFilter);
-              // navigate by using today detection—handled by parent via direct month select
-              void y; void m;
-            }}>
-              <SelectTrigger className="h-8 text-sm font-medium border-none shadow-none focus:ring-0 px-2 gap-1 w-auto">
-                <SelectValue>{MONTH_NAMES[calMonth]}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {MONTH_NAMES.map((name, idx) => (
-                  <SelectItem key={idx} value={`${calYear}-${idx}`}>
-                    {name} {calYear}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <button
-              onClick={onNextMonth}
-              className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
-            >
-              <ChevronRight className="h-4 w-4 text-[#71717A]" />
             </button>
           </div>
 
@@ -371,10 +348,22 @@ function TrackerView({
 
         <div className="flex items-center gap-2">
           <button
+            onClick={onPrevMonth}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4 text-[#71717A]" />
+          </button>
+          <button
             onClick={onGoToday}
-            className="text-sm font-medium text-[#09090B] px-3 py-1.5 rounded-lg border border-[#E4E4E4] hover:bg-[#F3F3F3] transition-colors"
+            className="text-sm font-medium text-[#09090B] px-3 py-1 rounded-lg border border-[#E4E4E4] hover:bg-[#F3F3F3] transition-colors"
           >
             Today
+          </button>
+          <button
+            onClick={onNextMonth}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
+          >
+            <ChevronRight className="h-4 w-4 text-[#71717A]" />
           </button>
           <span className="text-sm font-semibold text-[#09090B]">
             {MONTH_NAMES[calMonth]} {calYear}
@@ -568,10 +557,9 @@ function WeeklyView({
             <Select value={weeklyUserFilter} onValueChange={onWeeklyUserFilterChange}>
               <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 gap-1.5 w-auto min-w-[130px]">
                 <Users className="h-3.5 w-3.5 text-[#71717A]" />
-                <SelectValue placeholder="All Users" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Users</SelectItem>
                 {moduleUsers.map((u) => (
                   <SelectItem key={u.id} value={String(u.id)}>
                     {u.full_name}
@@ -958,7 +946,13 @@ export default function GeneralNewPage() {
   useEffect(() => {
     if (!isAdmin) return;
     getUsersForModule('general_new').then((res) => {
-      if (res.data) setModuleUsers(res.data);
+      if (res.data) {
+        setModuleUsers(res.data);
+        // Default weekly user filter to first user
+        if (res.data.length > 0) {
+          setWeeklyUserFilter(String(res.data[0].id));
+        }
+      }
     });
   }, [isAdmin]);
 
@@ -1045,12 +1039,6 @@ export default function GeneralNewPage() {
     setModalDate('');
     setIsModalOpen(true);
   };
-
-  const adminTabs: { key: typeof activeView; label: string }[] = [
-    { key: 'tracker', label: 'Tracker View' },
-    { key: 'weekly', label: 'Weekly View' },
-    { key: 'data', label: 'Data View' },
-  ];
 
   const dataViewContent = (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
@@ -1173,7 +1161,7 @@ export default function GeneralNewPage() {
 
         {/* Sticky tabs: Weekly View | Data View */}
         <Tabs value={agentView} onValueChange={(v) => setActiveView(v as typeof activeView)} className="gap-0">
-          <div className="sticky top-16 z-20 bg-white py-2 border-b border-[#E4E4E4]">
+          <div className="sticky top-16 z-20 bg-white py-2">
             <TabsList className="border border-[#E4E4E4] rounded-lg gap-0 p-0 bg-transparent">
               <TabsTrigger
                 value="weekly"
@@ -1206,41 +1194,53 @@ export default function GeneralNewPage() {
   // ── Admin layout ──────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-5">
-      {/* Sticky page header: title + tabs */}
-      <div className="sticky top-16 z-20 bg-white pt-0 pb-2 border-b border-[#E4E4E4]">
-        <h1 className="text-2xl font-bold text-[#09090B] pb-3">General New</h1>
-        <div className="flex items-center gap-1 pb-1">
-          {adminTabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveView(tab.key)}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                activeView === tab.key
-                  ? 'bg-[#F3F4F6] text-[#09090B]'
-                  : 'text-[#6B7280] hover:text-[#09090B] hover:bg-[#F9FAFB]'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <h1 className="text-2xl font-bold text-[#09090B]">General New</h1>
 
-      {activeView === 'tracker' && (
-        <TrackerView
-          calYear={calYear}
-          calMonth={calMonth}
-          monthEntries={monthEntries}
-          moduleUsers={moduleUsers}
-          trackerUserFilter={trackerUserFilter}
-          onTrackerUserFilterChange={setTrackerUserFilter}
-          onPrevMonth={prevMonth}
-          onNextMonth={nextMonth}
-          onGoToday={goToday}
-        />
-      )}
-      {activeView === 'weekly' && weeklyViewContent(false)}
-      {activeView === 'data' && dataViewContent}
+      <Tabs value={activeView} onValueChange={(v) => setActiveView(v as typeof activeView)} className="gap-0">
+        <div className="sticky top-16 z-20 bg-white py-2 border-b border-[#E4E4E4]">
+          <TabsList className="border border-[#E4E4E4] rounded-lg gap-0 p-0 bg-transparent">
+            <TabsTrigger
+              value="tracker"
+              className="rounded-none rounded-l-lg border-r border-[#E4E4E4] px-4 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:shadow-none data-[state=inactive]:bg-[#F9FAFB] data-[state=inactive]:text-[#6B7280]"
+            >
+              Tracker View
+            </TabsTrigger>
+            <TabsTrigger
+              value="weekly"
+              className="rounded-none border-r border-[#E4E4E4] px-4 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:shadow-none data-[state=inactive]:bg-[#F9FAFB] data-[state=inactive]:text-[#6B7280]"
+            >
+              Weekly View
+            </TabsTrigger>
+            <TabsTrigger
+              value="data"
+              className="rounded-none rounded-r-lg px-4 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:shadow-none data-[state=inactive]:bg-[#F9FAFB] data-[state=inactive]:text-[#6B7280]"
+            >
+              Data View
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="tracker" className="mt-4">
+          <TrackerView
+            calYear={calYear}
+            calMonth={calMonth}
+            monthEntries={monthEntries}
+            moduleUsers={moduleUsers}
+            trackerUserFilter={trackerUserFilter}
+            onTrackerUserFilterChange={setTrackerUserFilter}
+            onPrevMonth={prevMonth}
+            onNextMonth={nextMonth}
+            onGoToday={goToday}
+          />
+        </TabsContent>
+        <TabsContent value="weekly" className="mt-4">
+          {weeklyViewContent(false)}
+        </TabsContent>
+        <TabsContent value="data" className="mt-4">
+          {dataViewContent}
+        </TabsContent>
+      </Tabs>
+
       {modal}
     </div>
   );

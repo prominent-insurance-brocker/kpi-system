@@ -1162,16 +1162,16 @@ export default function GeneralNewPage() {
         {/* Sticky tabs: Weekly View | Data View */}
         <Tabs value={agentView} onValueChange={(v) => setActiveView(v as typeof activeView)} className="gap-0">
           <div className="sticky top-16 z-20 bg-white py-2">
-            <TabsList className="border border-[#E4E4E4] rounded-lg gap-0 p-0 bg-transparent">
+            <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0">
               <TabsTrigger
                 value="weekly"
-                className="rounded-none rounded-l-lg border-r border-[#E4E4E4] px-4 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:shadow-none data-[state=inactive]:bg-[#F9FAFB] data-[state=inactive]:text-[#6B7280]"
+                className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"
               >
                 Weekly View
               </TabsTrigger>
               <TabsTrigger
                 value="data"
-                className="rounded-none rounded-r-lg px-4 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:shadow-none data-[state=inactive]:bg-[#F9FAFB] data-[state=inactive]:text-[#6B7280]"
+                className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"
               >
                 Data View
               </TabsTrigger>
@@ -1197,23 +1197,23 @@ export default function GeneralNewPage() {
       <h1 className="text-2xl font-bold text-[#09090B]">General New</h1>
 
       <Tabs value={activeView} onValueChange={(v) => setActiveView(v as typeof activeView)} className="gap-0">
-        <div className="sticky top-16 z-20 bg-white py-2 border-b border-[#E4E4E4]">
-          <TabsList className="border border-[#E4E4E4] rounded-lg gap-0 p-0 bg-transparent">
+        <div className="sticky top-16 z-20 bg-white py-2">
+          <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0">
             <TabsTrigger
               value="tracker"
-              className="rounded-none rounded-l-lg border-r border-[#E4E4E4] px-4 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:shadow-none data-[state=inactive]:bg-[#F9FAFB] data-[state=inactive]:text-[#6B7280]"
+              className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"
             >
               Tracker View
             </TabsTrigger>
             <TabsTrigger
               value="weekly"
-              className="rounded-none border-r border-[#E4E4E4] px-4 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:shadow-none data-[state=inactive]:bg-[#F9FAFB] data-[state=inactive]:text-[#6B7280]"
+              className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"
             >
               Weekly View
             </TabsTrigger>
             <TabsTrigger
               value="data"
-              className="rounded-none rounded-r-lg px-4 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:shadow-none data-[state=inactive]:bg-[#F9FAFB] data-[state=inactive]:text-[#6B7280]"
+              className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"
             >
               Data View
             </TabsTrigger>

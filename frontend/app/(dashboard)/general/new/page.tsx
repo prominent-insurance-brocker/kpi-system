@@ -1041,8 +1041,8 @@ export default function GeneralNewPage() {
   };
 
   const dataViewContent = (
-    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
-      <div className="sticky top-39 z-10 bg-white rounded-t-2xl flex items-center justify-end px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3">
+    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm flex flex-col" style={{ height: 'calc(100vh - 10rem)' }}>
+      <div className="flex items-center justify-end px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3 shrink-0">
         {isAdmin && (
           <div className="flex items-center gap-2 mr-auto">
             <Select value={dataDateRange} onValueChange={(v) => { setDataDateRange(v as DateRangeOption); updateParams({ page: 1 }); }}>
@@ -1085,7 +1085,7 @@ export default function GeneralNewPage() {
         </Button>
       </div>
 
-      <div className="px-5 pb-5 pt-4">
+      <div className="flex-1 min-h-0">
         <DataTable
           columns={dataColumns}
           data={dataEntries}
@@ -1098,7 +1098,7 @@ export default function GeneralNewPage() {
           onDelete={handleDelete}
           canEdit={(entry) => entry.is_editable}
           isLoading={dataLoading}
-          height="max-h-[calc(100vh-15rem)] min-h-[200px]"
+          height="h-full !border-0 !rounded-none"
         />
       </div>
     </div>

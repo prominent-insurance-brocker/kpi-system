@@ -88,7 +88,7 @@ export function DataTable<T extends { id: number }>({
   };
 
   return (
-    <div className={`bg-white border border-[#E4E4E4] rounded-2xl  ${height}`}>
+    <div className={`bg-white border border-[#E4E4E4] rounded-2xl ${height}`}>
       <div className="p-3 flex flex-col h-full">
         {/* Table */}
         <div className="flex-1 min-h-0 rounded-lg overflow-auto">

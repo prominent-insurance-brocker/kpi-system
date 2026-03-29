@@ -91,7 +91,7 @@ export function DataTable<T extends { id: number }>({
     <div className={`bg-white border border-[#E4E4E4] rounded-2xl ${height}`}>
       <div className="p-3 flex flex-col h-full">
         {/* Table */}
-        <div className="flex-1 min-h-0 rounded-lg overflow-auto">
+        <div className="flex-1 min-h-0 rounded-lg overflow-auto scrollbar-hide">
           <table className="w-full min-w-max border-collapse">
             {/* Table Header */}
             <thead className="sticky top-0 z-10">

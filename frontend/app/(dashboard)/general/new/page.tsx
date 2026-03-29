@@ -158,7 +158,7 @@ function PersonalDailyTracker({
   return (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
       {/* Card header */}
-      <div className="flex items-center gap-2 px-5 pt-4 pb-3 border-b border-[#E4E4E4]">
+      <div className="flex items-center gap-2 px-5 py-2.5 border-b border-[#E4E4E4]">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#6366F1]">
           <rect x="1" y="2" width="14" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
           <path d="M1 6h14" stroke="currentColor" strokeWidth="1.5" />
@@ -168,7 +168,7 @@ function PersonalDailyTracker({
       </div>
 
       {/* Controls row */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-[#F3F3F3]">
+      <div className="flex items-center justify-between px-5 py-2 border-b border-[#F3F3F3]">
         <div className="flex items-center gap-3">
           {/* Month/Year toggle */}
           <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
@@ -202,49 +202,56 @@ function PersonalDailyTracker({
         </div>
       </div>
 
-      {/* Day cells strip */}
-      <div className="px-4 py-3 overflow-x-auto">
-        <div className="flex gap-1 min-w-max">
-          {Array.from({ length: daysInMonth }, (_, i) => new Date(calYear, calMonth, i + 1)).map((d) => {
+      {/* Day columns strip */}
+      <div className="px-4 py-2.5 overflow-x-auto">
+        <div className="flex w-full border border-[#E4E4E4] rounded-lg overflow-hidden">
+          {Array.from({ length: daysInMonth }, (_, i) => new Date(calYear, calMonth, i + 1)).map((d, i) => {
             const ds = toLocalDateString(d);
             const isSunday = d.getDay() === 0;
             const isToday = sameDay(d, today);
             const isPast = d < today && !isToday;
             const hasEntry = monthEntries.some((e) => e.date === ds && e.added_by === currentUserId);
 
-            let cellBg = '';
-            let cellStyle: React.CSSProperties | undefined;
+            let indicatorBg = '';
+            let indicatorStyle: React.CSSProperties | undefined;
             if (isSunday) {
-              cellStyle = {
+              indicatorStyle = {
                 backgroundImage: 'repeating-linear-gradient(135deg,#D1D5DB 0,#D1D5DB 1px,transparent 1px,transparent 6px)',
                 backgroundColor: '#F9FAFB',
               };
             } else if (hasEntry) {
-              cellBg = 'bg-[#DCFCE7]';
+              indicatorBg = 'bg-[#DCFCE7]';
             } else if (isToday) {
-              cellBg = 'bg-[#EEF2FF]';
+              indicatorBg = 'bg-[#EEF2FF]';
             } else if (isPast) {
-              cellBg = 'bg-[#FEE2E2]';
+              indicatorBg = 'bg-[#FEE2E2]';
             }
 
             return (
               <div
                 key={d.getDate()}
-                className={`flex flex-col items-center justify-center w-9 h-12 rounded-lg select-none ${cellBg}`}
-                style={cellStyle}
+                className={`flex-1 flex flex-col items-center select-none ${i > 0 ? 'border-l border-[#E4E4E4]' : ''}`}
               >
-                <span className={`text-xs font-semibold leading-none ${
-                  isToday
-                    ? 'w-5 h-5 flex items-center justify-center rounded-full bg-[#4F46E5] text-white'
-                    : isSunday
-                    ? 'text-[#9CA3AF]'
-                    : 'text-[#09090B]'
-                }`}>
-                  {d.getDate()}
-                </span>
-                <span className={`text-[10px] mt-0.5 leading-none ${isSunday ? 'text-[#9CA3AF]' : 'text-[#71717A]'}`}>
-                  {SHORT_DAY[d.getDay()]}
-                </span>
+                {/* Day number + abbreviation */}
+                <div className="flex flex-col items-center justify-center h-16 w-full">
+                  <span className={`text-[11px] font-semibold leading-none ${
+                    isToday
+                      ? 'w-[22px] h-[22px] flex items-center justify-center rounded-full bg-[#4F46E5] text-white text-[11px]'
+                      : isSunday
+                      ? 'text-[#9CA3AF]'
+                      : 'text-[#09090B]'
+                  }`}>
+                    {d.getDate()}
+                  </span>
+                  <span className={`text-[9px] mt-0.5 leading-none ${isSunday ? 'text-[#9CA3AF]' : 'text-[#71717A]'}`}>
+                    {SHORT_DAY[d.getDay()]}
+                  </span>
+                </div>
+                {/* Colored indicator */}
+                <div
+                  className={`w-full h-16 ${indicatorBg}`}
+                  style={indicatorStyle}
+                />
               </div>
             );
           })}

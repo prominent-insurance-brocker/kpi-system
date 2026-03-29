@@ -156,7 +156,7 @@ function PersonalDailyTracker({
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
+    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
       {/* Card header */}
       <div className="flex items-center gap-2 px-5 py-2.5 border-b border-[#E4E4E4]">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#6366F1]">
@@ -305,7 +305,7 @@ function TrackerView({
       : moduleUsers.filter((u) => String(u.id) === trackerUserFilter);
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
+    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
       {/* Card header */}
       <div className="flex items-center gap-2 px-5 py-2.5 border-b border-[#E4E4E4]">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#6366F1]">
@@ -317,7 +317,7 @@ function TrackerView({
       </div>
 
       {/* Controls row */}
-      <div className="sticky top-39 z-10 bg-white flex items-center justify-between px-5 py-2 border-b border-[#E4E4E4] flex-wrap gap-3">
+      <div className="bg-white flex items-center justify-between px-5 py-2 border-b border-[#E4E4E4] flex-wrap gap-3">
         <div className="flex items-center gap-3">
           {/* Month/Year toggle */}
           <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
@@ -1041,7 +1041,7 @@ export default function GeneralNewPage() {
   };
 
   const dataViewContent = (
-    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm flex flex-col" style={{ height: 'calc(100vh - 10rem)' }}>
+    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm flex flex-col" style={{ height: 'calc(100vh - 20rem)' }}>
       <div className="flex items-center justify-end px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3 shrink-0">
         {isAdmin && (
           <div className="flex items-center gap-2 mr-auto">

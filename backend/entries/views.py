@@ -69,26 +69,36 @@ class BaseEntryViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        """Set the added_by field to the current user."""
-        serializer.save(added_by=self.request.user)
+        """Set the added_by field to the current user, or allow staff to specify."""
+        if self.request.user.is_staff and 'added_by' in self.request.data:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            try:
+                target_user = User.objects.get(id=self.request.data['added_by'])
+                serializer.save(added_by=target_user)
+            except User.DoesNotExist:
+                serializer.save(added_by=self.request.user)
+        else:
+            serializer.save(added_by=self.request.user)
 
     def update(self, request, *args, **kwargs):
-        """Check ownership and edit window before updating."""
+        """Check ownership and edit window before updating. Staff can edit any entry."""
         instance = self.get_object()
 
-        # Check ownership
-        if instance.added_by != request.user:
-            return Response(
-                {'error': 'You can only edit your own entries'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        if not request.user.is_staff:
+            # Check ownership
+            if instance.added_by != request.user:
+                return Response(
+                    {'error': 'You can only edit your own entries'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
-        # Check 30-minute edit window
-        if not instance.is_editable():
-            return Response(
-                {'error': 'Edit window has expired (30 minutes)'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            # Check 30-minute edit window
+            if not instance.is_editable():
+                return Response(
+                    {'error': 'Edit window has expired (30 minutes)'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
         return super().update(request, *args, **kwargs)
 

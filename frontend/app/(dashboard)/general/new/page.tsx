@@ -992,9 +992,14 @@ export default function GeneralNewPage() {
     const endpoint = editingEntry
       ? `/api/entries/general-new/${editingEntry.id}/`
       : `/api/entries/general-new/`;
+    // When admin creates/edits for another user, include added_by
+    const body = { ...formData };
+    if (isAdmin && weeklyUserFilter && weeklyUserFilter !== 'all') {
+      (body as Record<string, unknown>).added_by = Number(weeklyUserFilter);
+    }
     const result = await fetchApi<GeneralNewEntry>(endpoint, {
       method: editingEntry ? 'PATCH' : 'POST',
-      body: JSON.stringify(formData),
+      body: JSON.stringify(body),
     });
     if (result.data) {
       setIsModalOpen(false);

@@ -571,27 +571,25 @@ function WeeklyView({
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={onPrevWeek}
-              className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
-            >
-              <ChevronLeft className="h-4 w-4 text-[#71717A]" />
-            </button>
-            <button
-              onClick={onGoToCurrentWeek}
-              className="text-sm font-medium text-[#09090B] px-3 py-1 rounded-lg border border-[#E4E4E4] hover:bg-[#F3F3F3] transition-colors"
-            >
-              This Week
-            </button>
-            <button
-              onClick={onNextWeek}
-              className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
-            >
-              <ChevronRight className="h-4 w-4 text-[#71717A]" />
-            </button>
-          </div>
-          <span className="text-sm font-semibold text-[#09090B]">{weekDateRangeLabel}</span>
+          <span className="text-sm font-semibold text-[#09090B] min-w-[160px]">{weekDateRangeLabel}</span>
+          <button
+            onClick={onGoToCurrentWeek}
+            className="text-sm font-medium text-[#09090B] px-3 py-1 rounded-lg border border-[#E4E4E4] hover:bg-[#F3F3F3] transition-colors"
+          >
+            This Week
+          </button>
+          <button
+            onClick={onPrevWeek}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4 text-[#71717A]" />
+          </button>
+          <button
+            onClick={onNextWeek}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
+          >
+            <ChevronRight className="h-4 w-4 text-[#71717A]" />
+          </button>
         </div>
       </div>
 

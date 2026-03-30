@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DataTable } from '@/app/components/DataTable';
-import { API_BASE_URL, getUsersForFilter } from '@/app/lib/api';
+import { fetchApi, getUsersForFilter } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
 import { Plus } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
@@ -87,10 +87,9 @@ export default function MotorRenewalPage() {
       if (dateFrom) params.set('date_from', dateFrom);
       if (dateTo) params.set('date_to', dateTo);
       if (userId) params.set('user_id', userId);
-      const response = await fetch(`${API_BASE_URL}/api/entries/motor-renewal/?${params}`, { credentials: 'include' });
-      const data = await response.json();
-      setEntries(data.results || []);
-      setTotalCount(data.count || 0);
+      const result = await fetchApi<{ results: MotorRenewalEntry[]; count: number }>(`/api/entries/motor-renewal/?${params}`);
+      setEntries(result.data?.results || []);
+      setTotalCount(result.data?.count || 0);
     } catch (err) { console.error('Failed to fetch entries:', err); }
     setIsLoading(false);
   };
@@ -100,17 +99,17 @@ export default function MotorRenewalPage() {
 
   const handleSave = async (formData: Partial<MotorRenewalEntry>) => {
     setError('');
-    const url = editingEntry ? `${API_BASE_URL}/api/entries/motor-renewal/${editingEntry.id}/` : `${API_BASE_URL}/api/entries/motor-renewal/`;
-    const response = await fetch(url, { method: editingEntry ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(formData) });
-    if (response.ok) { setIsModalOpen(false); setEditingEntry(null); fetchEntries(); }
-    else { const data = await response.json(); setError(data.error || 'Failed to save entry'); }
+    const endpoint = editingEntry ? `/api/entries/motor-renewal/${editingEntry.id}/` : `/api/entries/motor-renewal/`;
+    const result = await fetchApi<MotorRenewalEntry>(endpoint, { method: editingEntry ? 'PATCH' : 'POST', body: JSON.stringify(formData) });
+    if (result.data) { setIsModalOpen(false); setEditingEntry(null); fetchEntries(); }
+    else { setError(result.error || 'Failed to save entry'); }
   };
 
   const handleDelete = async (entry: MotorRenewalEntry) => {
     if (!confirm('Are you sure you want to delete this entry?')) return;
-    const response = await fetch(`${API_BASE_URL}/api/entries/motor-renewal/${entry.id}/`, { method: 'DELETE', credentials: 'include' });
-    if (response.ok) fetchEntries();
-    else { const data = await response.json(); alert(data.error || 'Failed to delete entry'); }
+    const result = await fetchApi<void>(`/api/entries/motor-renewal/${entry.id}/`, { method: 'DELETE' });
+    if (!result.error) fetchEntries();
+    else { alert(result.error || 'Failed to delete entry'); }
   };
 
   const hasActiveFilters = dateFrom || dateTo || userId;

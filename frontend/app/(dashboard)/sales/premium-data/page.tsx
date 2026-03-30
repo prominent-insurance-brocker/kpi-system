@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DataTable } from '@/app/components/DataTable';
-import { API_BASE_URL, getUsersForFilter } from '@/app/lib/api';
+import { fetchApi, getUsersForFilter } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
 import { Plus } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
@@ -106,12 +106,9 @@ export default function SalesPremiumDataPage() {
       if (dateTo) params.set('date_to', dateTo);
       if (userId) params.set('user_id', userId);
 
-      const response = await fetch(`${API_BASE_URL}/api/entries/sales-premium-data/?${params}`, {
-        credentials: 'include',
-      });
-      const data = await response.json();
-      setEntries(data.results || []);
-      setTotalCount(data.count || 0);
+      const result = await fetchApi<{ results: SalesPremiumDataEntry[]; count: number }>(`/api/entries/sales-premium-data/?${params}`);
+      setEntries(result.data?.results || []);
+      setTotalCount(result.data?.count || 0);
     } catch (err) {
       console.error('Failed to fetch entries:', err);
     }
@@ -128,40 +125,35 @@ export default function SalesPremiumDataPage() {
 
   const handleSave = async (formData: Partial<SalesPremiumDataEntry>) => {
     setError('');
-    const url = editingEntry
-      ? `${API_BASE_URL}/api/entries/sales-premium-data/${editingEntry.id}/`
-      : `${API_BASE_URL}/api/entries/sales-premium-data/`;
+    const endpoint = editingEntry
+      ? `/api/entries/sales-premium-data/${editingEntry.id}/`
+      : `/api/entries/sales-premium-data/`;
 
-    const response = await fetch(url, {
+    const result = await fetchApi<SalesPremiumDataEntry>(endpoint, {
       method: editingEntry ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify(formData),
     });
 
-    if (response.ok) {
+    if (result.data) {
       setIsModalOpen(false);
       setEditingEntry(null);
       fetchEntries();
     } else {
-      const data = await response.json();
-      setError(data.error || 'Failed to save entry');
+      setError(result.error || 'Failed to save entry');
     }
   };
 
   const handleDelete = async (entry: SalesPremiumDataEntry) => {
     if (!confirm('Are you sure you want to delete this entry?')) return;
 
-    const response = await fetch(`${API_BASE_URL}/api/entries/sales-premium-data/${entry.id}/`, {
+    const result = await fetchApi<void>(`/api/entries/sales-premium-data/${entry.id}/`, {
       method: 'DELETE',
-      credentials: 'include',
     });
 
-    if (response.ok) {
+    if (!result.error) {
       fetchEntries();
     } else {
-      const data = await response.json();
-      alert(data.error || 'Failed to delete entry');
+      alert(result.error || 'Failed to delete entry');
     }
   };
 

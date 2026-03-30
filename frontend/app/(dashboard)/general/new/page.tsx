@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DataTable } from '@/app/components/DataTable';
-import { API_BASE_URL, getUsersForModule } from '@/app/lib/api';
+import { fetchApi, getUsersForModule } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
 import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users } from 'lucide-react';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
@@ -915,9 +915,8 @@ export default function GeneralNewPage() {
       const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
       const lastDay = toLocalDateString(new Date(year, month + 1, 0));
       const params = new URLSearchParams({ date_from: firstDay, date_to: lastDay, page_size: '1000' });
-      const res = await fetch(`${API_BASE_URL}/api/entries/general-new/?${params}`, { credentials: 'include' });
-      const data = await res.json();
-      setMonthEntries(data.results || []);
+      const result = await fetchApi<{ results: GeneralNewEntry[] }>(`/api/entries/general-new/?${params}`);
+      setMonthEntries(result.data?.results || []);
     } catch {
       setMonthEntries([]);
     }
@@ -932,10 +931,9 @@ export default function GeneralNewPage() {
       if (range.date_from) params.set('date_from', range.date_from);
       if (range.date_to) params.set('date_to', range.date_to);
       if (dataUserFilter !== 'all') params.set('user_id', dataUserFilter);
-      const res = await fetch(`${API_BASE_URL}/api/entries/general-new/?${params}`, { credentials: 'include' });
-      const data = await res.json();
-      setDataEntries(data.results || []);
-      setTotalCount(data.count || 0);
+      const result = await fetchApi<{ results: GeneralNewEntry[]; count: number }>(`/api/entries/general-new/?${params}`);
+      setDataEntries(result.data?.results || []);
+      setTotalCount(result.data?.count || 0);
     } catch {
       setDataEntries([]);
     }
@@ -991,39 +989,34 @@ export default function GeneralNewPage() {
 
   const handleSave = async (formData: Partial<GeneralNewEntry>) => {
     setModalError('');
-    const url = editingEntry
-      ? `${API_BASE_URL}/api/entries/general-new/${editingEntry.id}/`
-      : `${API_BASE_URL}/api/entries/general-new/`;
-    const res = await fetch(url, {
+    const endpoint = editingEntry
+      ? `/api/entries/general-new/${editingEntry.id}/`
+      : `/api/entries/general-new/`;
+    const result = await fetchApi<GeneralNewEntry>(endpoint, {
       method: editingEntry ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify(formData),
     });
-    if (res.ok) {
+    if (result.data) {
       setIsModalOpen(false);
       setEditingEntry(null);
       setModalDate('');
       fetchMonthEntries(calYear, calMonth);
       if (activeView === 'data') fetchDataEntries();
     } else {
-      const data = await res.json();
-      setModalError(data.error || Object.values(data).flat().join(', ') || 'Failed to save entry');
+      setModalError(result.error || 'Failed to save entry');
     }
   };
 
   const handleDelete = async (entry: GeneralNewEntry) => {
     if (!confirm('Are you sure you want to delete this entry?')) return;
-    const res = await fetch(`${API_BASE_URL}/api/entries/general-new/${entry.id}/`, {
+    const result = await fetchApi<void>(`/api/entries/general-new/${entry.id}/`, {
       method: 'DELETE',
-      credentials: 'include',
     });
-    if (res.ok) {
+    if (!result.error) {
       fetchMonthEntries(calYear, calMonth);
       if (activeView === 'data') fetchDataEntries();
     } else {
-      const data = await res.json();
-      alert(data.error || 'Failed to delete entry');
+      alert(result.error || 'Failed to delete entry');
     }
   };
 

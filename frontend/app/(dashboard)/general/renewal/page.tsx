@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DataTable } from '@/app/components/DataTable';
-import { API_BASE_URL, getUsersForFilter } from '@/app/lib/api';
+import { fetchApi, getUsersForFilter } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
 import { Plus } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
@@ -116,12 +116,9 @@ export default function GeneralRenewalPage() {
       if (dateTo) params.set('date_to', dateTo);
       if (userId) params.set('user_id', userId);
 
-      const response = await fetch(`${API_BASE_URL}/api/entries/general-renewal/?${params}`, {
-        credentials: 'include',
-      });
-      const data = await response.json();
-      setEntries(data.results || []);
-      setTotalCount(data.count || 0);
+      const result = await fetchApi<{ results: GeneralRenewalEntry[]; count: number }>(`/api/entries/general-renewal/?${params}`);
+      setEntries(result.data?.results || []);
+      setTotalCount(result.data?.count || 0);
     } catch (err) {
       console.error('Failed to fetch entries:', err);
     }
@@ -138,40 +135,35 @@ export default function GeneralRenewalPage() {
 
   const handleSave = async (formData: Partial<GeneralRenewalEntry>) => {
     setError('');
-    const url = editingEntry
-      ? `${API_BASE_URL}/api/entries/general-renewal/${editingEntry.id}/`
-      : `${API_BASE_URL}/api/entries/general-renewal/`;
+    const endpoint = editingEntry
+      ? `/api/entries/general-renewal/${editingEntry.id}/`
+      : `/api/entries/general-renewal/`;
 
-    const response = await fetch(url, {
+    const result = await fetchApi<GeneralRenewalEntry>(endpoint, {
       method: editingEntry ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify(formData),
     });
 
-    if (response.ok) {
+    if (result.data) {
       setIsModalOpen(false);
       setEditingEntry(null);
       fetchEntries();
     } else {
-      const data = await response.json();
-      setError(data.error || 'Failed to save entry');
+      setError(result.error || 'Failed to save entry');
     }
   };
 
   const handleDelete = async (entry: GeneralRenewalEntry) => {
     if (!confirm('Are you sure you want to delete this entry?')) return;
 
-    const response = await fetch(`${API_BASE_URL}/api/entries/general-renewal/${entry.id}/`, {
+    const result = await fetchApi<void>(`/api/entries/general-renewal/${entry.id}/`, {
       method: 'DELETE',
-      credentials: 'include',
     });
 
-    if (response.ok) {
+    if (!result.error) {
       fetchEntries();
     } else {
-      const data = await response.json();
-      alert(data.error || 'Failed to delete entry');
+      alert(result.error || 'Failed to delete entry');
     }
   };
 

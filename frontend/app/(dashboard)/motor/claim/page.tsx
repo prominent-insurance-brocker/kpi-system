@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DataTable } from '@/app/components/DataTable';
-import { API_BASE_URL, getUsersForFilter } from '@/app/lib/api';
+import { fetchApi, getUsersForFilter } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
 import { Plus } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
@@ -143,10 +143,9 @@ export default function MotorClaimPage() {
       if (dateFrom) params.set('date_from', dateFrom);
       if (dateTo) params.set('date_to', dateTo);
       if (userId) params.set('user_id', userId);
-      const response = await fetch(`${API_BASE_URL}/api/entries/motor-claim/?${params}`, { credentials: 'include' });
-      const data = await response.json();
-      setEntries(data.results || []);
-      setTotalCount(data.count || 0);
+      const result = await fetchApi<{ results: MotorClaimEntry[]; count: number }>(`/api/entries/motor-claim/?${params}`);
+      setEntries(result.data?.results || []);
+      setTotalCount(result.data?.count || 0);
     } catch (err) { console.error('Failed to fetch entries:', err); }
     setIsLoading(false);
   };
@@ -157,10 +156,9 @@ export default function MotorClaimPage() {
       if (dateFrom) params.set('date_from', dateFrom);
       if (dateTo) params.set('date_to', dateTo);
       if (userId) params.set('user_id', userId);
-      const response = await fetch(`${API_BASE_URL}/api/entries/motor-claim/stats/?${params}`, { credentials: 'include' });
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
+      const result = await fetchApi<typeof stats>(`/api/entries/motor-claim/stats/?${params}`);
+      if (result.data) {
+        setStats(result.data);
       }
     } catch (err) { console.error('Failed to fetch stats:', err); }
   };
@@ -170,22 +168,19 @@ export default function MotorClaimPage() {
 
   const updateStatus = async (entryId: number, newStatus: string) => {
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/entries/motor-claim/${entryId}/update-status/`,
+      const result = await fetchApi<MotorClaimEntry>(
+        `/api/entries/motor-claim/${entryId}/update-status/`,
         {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
           body: JSON.stringify({ status: newStatus }),
         }
       );
-      if (response.ok) {
+      if (result.data) {
         fetchEntries();
         fetchStats();
         toast.success(`Status updated to ${getStatusLabel(newStatus)}`);
       } else {
-        const data = await response.json();
-        alert(data.error || data.status?.[0] || 'Failed to update status');
+        alert(result.error || 'Failed to update status');
       }
     } catch (err) {
       console.error('Failed to update status:', err);
@@ -195,17 +190,17 @@ export default function MotorClaimPage() {
 
   const handleSave = async (formData: Partial<MotorClaimEntry>) => {
     setError('');
-    const url = editingEntry ? `${API_BASE_URL}/api/entries/motor-claim/${editingEntry.id}/` : `${API_BASE_URL}/api/entries/motor-claim/`;
-    const response = await fetch(url, { method: editingEntry ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(formData) });
-    if (response.ok) { setIsModalOpen(false); setEditingEntry(null); fetchEntries(); fetchStats(); }
-    else { const data = await response.json(); setError(data.error || 'Failed to save entry'); }
+    const endpoint = editingEntry ? `/api/entries/motor-claim/${editingEntry.id}/` : `/api/entries/motor-claim/`;
+    const result = await fetchApi<MotorClaimEntry>(endpoint, { method: editingEntry ? 'PATCH' : 'POST', body: JSON.stringify(formData) });
+    if (result.data) { setIsModalOpen(false); setEditingEntry(null); fetchEntries(); fetchStats(); }
+    else { setError(result.error || 'Failed to save entry'); }
   };
 
   const handleDelete = async (entry: MotorClaimEntry) => {
     if (!confirm('Are you sure you want to delete this entry?')) return;
-    const response = await fetch(`${API_BASE_URL}/api/entries/motor-claim/${entry.id}/`, { method: 'DELETE', credentials: 'include' });
-    if (response.ok) { fetchEntries(); fetchStats(); }
-    else { const data = await response.json(); alert(data.error || 'Failed to delete entry'); }
+    const result = await fetchApi<void>(`/api/entries/motor-claim/${entry.id}/`, { method: 'DELETE' });
+    if (!result.error) { fetchEntries(); fetchStats(); }
+    else { alert(result.error || 'Failed to delete entry'); }
   };
 
   const columns = [

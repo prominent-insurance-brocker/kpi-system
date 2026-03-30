@@ -41,6 +41,9 @@ async function fetchApi<T>(
       return { error: errorData.error || `Request failed with status ${response.status}` };
     }
 
+    if (response.status === 204) {
+      return { data: undefined as unknown as T };
+    }
     const data = await response.json();
     return { data };
   } catch (error) {

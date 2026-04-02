@@ -184,28 +184,14 @@ class MotorClaimStatusTransition(models.Model):
         return f"{self.entry_id}: {self.from_status} -> {self.to_status}"
 
 
-class SalesPremiumDataEntry(BaseEntry):
-    """Sales Premium Data module entry."""
-    gross_booked_premium = models.DecimalField(max_digits=15, decimal_places=2)
-    target = models.DecimalField(max_digits=15, decimal_places=2)
-
-    class Meta(BaseEntry.Meta):
-        verbose_name = 'Sales Premium Data Entry'
-        verbose_name_plural = 'Sales Premium Data Entries'
-
-    def __str__(self):
-        return f"Sales Premium Data - {self.date} by {self.added_by}"
-
-
 class SalesKPIEntry(BaseEntry):
     """Sales KPI module entry."""
     leads_to_ops_team = models.PositiveIntegerField()
     quotes_from_ops_team = models.PositiveIntegerField()
     quotes_to_client = models.PositiveIntegerField()
     total_conversions = models.PositiveIntegerField()
-    existing_clients = models.PositiveIntegerField()
-    existing_clients_closed = models.PositiveIntegerField()
     new_clients_acquired = models.PositiveIntegerField()
+    gross_booked_premium = models.DecimalField(max_digits=15, decimal_places=2)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Sales KPI Entry'
@@ -213,6 +199,26 @@ class SalesKPIEntry(BaseEntry):
 
     def __str__(self):
         return f"Sales KPI - {self.date} by {self.added_by}"
+
+
+class SalesMonthlyTarget(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sales_monthly_targets'
+    )
+    year = models.PositiveIntegerField()
+    month = models.PositiveIntegerField()
+    premium_target = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    clients_assigned = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'year', 'month')
+
+    def __str__(self):
+        return f"Sales Target {self.year}/{self.month} - {self.user}"
 
 
 class MarineNewEntry(BaseEntry):

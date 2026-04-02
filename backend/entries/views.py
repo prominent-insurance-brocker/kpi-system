@@ -13,8 +13,8 @@ from .models import (
     MotorRenewalEntry,
     MotorClaimEntry,
     MotorClaimStatusTransition,
-    SalesPremiumDataEntry,
     SalesKPIEntry,
+    SalesMonthlyTarget,
     MarineNewEntry,
     MarineRenewalEntry,
     MedicalClaimEntry,
@@ -27,8 +27,8 @@ from .serializers import (
     MotorRenewalEntrySerializer,
     MotorClaimEntrySerializer,
     MotorClaimStatusUpdateSerializer,
-    SalesPremiumDataEntrySerializer,
     SalesKPIEntrySerializer,
+    SalesMonthlyTargetSerializer,
     MarineNewEntrySerializer,
     MarineRenewalEntrySerializer,
     MedicalClaimEntrySerializer,
@@ -215,16 +215,43 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
         return Response(counts)
 
 
-class SalesPremiumDataEntryViewSet(BaseEntryViewSet):
-    queryset = SalesPremiumDataEntry.objects.all()
-    serializer_class = SalesPremiumDataEntrySerializer
-    module_key = 'sales_premium_data'
-
-
 class SalesKPIEntryViewSet(BaseEntryViewSet):
     queryset = SalesKPIEntry.objects.all()
     serializer_class = SalesKPIEntrySerializer
     module_key = 'sales_kpi'
+
+
+class SalesMonthlyTargetViewSet(viewsets.ModelViewSet):
+    serializer_class = SalesMonthlyTargetSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = SalesMonthlyTarget.objects.all() if user.is_staff else SalesMonthlyTarget.objects.filter(user=user)
+        year = self.request.query_params.get('year')
+        month = self.request.query_params.get('month')
+        if year:
+            queryset = queryset.filter(year=year)
+        if month:
+            queryset = queryset.filter(month=month)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='current')
+    def current(self, request):
+        from django.utils import timezone
+        today = timezone.now().date()
+        try:
+            target = SalesMonthlyTarget.objects.get(
+                user=request.user,
+                year=today.year,
+                month=today.month,
+            )
+            return Response(SalesMonthlyTargetSerializer(target).data)
+        except SalesMonthlyTarget.DoesNotExist:
+            return Response(None)
 
 
 class MarineNewEntryViewSet(BaseEntryViewSet):

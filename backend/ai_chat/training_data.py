@@ -101,9 +101,8 @@ def get_ddl_statements():
                 quotes_from_ops_team INTEGER NOT NULL,
                 quotes_to_client INTEGER NOT NULL,
                 total_conversions INTEGER NOT NULL,
-                existing_clients INTEGER NOT NULL,
-                existing_clients_closed INTEGER NOT NULL,
                 new_clients_acquired INTEGER NOT NULL,
+                gross_booked_premium DECIMAL(15,2) NOT NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at TIMESTAMPTZ NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL
@@ -220,9 +219,8 @@ def get_ddl_statements():
                 quotes_from_ops_team INTEGER UNSIGNED NOT NULL,
                 quotes_to_client INTEGER UNSIGNED NOT NULL,
                 total_conversions INTEGER UNSIGNED NOT NULL,
-                existing_clients INTEGER UNSIGNED NOT NULL,
-                existing_clients_closed INTEGER UNSIGNED NOT NULL,
                 new_clients_acquired INTEGER UNSIGNED NOT NULL,
+                gross_booked_premium DECIMAL(15,2) NOT NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at DATETIME NOT NULL,
                 updated_at DATETIME NOT NULL
@@ -277,13 +275,9 @@ def get_documentation():
         "registered_claims (new claims filed), claims_closed (resolved claims), "
         "pending_cases (currently open claims), and TAT.",
 
-        "The 'Sales Premium Data' module (entries_salespremiumdataentry) tracks premium revenue: "
-        "gross_booked_premium (actual premium collected) and target (premium target to achieve). "
-        "Both are decimal values representing currency amounts.",
-
         "The 'Sales KPI' module (entries_saleskpientry) tracks sales team performance: "
         "leads_to_ops_team, quotes_from_ops_team, quotes_to_client, total_conversions, "
-        "existing_clients, existing_clients_closed, and new_clients_acquired.",
+        "new_clients_acquired, and gross_booked_premium (actual gross premium booked, decimal currency amount).",
 
         "The 'Medical Claim' module (entries_medicalclaimentry) tracks medical insurance claims: "
         "customer_name (name of the customer) and status (one of 'claims_opened', 'claims_pending', 'claims_resolved').",

@@ -6,8 +6,8 @@ from .views import (
     MotorNewEntryViewSet,
     MotorRenewalEntryViewSet,
     MotorClaimEntryViewSet,
-    SalesPremiumDataEntryViewSet,
     SalesKPIEntryViewSet,
+    SalesMonthlyTargetViewSet,
     MarineNewEntryViewSet,
     MarineRenewalEntryViewSet,
     MedicalClaimEntryViewSet,
@@ -19,7 +19,7 @@ router.register(r'general-renewal', GeneralRenewalEntryViewSet, basename='genera
 router.register(r'motor-new', MotorNewEntryViewSet, basename='motor-new')
 router.register(r'motor-renewal', MotorRenewalEntryViewSet, basename='motor-renewal')
 router.register(r'motor-claim', MotorClaimEntryViewSet, basename='motor-claim')
-router.register(r'sales-premium-data', SalesPremiumDataEntryViewSet, basename='sales-premium-data')
+router.register(r'sales-kpi/monthly-targets', SalesMonthlyTargetViewSet, basename='sales-monthly-targets')
 router.register(r'sales-kpi', SalesKPIEntryViewSet, basename='sales-kpi')
 router.register(r'marine-new', MarineNewEntryViewSet, basename='marine-new')
 router.register(r'marine-renewal', MarineRenewalEntryViewSet, basename='marine-renewal')

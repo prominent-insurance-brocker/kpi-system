@@ -13,7 +13,6 @@ from entries.models import (
     MotorNewEntry,
     MotorRenewalEntry,
     MotorClaimEntry,
-    SalesPremiumDataEntry,
     SalesKPIEntry,
     MedicalClaimEntry,
 )
@@ -48,7 +47,6 @@ class Command(BaseCommand):
         # Clear entries first
         MedicalClaimEntry.objects.all().delete()
         SalesKPIEntry.objects.all().delete()
-        SalesPremiumDataEntry.objects.all().delete()
         MotorClaimEntry.objects.all().delete()
         MotorRenewalEntry.objects.all().delete()
         MotorNewEntry.objects.all().delete()
@@ -126,13 +124,13 @@ class Command(BaseCommand):
             'Admin': [
                 'general_new', 'general_renewal', 'general_claim',
                 'motor_new', 'motor_renewal', 'motor_claim',
-                'sales_premium_data', 'sales_kpi',
+                'sales_kpi',
                 'medical_claim',
             ],
             'Manager': [
                 'general_new', 'general_renewal', 'general_claim',
                 'motor_new', 'motor_renewal', 'motor_claim',
-                'sales_premium_data', 'sales_kpi',
+                'sales_kpi',
                 'medical_claim',
             ],
             'General Agent': [
@@ -142,7 +140,7 @@ class Command(BaseCommand):
                 'motor_new', 'motor_renewal', 'motor_claim',
             ],
             'Sales Agent': [
-                'sales_premium_data', 'sales_kpi',
+                'sales_kpi',
             ],
             'Medical Agent': [
                 'medical_claim',
@@ -330,10 +328,6 @@ class Command(BaseCommand):
         count = self._seed_motor_claim_entries(motor_users, dates)
         self.stdout.write(f'  - Motor Claim entries: {count}')
 
-        # Seed Sales Premium Data entries (monthly for 2025-2026)
-        count = self._seed_sales_premium_data_entries(sales_users, sales_dates)
-        self.stdout.write(f'  - Sales Premium Data entries: {count}')
-
         # Seed Sales KPI entries (monthly for 2025-2026)
         count = self._seed_sales_kpi_entries(sales_users, sales_dates)
         self.stdout.write(f'  - Sales KPI entries: {count}')
@@ -459,32 +453,6 @@ class Command(BaseCommand):
                     count += 1
         return count
 
-    def _seed_sales_premium_data_entries(self, users, dates):
-        """Seed SalesPremiumDataEntry records."""
-        count = 0
-        for user in users:
-            if not user:
-                continue
-            for entry_date in dates:
-                # Target between 50000 and 200000
-                target = Decimal(str(random.randint(50000, 200000)))
-                # Gross booked premium is 20-30% more or less than target
-                variance = random.uniform(-0.30, 0.30)
-                gross_booked_premium = target * Decimal(str(1 + variance))
-                gross_booked_premium = gross_booked_premium.quantize(Decimal('0.01'))
-
-                _, created = SalesPremiumDataEntry.objects.get_or_create(
-                    date=entry_date,
-                    added_by=user,
-                    defaults={
-                        'gross_booked_premium': gross_booked_premium,
-                        'target': target,
-                    }
-                )
-                if created:
-                    count += 1
-        return count
-
     def _seed_sales_kpi_entries(self, users, dates):
         """Seed SalesKPIEntry records."""
         count = 0
@@ -500,9 +468,8 @@ class Command(BaseCommand):
                         'quotes_from_ops_team': random.randint(10, 99),
                         'quotes_to_client': random.randint(10, 99),
                         'total_conversions': random.randint(10, 99),
-                        'existing_clients': random.randint(10, 99),
-                        'existing_clients_closed': random.randint(10, 99),
                         'new_clients_acquired': random.randint(10, 99),
+                        'gross_booked_premium': Decimal(str(random.randint(50000, 200000))),
                     }
                 )
                 if created:

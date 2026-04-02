@@ -6,8 +6,8 @@ from .models import (
     MotorRenewalEntry,
     MotorClaimEntry,
     MotorClaimStatusTransition,
-    SalesPremiumDataEntry,
     SalesKPIEntry,
+    SalesMonthlyTarget,
     MarineNewEntry,
     MarineRenewalEntry,
     MedicalClaimEntry,
@@ -120,26 +120,23 @@ class MotorClaimStatusUpdateSerializer(serializers.Serializer):
         return value
 
 
-class SalesPremiumDataEntrySerializer(BaseEntrySerializer):
-    class Meta:
-        model = SalesPremiumDataEntry
-        fields = [
-            'id', 'date', 'gross_booked_premium', 'target',
-            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
-        ]
-        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
-
-
 class SalesKPIEntrySerializer(BaseEntrySerializer):
     class Meta:
         model = SalesKPIEntry
         fields = [
             'id', 'date', 'leads_to_ops_team', 'quotes_from_ops_team',
-            'quotes_to_client', 'total_conversions', 'existing_clients',
-            'existing_clients_closed', 'new_clients_acquired',
+            'quotes_to_client', 'total_conversions', 'new_clients_acquired',
+            'gross_booked_premium',
             'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
         ]
         read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+
+
+class SalesMonthlyTargetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SalesMonthlyTarget
+        fields = ['id', 'user', 'year', 'month', 'premium_target', 'clients_assigned', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
 
 
 class MarineNewEntrySerializer(BaseEntrySerializer):

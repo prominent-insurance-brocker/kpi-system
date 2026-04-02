@@ -57,7 +57,6 @@ const MODULE_CATEGORIES: ModuleCategory[] = [
   {
     name: 'Sales',
     modules: [
-      { key: 'sales_premium_data', label: 'Sales Premium Data' },
       { key: 'sales_kpi', label: 'Sales KPI' },
     ],
   },

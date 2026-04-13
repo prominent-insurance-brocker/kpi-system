@@ -168,7 +168,7 @@ function PersonalDailyTracker({
       </div>
 
       {/* Controls row */}
-      <div className="flex items-center justify-between px-5 py-2 border-b border-[#F3F3F3]">
+      <div className="flex items-center justify-between px-5 py-2 border-b border-[#E4E4E4]">
         <div className="flex items-center gap-3">
           {/* Month/Year toggle */}
           <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
@@ -249,7 +249,7 @@ function PersonalDailyTracker({
                 </div>
                 {/* Colored indicator */}
                 <div
-                  className={`w-full h-16 ${indicatorBg}`}
+                  className={`w-full h-16 border-t border-[#E4E4E4] ${indicatorBg}`}
                   style={indicatorStyle}
                 />
               </div>

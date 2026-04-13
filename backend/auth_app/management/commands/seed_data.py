@@ -431,22 +431,22 @@ class Command(BaseCommand):
     def _seed_motor_claim_entries(self, users, dates):
         """Seed MotorClaimEntry records."""
         count = 0
+        customer_names = [
+            'Acme Corp', 'Global Industries', 'Tech Solutions', 'Prime Motors',
+            'City Transport', 'Metro Logistics', 'Swift Autos', 'Royal Fleet',
+            'Star Vehicles', 'Atlas Movers', 'Delta Cars', 'Nova Transport',
+        ]
+        statuses = ['claims_opened', 'claims_pending', 'claims_resolved', 'claims_rejected']
         for user in users:
             if not user:
                 continue
             for entry_date in dates:
-                registered = random.randint(3, 15)
-                closed = random.randint(1, registered)
-                pending = random.randint(0, 10)
-
                 _, created = MotorClaimEntry.objects.get_or_create(
                     date=entry_date,
                     added_by=user,
+                    customer_name=random.choice(customer_names),
                     defaults={
-                        'registered_claims': registered,
-                        'claims_closed': closed,
-                        'pending_cases': pending,
-                        'tat': random.randint(2, 7),
+                        'status': random.choice(statuses),
                     }
                 )
                 if created:

@@ -377,7 +377,7 @@ function TrackerView({
           <thead className="sticky top-0 z-20">
             <tr className="border-b border-[#E4E4E4]">
               {/* Dept header spanning user column */}
-              <th className="sticky left-0 z-30 bg-[#F9F9F9] px-4 py-3 text-left min-w-[180px]">
+              <th className="sticky left-0 z-30 bg-[#F9F9F9] px-4 py-3 text-left min-w-[180px] border-r border-[#E4E4E4]">
                 <div className="text-sm font-semibold text-[#09090B]">General New DEPT.</div>
                 <div className="text-xs text-[#71717A]">{visibleUsers.length} members</div>
               </th>
@@ -387,7 +387,7 @@ function TrackerView({
                 return (
                   <th
                     key={d.getDate()}
-                    className={`px-1 py-2 text-center min-w-[36px] ${
+                    className={`px-1 py-2 text-center min-w-[36px] border-l border-[#E4E4E4] ${
                       isToday ? 'bg-[#EEF2FF]' : 'bg-[#F9F9F9]'
                     }`}
                   >
@@ -416,7 +416,7 @@ function TrackerView({
               })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#F3F3F3]">
+          <tbody className="divide-y divide-[#E4E4E4]">
             {visibleUsers.length === 0 ? (
               <tr>
                 <td colSpan={daysInMonth + 1} className="px-4 py-8 text-center text-sm text-[#71717A]">
@@ -426,7 +426,7 @@ function TrackerView({
             ) : (
               visibleUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-[#FAFAFA] transition-colors">
-                  <td className="sticky left-0 z-10 bg-white hover:bg-[#FAFAFA] px-4 py-3 min-w-[180px]">
+                  <td className="sticky left-0 z-10 bg-white hover:bg-[#FAFAFA] px-4 py-3 min-w-[180px] border-r border-[#E4E4E4]">
                     <div className="flex items-center gap-2">
                       <UserAvatar name={user.full_name} />
                       <span className="text-sm font-medium text-[#09090B] truncate max-w-[120px]">
@@ -461,7 +461,7 @@ function TrackerView({
                     return (
                       <td
                         key={d.getDate()}
-                        className={`px-1 py-2 ${cellBg}`}
+                        className={`px-1 py-2 border-l border-[#E4E4E4] ${cellBg}`}
                         style={cellStyle}
                       >
                         <div className="w-8 h-8" />

@@ -31,10 +31,13 @@ import {
   AlertTriangle,
   Pencil,
   Calendar,
+  X,
+  Check,
 } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate, formatDateTime } from '@/app/lib/date';
+import { Progress } from '@/components/ui/progress';
 
 interface SalesKPIEntry {
   id: number;
@@ -73,7 +76,7 @@ const MONTH_NAMES = [
 
 function formatPremium(val: number | null | undefined): string {
   if (val == null) return '0';
-  return Number(val).toLocaleString('en-IN');
+  return Math.round(Number(val)).toLocaleString('en-IN');
 }
 
 const columns = [
@@ -288,13 +291,22 @@ export default function SalesKPIPage() {
   const premiumTarget = cardTarget?.premium_target ? Number(cardTarget.premium_target) : null;
   const clientsTarget = cardTarget?.clients_assigned ?? null;
 
-  const premiumPct = premiumTarget ? Math.min(100, (cardPremiumActual / premiumTarget) * 100) : 0;
-  const clientsPct = clientsTarget ? Math.min(100, (cardClientsActual / clientsTarget) * 100) : 0;
+  const TARGET_MULTIPLIER = 3;
+  const premiumMax = premiumTarget ? premiumTarget * TARGET_MULTIPLIER : 0;
+  const clientsMax = clientsTarget ? clientsTarget * TARGET_MULTIPLIER : 0;
+  const premiumPct = premiumMax ? Math.min(100, (cardPremiumActual / premiumMax) * 100) : 0;
+  const clientsPct = clientsMax ? Math.min(100, (cardClientsActual / clientsMax) * 100) : 0;
+  const premiumMarkerPct = premiumMax ? (premiumTarget! / premiumMax) * 100 : 0;
+  const clientsMarkerPct = clientsMax ? (clientsTarget! / clientsMax) * 100 : 0;
 
   const isCurrentMonthCard =
     cardYear === today.getFullYear() && cardMonth === today.getMonth() + 1;
 
   const noCurrentTarget = currentTargetLoaded && !currentTarget;
+
+  useEffect(() => {
+    if (noCurrentTarget) setIsTargetModalOpen(true);
+  }, [noCurrentTarget]);
 
   const hasActiveFilters = dateFrom || dateTo || userId;
 
@@ -361,36 +373,58 @@ export default function SalesKPIPage() {
           <h2 className="text-base font-semibold">Monthly Target</h2>
           <div className="grid grid-cols-2 gap-6">
             {/* Premium */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <div className="flex items-baseline justify-between">
                 <span className="text-xl font-bold">{formatPremium(cardPremiumActual)}</span>
                 <span className="text-sm text-muted-foreground">Premium</span>
               </div>
-              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-2 bg-red-400 rounded-full transition-all"
-                  style={{ width: `${premiumPct}%` }}
-                />
+              <div className="relative">
+                <div className={premiumTarget !== null && cardPremiumActual >= premiumTarget ? '[&_[data-slot=progress-indicator]]:bg-green-500' : '[&_[data-slot=progress-indicator]]:bg-red-400'}>
+                  <Progress value={premiumPct} className="h-2 bg-gray-100" />
+                </div>
+                {premiumTarget !== null && (
+                  <div
+                    className="absolute top-0 h-2 w-0.5 bg-gray-400 rounded-full"
+                    style={{ left: `${premiumMarkerPct}%` }}
+                  />
+                )}
               </div>
-              {premiumTarget !== null && (
-                <div className="text-xs text-muted-foreground">▲{formatPremium(premiumTarget)}</div>
-              )}
+              <div className="relative">
+                <span className="text-xs text-muted-foreground">0</span>
+                {premiumTarget !== null && (
+                  <span
+                    className="absolute text-xs text-muted-foreground -translate-x-1/2"
+                    style={{ left: `${premiumMarkerPct}%` }}
+                  ><span className="text-blue-500">▲</span> {formatPremium(premiumTarget)}</span>
+                )}
+              </div>
             </div>
             {/* Client Retention */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <div className="flex items-baseline justify-between">
                 <span className="text-xl font-bold">{cardClientsActual.toLocaleString()}</span>
                 <span className="text-sm text-muted-foreground">Client Retention</span>
               </div>
-              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-2 bg-green-500 rounded-full transition-all"
-                  style={{ width: `${clientsPct}%` }}
-                />
+              <div className="relative">
+                <div className={clientsTarget !== null && cardClientsActual >= clientsTarget ? '[&_[data-slot=progress-indicator]]:bg-green-500' : '[&_[data-slot=progress-indicator]]:bg-red-400'}>
+                  <Progress value={clientsPct} className="h-2 bg-gray-100" />
+                </div>
+                {clientsTarget !== null && (
+                  <div
+                    className="absolute top-0 h-2 w-0.5 bg-gray-400 rounded-full"
+                    style={{ left: `${clientsMarkerPct}%` }}
+                  />
+                )}
               </div>
-              {clientsTarget !== null && (
-                <div className="text-xs text-muted-foreground">▲{clientsTarget.toLocaleString()}</div>
-              )}
+              <div className="relative">
+                <span className="text-xs text-muted-foreground">0</span>
+                {clientsTarget !== null && (
+                  <span
+                    className="absolute text-xs text-muted-foreground -translate-x-1/2"
+                    style={{ left: `${clientsMarkerPct}%` }}
+                  ><span className="text-blue-500">▲</span> {Math.round(clientsTarget).toLocaleString()}</span>
+                )}
+              </div>
             </div>
           </div>
           {/* Month heading */}
@@ -436,25 +470,6 @@ export default function SalesKPIPage() {
             </Button>
           </div>
         </div>
-
-      {/* Gate banner */}
-      {noCurrentTarget && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
-          <div className="flex-1 text-sm text-amber-800">
-            <span className="font-semibold">Action required for {MONTH_NAMES[today.getMonth()]} {today.getFullYear()}:</span>{' '}
-            Set your premium target and assigned clients to continue adding entries.
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-amber-300 text-amber-800 hover:bg-amber-100 shrink-0"
-            onClick={() => setIsTargetModalOpen(true)}
-          >
-            Set Targets
-          </Button>
-        </div>
-      )}
 
       {/* Filters + Add Entry */}
       <div className="flex gap-4 items-end flex-wrap justify-between">
@@ -550,6 +565,7 @@ export default function SalesKPIPage() {
         year={isCurrentMonthCard ? today.getFullYear() : cardYear}
         month={isCurrentMonthCard ? today.getMonth() + 1 : cardMonth}
         existing={targetForModal}
+        required={noCurrentTarget}
         onSaved={() => {
           fetchCurrentTarget();
           fetchCardData();
@@ -559,28 +575,44 @@ export default function SalesKPIPage() {
 
       {/* Monthly Targets Panel */}
       {isPanelOpen && (
-        <div className="w-72 shrink-0 border rounded-lg overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b">
-            <span className="font-semibold text-sm">Monthly Targets</span>
-            <div className="flex items-center gap-1">
+        <div className="w-[340px] shrink-0 border rounded-lg overflow-hidden bg-white">
+          <div className="flex items-start justify-between px-4 py-3 border-b">
+            <div>
+              <h3 className="font-semibold text-base text-[#09090B]">Monthly Targets</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Calendar year monthly KPI targets
+              </p>
+            </div>
+            <button
+              onClick={() => setIsPanelOpen(false)}
+              className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-[#09090B]"
+              aria-label="Close monthly targets panel"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-[#FAFAFA]">
+            <span className="font-semibold text-base text-[#09090B]">{sheetYear}</span>
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setSheetYear((y) => y - 1)}
-                className="p-1 rounded hover:bg-accent"
+                className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-[#E4E4E4] bg-white hover:bg-accent"
+                aria-label="Previous year"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-sm font-medium w-12 text-center">{sheetYear}</span>
               <button
                 onClick={() => setSheetYear((y) => y + 1)}
-                className="p-1 rounded hover:bg-accent"
+                className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-[#E4E4E4] bg-white hover:bg-accent"
+                aria-label="Next year"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
           </div>
-          <div className="p-4">
+          <div className="px-4 pt-3 pb-1">
             <Tabs defaultValue="premium">
-              <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0 mb-4 w-fit">
+              <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0 mb-2 w-fit">
                 <TabsTrigger
                   value="premium"
                   className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"
@@ -595,8 +627,8 @@ export default function SalesKPIPage() {
                 </TabsTrigger>
               </TabsList>
               {(['premium', 'clients'] as const).map((tab) => (
-                <TabsContent key={tab} value={tab}>
-                  <div className="space-y-1">
+                <TabsContent key={tab} value={tab} className="-mx-4">
+                  <div>
                     {MONTH_NAMES.map((name, idx) => {
                       const m = idx + 1;
                       const t = getSheetTarget(m);
@@ -605,60 +637,114 @@ export default function SalesKPIPage() {
                       const key = sheetInlineKey(tab, m);
                       const isEditing = sheetEditingKey === key;
 
-                      return (
-                        <div
-                          key={m}
-                          className="flex items-center justify-between py-2 px-3 rounded hover:bg-accent/50 group"
-                        >
-                          <span className="text-sm text-[#343434] w-24">{name}</span>
-                          {isEditing ? (
+                      const enterEdit = () => {
+                        setSheetEditingKey(key);
+                        setSheetInlineValues((prev) => ({
+                          ...prev,
+                          [key]: isSet ? String(val) : '',
+                        }));
+                      };
+                      const cancelEdit = () => {
+                        setSheetEditingKey(null);
+                        setSheetInlineValues((prev) => {
+                          const next = { ...prev };
+                          delete next[key];
+                          return next;
+                        });
+                      };
+
+                      if (isEditing) {
+                        return (
+                          <div
+                            key={m}
+                            className="px-4 py-3 border-t border-b border-[#F1F1F1] bg-white"
+                          >
+                            <h4 className="text-sm font-semibold text-[#09090B] mb-3">
+                              {name} {sheetYear}
+                            </h4>
+                            <Label htmlFor={key} className="text-sm">
+                              {tab === 'premium' ? 'Premium Target' : 'Clients Assigned'}
+                            </Label>
                             <Input
+                              id={key}
                               type="number"
                               min="0"
                               autoFocus
-                              className="h-7 w-32 text-sm"
+                              placeholder={
+                                tab === 'premium'
+                                  ? 'Enter premium target…'
+                                  : 'Enter clients assigned…'
+                              }
                               value={sheetInlineValues[key] ?? ''}
                               onChange={(e) =>
-                                setSheetInlineValues((prev) => ({ ...prev, [key]: e.target.value }))
+                                setSheetInlineValues((prev) => ({
+                                  ...prev,
+                                  [key]: e.target.value,
+                                }))
                               }
-                              onBlur={() => handleSheetInlineSave(tab, m)}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSheetInlineSave(tab, m);
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSheetInlineSave(tab, m);
+                                }
                                 if (e.key === 'Escape') {
-                                  setSheetEditingKey(null);
-                                  setSheetInlineValues((prev) => ({ ...prev, [key]: '' }));
+                                  e.preventDefault();
+                                  cancelEdit();
                                 }
                               }}
+                              className="mt-2"
                             />
-                          ) : isSet ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">
+                            <div className="flex justify-end gap-2 mt-3">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={cancelEdit}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => handleSheetInlineSave(tab, m)}
+                              >
+                                <Check className="h-4 w-4 mr-1" /> Save
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={m}
+                          className="flex items-center justify-between px-4 py-3 border-t border-[#F1F1F1]"
+                        >
+                          <span className="text-sm text-[#09090B]">{name}</span>
+                          {isSet ? (
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm font-semibold text-[#09090B]">
                                 {tab === 'premium' ? formatPremium(Number(val)) : val}
                               </span>
                               <button
-                                onClick={() => {
-                                  setSheetEditingKey(key);
-                                  setSheetInlineValues((prev) => ({
-                                    ...prev,
-                                    [key]: String(val),
-                                  }));
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent"
+                                onClick={enterEdit}
+                                className="text-muted-foreground hover:text-[#09090B]"
+                                aria-label={`Edit ${name} target`}
                               >
-                                <Pencil className="h-3 w-3" />
+                                <Pencil className="h-4 w-4" />
                               </button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-muted-foreground">Not set</span>
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm italic text-muted-foreground">
+                                Not set
+                              </span>
                               <button
-                                onClick={() => {
-                                  setSheetEditingKey(key);
-                                  setSheetInlineValues((prev) => ({ ...prev, [key]: '' }));
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent"
+                                onClick={enterEdit}
+                                className="text-muted-foreground hover:text-[#09090B]"
+                                aria-label={`Set ${name} target`}
                               >
-                                <Pencil className="h-3 w-3" />
+                                <Plus className="h-4 w-4" />
                               </button>
                             </div>
                           )}
@@ -760,6 +846,52 @@ function EntryModal({
             required
           />
           <div className="space-y-5">
+            {/* New Clients + Premium */}
+            <div>
+              <h3 className="text-base font-semibold text-[#343434] mb-3">
+                Clients &amp; Premium
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1">
+                    New Clients Acquired
+                    <Tooltip text="Number of new clients acquired">
+                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
+                    </Tooltip>
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="Enter count"
+                    value={formData.new_clients_acquired}
+                    onChange={(e) =>
+                      setFormData({ ...formData, new_clients_acquired: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1">
+                    Gross Booked Premium
+                    <Tooltip text="Total gross premium booked today">
+                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
+                    </Tooltip>
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="e.g. 5000"
+                    value={formData.gross_booked_premium}
+                    onChange={(e) =>
+                      setFormData({ ...formData, gross_booked_premium: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Lead to Quote */}
             <div>
               <h3 className="text-base font-semibold text-[#343434] mb-3">Lead to Quote Ratio</h3>
@@ -845,52 +977,6 @@ function EntryModal({
                 </div>
               </div>
             </div>
-
-            {/* New Clients + Premium */}
-            <div>
-              <h3 className="text-base font-semibold text-[#343434] mb-3">
-                Clients &amp; Premium
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    New Clients Acquired
-                    <Tooltip text="Number of new clients acquired">
-                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
-                    </Tooltip>
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="Enter count"
-                    value={formData.new_clients_acquired}
-                    onChange={(e) =>
-                      setFormData({ ...formData, new_clients_acquired: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    Gross Booked Premium
-                    <Tooltip text="Total gross premium booked today">
-                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
-                    </Tooltip>
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="e.g. 5000"
-                    value={formData.gross_booked_premium}
-                    onChange={(e) =>
-                      setFormData({ ...formData, gross_booked_premium: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
@@ -914,6 +1000,7 @@ function TargetModal({
   year,
   month,
   existing,
+  required,
   onSaved,
 }: {
   isOpen: boolean;
@@ -921,6 +1008,7 @@ function TargetModal({
   year: number;
   month: number;
   existing: SalesMonthlyTarget | null;
+  required?: boolean;
   onSaved: () => void;
 }) {
   const [premiumTarget, setPremiumTarget] = useState('');
@@ -971,8 +1059,12 @@ function TargetModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="p-0 sm:max-w-md">
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!required || open) onClose(); }}>
+      <DialogContent
+        className={`p-0 sm:max-w-md${required ? ' [&>button]:hidden' : ''}`}
+        onInteractOutside={required ? (e) => e.preventDefault() : undefined}
+        onEscapeKeyDown={required ? (e) => e.preventDefault() : undefined}
+      >
         <DialogHeader className="border-b border-[#E4E4E4] p-4">
           <DialogTitle>
             {isNew ? `Set ${monthLabel} Targets` : `Edit ${monthLabel} Targets`}
@@ -1006,7 +1098,7 @@ function TargetModal({
             <Input
               type="number"
               min="0"
-              step="0.01"
+              step="1"
               placeholder="e.g. 150"
               value={premiumTarget}
               onChange={(e) => setPremiumTarget(e.target.value)}
@@ -1035,9 +1127,11 @@ function TargetModal({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Skip for now
-            </Button>
+            {!required && (
+              <Button type="button" variant="outline" onClick={onClose}>
+                Skip for now
+              </Button>
+            )}
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Saving...' : `✓ Save ${MONTH_NAMES[month - 1]} Targets`}
             </Button>

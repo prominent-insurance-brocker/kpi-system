@@ -34,8 +34,8 @@ class GeneralNewEntry(BaseEntry):
     quotations = models.PositiveIntegerField()
     quotes_revised = models.PositiveIntegerField()
     quotes_converted = models.PositiveIntegerField()
-    tat = models.PositiveIntegerField(verbose_name='TAT')
-    accuracy = models.DecimalField(max_digits=5, decimal_places=2)
+    tat = models.PositiveIntegerField(null=True, blank=True, verbose_name='TAT')
+    accuracy = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'General New Entry'
@@ -50,8 +50,8 @@ class GeneralRenewalEntry(BaseEntry):
     quotations = models.PositiveIntegerField()
     quotes_revised = models.PositiveIntegerField()
     quotes_converted = models.PositiveIntegerField()
-    tat = models.PositiveIntegerField(verbose_name='TAT')
-    accuracy = models.DecimalField(max_digits=5, decimal_places=2)
+    tat = models.PositiveIntegerField(null=True, blank=True, verbose_name='TAT')
+    accuracy = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'General Renewal Entry'
@@ -66,8 +66,8 @@ class MotorNewEntry(BaseEntry):
     quotations = models.PositiveIntegerField()
     quotes_revised = models.PositiveIntegerField()
     quotes_converted = models.PositiveIntegerField()
-    tat = models.PositiveIntegerField(verbose_name='TAT')
-    accuracy = models.DecimalField(max_digits=5, decimal_places=2)
+    tat = models.PositiveIntegerField(null=True, blank=True, verbose_name='TAT')
+    accuracy = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Motor New Entry'
@@ -81,8 +81,8 @@ class MotorRenewalEntry(BaseEntry):
     """Motor Renewal module entry."""
     quotations = models.PositiveIntegerField()
     retention = models.PositiveIntegerField()
-    tat = models.PositiveIntegerField(verbose_name='TAT')
-    accuracy = models.DecimalField(max_digits=5, decimal_places=2)
+    tat = models.PositiveIntegerField(null=True, blank=True, verbose_name='TAT')
+    accuracy = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Motor Renewal Entry'

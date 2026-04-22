@@ -1113,7 +1113,7 @@ export default function SalesKPIPage() {
   const premiumTarget = cardTarget?.premium_target ? Number(cardTarget.premium_target) : null;
   const clientsTarget = cardTarget?.clients_assigned ?? null;
 
-  const TARGET_MULTIPLIER = 3;
+  const TARGET_MULTIPLIER = 1.5;
   const premiumMax = premiumTarget ? premiumTarget * TARGET_MULTIPLIER : 0;
   const clientsMax = clientsTarget ? clientsTarget * TARGET_MULTIPLIER : 0;
   const premiumPct = premiumMax ? Math.min(100, (cardPremiumActual / premiumMax) * 100) : 0;
@@ -1266,10 +1266,13 @@ export default function SalesKPIPage() {
                 <div className="relative">
                   <span className="text-xs text-muted-foreground">0</span>
                   {premiumTarget !== null && (
-                    <span
-                      className="absolute text-xs text-muted-foreground -translate-x-1/2"
+                    <div
+                      className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
                       style={{ left: `${premiumMarkerPct}%` }}
-                    ><span className="text-blue-500">▲</span> {formatPremium(premiumTarget)}</span>
+                    >
+                      <span className="text-blue-500 leading-none">▲</span>
+                      <span className="text-muted-foreground">{formatPremium(premiumTarget)}</span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -1293,10 +1296,13 @@ export default function SalesKPIPage() {
                 <div className="relative">
                   <span className="text-xs text-muted-foreground">0</span>
                   {clientsTarget !== null && (
-                    <span
-                      className="absolute text-xs text-muted-foreground -translate-x-1/2"
+                    <div
+                      className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
                       style={{ left: `${clientsMarkerPct}%` }}
-                    ><span className="text-blue-500">▲</span> {Math.round(clientsTarget).toLocaleString()}</span>
+                    >
+                      <span className="text-blue-500 leading-none">▲</span>
+                      <span className="text-muted-foreground">{Math.round(clientsTarget).toLocaleString()}</span>
+                    </div>
                   )}
                 </div>
               </div>

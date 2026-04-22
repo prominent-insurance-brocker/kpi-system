@@ -371,7 +371,7 @@ function UserForm({
           </SelectContent>
         </Select>
       </div>
-      {/* <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-4">
         <div className="flex items-center space-x-2">
           <Checkbox
             id="is_staff"
@@ -388,7 +388,7 @@ function UserForm({
           />
           <Label htmlFor="is_active">Active</Label>
         </div>
-      </div> */}
+      </div>
       <DialogFooter className='py-4'>
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel

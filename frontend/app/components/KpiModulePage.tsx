@@ -970,7 +970,9 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const [activeView, setActiveView] = useState<'tracker' | 'weekly' | 'data'>('weekly');
+  const [activeView, setActiveView] = useState<'tracker' | 'weekly' | 'data'>(
+    isAdmin ? 'tracker' : 'weekly'
+  );
 
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth());
@@ -1312,6 +1314,17 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   return (
     <div className="p-6 space-y-5">
       <h1 className="text-2xl font-bold text-[#09090B]">{title}</h1>
+
+      <PersonalDailyTracker
+        calYear={calYear}
+        calMonth={calMonth}
+        today={today}
+        monthEntries={monthEntries}
+        currentUserId={currentUserId}
+        onPrevMonth={prevMonth}
+        onNextMonth={nextMonth}
+        onGoToday={goToday}
+      />
 
       <Tabs value={activeView} onValueChange={(v) => setActiveView(v as typeof activeView)} className="gap-0">
         <div className="sticky top-16 z-20 bg-white py-2">

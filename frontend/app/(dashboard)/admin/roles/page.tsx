@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,6 +28,7 @@ import {
   createRole,
   updateRole,
   deleteRole,
+  getModules,
   type RoleFull,
   type ModuleInfo,
 } from '@/app/lib/api';
@@ -37,30 +38,38 @@ interface ModuleCategory {
   modules: ModuleInfo[];
 }
 
-const MODULE_CATEGORIES: ModuleCategory[] = [
-  {
-    name: 'General',
-    modules: [
-      { key: 'general_new', label: 'General New' },
-      { key: 'general_renewal', label: 'General Renewal' },
-      { key: 'general_claim', label: 'General Claim' },
-    ],
-  },
-  {
-    name: 'Motor',
-    modules: [
-      { key: 'motor_new', label: 'Motor New' },
-      { key: 'motor_renewal', label: 'Motor Renewal' },
-      { key: 'motor_claim', label: 'Motor Claim' },
-    ],
-  },
-  {
-    name: 'Sales',
-    modules: [
-      { key: 'sales_kpi', label: 'Sales KPI' },
-    ],
-  },
+const CATEGORY_CONFIG: { prefix: string; name: string }[] = [
+  { prefix: 'general_', name: 'General' },
+  { prefix: 'motor_', name: 'Motor' },
+  { prefix: 'sales_', name: 'Sales' },
+  { prefix: 'marine_', name: 'Marine' },
+  { prefix: 'medical_', name: 'Medical' },
 ];
+
+function groupModulesByCategory(modules: ModuleInfo[]): ModuleCategory[] {
+  const groups = new Map<string, ModuleInfo[]>();
+  const other: ModuleInfo[] = [];
+
+  for (const module of modules) {
+    const match = CATEGORY_CONFIG.find((c) => module.key.startsWith(c.prefix));
+    if (match) {
+      const existing = groups.get(match.name) ?? [];
+      existing.push(module);
+      groups.set(match.name, existing);
+    } else {
+      other.push(module);
+    }
+  }
+
+  const result: ModuleCategory[] = CATEGORY_CONFIG
+    .filter((c) => groups.has(c.name))
+    .map((c) => ({ name: c.name, modules: groups.get(c.name)! }));
+
+  if (other.length > 0) {
+    result.push({ name: 'Other', modules: other });
+  }
+  return result;
+}
 
 export default function RolesPage() {
   const [roles, setRoles] = useState<RoleFull[]>([]);
@@ -271,6 +280,17 @@ function RoleForm({
     module_permissions: [] as string[],
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [modules, setModules] = useState<ModuleInfo[]>([]);
+
+  useEffect(() => {
+    getModules().then((result) => {
+      if (result.data) {
+        setModules(result.data.modules);
+      }
+    });
+  }, []);
+
+  const categories = useMemo(() => groupModulesByCategory(modules), [modules]);
 
   useEffect(() => {
     if (role) {
@@ -391,7 +411,7 @@ function RoleForm({
       <div>
         <Label className="mb-3 block">Module Permissions</Label>
         <div className="border rounded-lg p-4 space-y-4 bg-[#F9F9F9]">
-          {MODULE_CATEGORIES.map((category) => {
+          {categories.map((category) => {
             const state = getCategoryState(category);
             return (
               <div key={category.name} className="space-y-2">

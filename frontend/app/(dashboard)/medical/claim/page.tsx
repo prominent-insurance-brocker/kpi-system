@@ -117,6 +117,7 @@ export default function MedicalClaimPage() {
   const dateFrom = searchParams.get('dateFrom') || '';
   const dateTo = searchParams.get('dateTo') || '';
   const userId = searchParams.get('userId') || '';
+  const statusFilter = searchParams.get('status') || '';
 
   const updateFilters = (updates: Record<string, string | number>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -143,6 +144,7 @@ export default function MedicalClaimPage() {
       if (dateFrom) params.set('date_from', dateFrom);
       if (dateTo) params.set('date_to', dateTo);
       if (userId) params.set('user_id', userId);
+      if (statusFilter) params.set('status', statusFilter);
       const result = await fetchApi<{ results: MedicalClaimEntry[]; count: number }>(`/api/entries/medical-claim/?${params}`);
       setEntries(result.data?.results || []);
       setTotalCount(result.data?.count || 0);
@@ -164,7 +166,7 @@ export default function MedicalClaimPage() {
   };
 
   useEffect(() => { fetchUsers(); }, []);
-  useEffect(() => { fetchEntries(); fetchStats(); }, [page, pageSize, dateFrom, dateTo, userId]);
+  useEffect(() => { fetchEntries(); fetchStats(); }, [page, pageSize, dateFrom, dateTo, userId, statusFilter]);
 
   const updateStatus = async (entryId: number, newStatus: string) => {
     try {
@@ -227,7 +229,7 @@ export default function MedicalClaimPage() {
     { key: 'tat_display', header: 'TAT' },
   ];
 
-  const hasActiveFilters = dateFrom || dateTo || userId;
+  const hasActiveFilters = dateFrom || dateTo || userId || statusFilter;
 
   return (
     <div className="p-6 space-y-6">
@@ -258,7 +260,19 @@ export default function MedicalClaimPage() {
             </Select>
           </div>
         )}
-        {hasActiveFilters && <Button variant="outline" onClick={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', page: 1 })}>Clear Filters</Button>}
+        <div className="flex flex-col gap-2">
+          <Label>Status</Label>
+          <Select value={statusFilter || 'all'} onValueChange={(value) => updateFilters({ status: value === 'all' ? '' : value, page: 1 })}>
+            <SelectTrigger className="w-[200px] shadow-none"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {STATUS_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {hasActiveFilters && <Button variant="outline" onClick={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', status: '', page: 1 })}>Clear Filters</Button>}
       </div>
       {stats && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

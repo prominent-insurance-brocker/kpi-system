@@ -34,8 +34,8 @@ class GeneralNewEntry(BaseEntry):
     quotations = models.PositiveIntegerField()
     quotes_revised = models.PositiveIntegerField()
     quotes_converted = models.PositiveIntegerField()
-    tat = models.PositiveIntegerField(verbose_name='TAT', null=True, blank=True)
-    accuracy = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    tat = models.PositiveIntegerField(verbose_name='TAT')
+    accuracy = models.DecimalField(max_digits=5, decimal_places=2)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'General New Entry'
@@ -65,6 +65,7 @@ class MotorNewEntry(BaseEntry):
     """Motor New module entry."""
     quotations = models.PositiveIntegerField()
     quotes_revised = models.PositiveIntegerField()
+    quotes_converted = models.PositiveIntegerField()
     tat = models.PositiveIntegerField(verbose_name='TAT')
     accuracy = models.DecimalField(max_digits=5, decimal_places=2)
 
@@ -95,7 +96,7 @@ class MotorClaimEntry(BaseEntry):
     """Motor Claim module entry."""
     STATUS_CHOICES = [
         ('claims_opened', 'Claims Opened'),
-        ('claims_pending', 'Claims Pending'),
+        ('claims_in_progress', 'Claims In Progress'),
         ('claims_resolved', 'Claims Resolved'),
         ('claims_rejected', 'Claims Rejected'),
     ]
@@ -103,8 +104,8 @@ class MotorClaimEntry(BaseEntry):
     TERMINAL_STATUSES = {'claims_resolved', 'claims_rejected'}
 
     TRANSITIONS = {
-        'claims_opened': ['claims_pending'],
-        'claims_pending': ['claims_resolved', 'claims_rejected'],
+        'claims_opened': ['claims_in_progress'],
+        'claims_in_progress': ['claims_resolved', 'claims_rejected'],
         'claims_resolved': [],
         'claims_rejected': [],
     }

@@ -9,3 +9,11 @@ class EntryFilter(django_filters.FilterSet):
 
     class Meta:
         fields = ['date_from', 'date_to', 'user_id']
+
+
+class ClaimEntryFilter(EntryFilter):
+    """Filter for claim entries — adds a status filter."""
+    status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
+
+    class Meta:
+        fields = ['date_from', 'date_to', 'user_id', 'status']

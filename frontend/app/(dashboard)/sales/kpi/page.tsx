@@ -1113,7 +1113,7 @@ export default function SalesKPIPage() {
   const premiumTarget = cardTarget?.premium_target ? Number(cardTarget.premium_target) : null;
   const clientsTarget = cardTarget?.clients_assigned ?? null;
 
-  const TARGET_MULTIPLIER = 3;
+  const TARGET_MULTIPLIER = 1.5;
   const premiumMax = premiumTarget ? premiumTarget * TARGET_MULTIPLIER : 0;
   const clientsMax = clientsTarget ? clientsTarget * TARGET_MULTIPLIER : 0;
   const premiumPct = premiumMax ? Math.min(100, (cardPremiumActual / premiumMax) * 100) : 0;
@@ -1241,9 +1241,9 @@ export default function SalesKPIPage() {
         </div>
 
         {/* Monthly Target + Daily Tracker row */}
-        <div className="flex gap-5 items-start flex-wrap">
+        <div className="flex gap-5 items-stretch flex-wrap">
           {/* Monthly Target Card */}
-          <div className="border rounded-lg p-4 space-y-2 bg-white w-[362px] shrink-0">
+          <div className="border rounded-lg p-4 space-y-2 bg-white w-[362px] shrink-0 flex flex-col">
             <h2 className="text-base font-semibold">Monthly Target</h2>
             <div className="grid grid-cols-2 gap-6">
               {/* Premium */}
@@ -1266,10 +1266,13 @@ export default function SalesKPIPage() {
                 <div className="relative">
                   <span className="text-xs text-muted-foreground">0</span>
                   {premiumTarget !== null && (
-                    <span
-                      className="absolute text-xs text-muted-foreground -translate-x-1/2"
+                    <div
+                      className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
                       style={{ left: `${premiumMarkerPct}%` }}
-                    ><span className="text-blue-500">▲</span> {formatPremium(premiumTarget)}</span>
+                    >
+                      <span className="text-blue-500 leading-none">▲</span>
+                      <span className="text-muted-foreground">{formatPremium(premiumTarget)}</span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -1293,10 +1296,13 @@ export default function SalesKPIPage() {
                 <div className="relative">
                   <span className="text-xs text-muted-foreground">0</span>
                   {clientsTarget !== null && (
-                    <span
-                      className="absolute text-xs text-muted-foreground -translate-x-1/2"
+                    <div
+                      className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
                       style={{ left: `${clientsMarkerPct}%` }}
-                    ><span className="text-blue-500">▲</span> {Math.round(clientsTarget).toLocaleString()}</span>
+                    >
+                      <span className="text-blue-500 leading-none">▲</span>
+                      <span className="text-muted-foreground">{Math.round(clientsTarget).toLocaleString()}</span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -1304,7 +1310,7 @@ export default function SalesKPIPage() {
             {/* Month heading */}
             <h3 className="text-xl font-semibold">{MONTH_NAMES[cardMonth - 1]}</h3>
             {/* Navigation */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mt-auto">
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => {
@@ -2018,7 +2024,7 @@ function TargetModal({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!required || open) onClose(); }}>
       <DialogContent
-        className={`p-0 sm:max-w-md${required ? ' [&>button]:hidden' : ''}`}
+        className={`p-0 sm:max-w-sm${required ? ' [&>button]:hidden' : ''}`}
         onInteractOutside={required ? (e) => e.preventDefault() : undefined}
         onEscapeKeyDown={required ? (e) => e.preventDefault() : undefined}
       >

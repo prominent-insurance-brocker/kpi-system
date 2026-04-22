@@ -39,14 +39,14 @@ interface FilterUser {
 
 interface MotorClaimStats {
   claims_opened: number;
-  claims_pending: number;
+  claims_in_progress: number;
   claims_resolved: number;
   claims_rejected: number;
 }
 
 const STATUS_OPTIONS = [
   { value: 'claims_opened', label: 'Claims Opened' },
-  { value: 'claims_pending', label: 'Claims Pending' },
+  { value: 'claims_in_progress', label: 'Claims In Progress' },
   { value: 'claims_resolved', label: 'Claims Resolved' },
   { value: 'claims_rejected', label: 'Claims Rejected' },
 ];
@@ -58,7 +58,7 @@ const getStatusLabel = (value: string) => {
 
 const STATUS_COLORS: Record<string, string> = {
   claims_opened: 'bg-blue-100 text-blue-800',
-  claims_pending: 'bg-yellow-100 text-yellow-800',
+  claims_in_progress: 'bg-yellow-100 text-yellow-800',
   claims_resolved: 'bg-green-100 text-green-800',
   claims_rejected: 'bg-red-100 text-red-800',
 };
@@ -117,6 +117,7 @@ export default function MotorClaimPage() {
   const dateFrom = searchParams.get('dateFrom') || '';
   const dateTo = searchParams.get('dateTo') || '';
   const userId = searchParams.get('userId') || '';
+  const statusFilter = searchParams.get('status') || '';
 
   const updateFilters = (updates: Record<string, string | number>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -143,6 +144,7 @@ export default function MotorClaimPage() {
       if (dateFrom) params.set('date_from', dateFrom);
       if (dateTo) params.set('date_to', dateTo);
       if (userId) params.set('user_id', userId);
+      if (statusFilter) params.set('status', statusFilter);
       const result = await fetchApi<{ results: MotorClaimEntry[]; count: number }>(`/api/entries/motor-claim/?${params}`);
       setEntries(result.data?.results || []);
       setTotalCount(result.data?.count || 0);
@@ -164,7 +166,7 @@ export default function MotorClaimPage() {
   };
 
   useEffect(() => { fetchUsers(); }, []);
-  useEffect(() => { fetchEntries(); fetchStats(); }, [page, pageSize, dateFrom, dateTo, userId]);
+  useEffect(() => { fetchEntries(); fetchStats(); }, [page, pageSize, dateFrom, dateTo, userId, statusFilter]);
 
   const updateStatus = async (entryId: number, newStatus: string) => {
     try {
@@ -227,7 +229,7 @@ export default function MotorClaimPage() {
     { key: 'tat_display', header: 'TAT' },
   ];
 
-  const hasActiveFilters = dateFrom || dateTo || userId;
+  const hasActiveFilters = dateFrom || dateTo || userId || statusFilter;
 
   return (
     <div className="p-6 space-y-6">
@@ -258,7 +260,19 @@ export default function MotorClaimPage() {
             </Select>
           </div>
         )}
-        {hasActiveFilters && <Button variant="outline" onClick={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', page: 1 })}>Clear Filters</Button>}
+        <div className="flex flex-col gap-2">
+          <Label>Status</Label>
+          <Select value={statusFilter || 'all'} onValueChange={(value) => updateFilters({ status: value === 'all' ? '' : value, page: 1 })}>
+            <SelectTrigger className="w-[200px] shadow-none"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {STATUS_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {hasActiveFilters && <Button variant="outline" onClick={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', status: '', page: 1 })}>Clear Filters</Button>}
       </div>
       {stats && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -272,10 +286,10 @@ export default function MotorClaimPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Claims Pending</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Claims In Progress</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{stats.claims_pending}</div>
+              <div className="text-2xl font-bold text-yellow-600">{stats.claims_in_progress}</div>
             </CardContent>
           </Card>
           <Card>

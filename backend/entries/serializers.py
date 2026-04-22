@@ -60,8 +60,9 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
     class Meta:
         model = MotorNewEntry
         fields = [
-            'id', 'date', 'quotations', 'quotes_revised', 'tat', 'accuracy',
-            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
+            'id', 'date', 'quotations', 'quotes_revised', 'quotes_converted',
+            'tat', 'accuracy', 'added_by', 'added_by_name', 'added_at',
+            'updated_at', 'is_editable'
         ]
         read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
 

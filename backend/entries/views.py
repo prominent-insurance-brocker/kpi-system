@@ -34,7 +34,7 @@ from .serializers import (
     MedicalClaimEntrySerializer,
     MedicalClaimStatusUpdateSerializer,
 )
-from .filters import EntryFilter
+from .filters import EntryFilter, ClaimEntryFilter
 
 
 class BaseEntryViewSet(viewsets.ModelViewSet):
@@ -144,6 +144,7 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
     queryset = MotorClaimEntry.objects.all()
     serializer_class = MotorClaimEntrySerializer
     module_key = 'motor_claim'
+    filterset_class = ClaimEntryFilter
 
     def get_queryset(self):
         return super().get_queryset().prefetch_related('status_transitions')
@@ -204,7 +205,7 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
 
         counts = {
             'claims_opened': 0,
-            'claims_pending': 0,
+            'claims_in_progress': 0,
             'claims_resolved': 0,
             'claims_rejected': 0,
         }
@@ -270,6 +271,7 @@ class MedicalClaimEntryViewSet(BaseEntryViewSet):
     queryset = MedicalClaimEntry.objects.all()
     serializer_class = MedicalClaimEntrySerializer
     module_key = 'medical_claim'
+    filterset_class = ClaimEntryFilter
 
     def get_queryset(self):
         return super().get_queryset().prefetch_related('status_transitions')

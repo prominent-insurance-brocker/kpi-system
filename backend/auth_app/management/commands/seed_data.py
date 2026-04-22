@@ -399,6 +399,7 @@ class Command(BaseCommand):
                     defaults={
                         'quotations': random.randint(8, 20),
                         'quotes_revised': random.randint(2, 8),
+                        'quotes_converted': random.randint(1, 6),
                         'tat': random.randint(1, 3),
                         'accuracy': Decimal(str(round(random.uniform(90.0, 99.9), 2))),
                     }
@@ -436,7 +437,7 @@ class Command(BaseCommand):
             'City Transport', 'Metro Logistics', 'Swift Autos', 'Royal Fleet',
             'Star Vehicles', 'Atlas Movers', 'Delta Cars', 'Nova Transport',
         ]
-        statuses = ['claims_opened', 'claims_pending', 'claims_resolved', 'claims_rejected']
+        statuses = ['claims_opened', 'claims_in_progress', 'claims_resolved', 'claims_rejected']
         for user in users:
             if not user:
                 continue

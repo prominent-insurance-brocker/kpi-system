@@ -226,7 +226,7 @@ function PersonalDailyTracker({
             <ChevronRight className="h-4 w-4 text-[#71717A]" />
           </button>
           <span className="text-sm font-semibold text-[#09090B] ml-1">
-            {MONTH_NAMES[calMonth]} {calYear}
+            {MONTH_NAMES[calMonth]}
           </span>
         </div>
       </div>
@@ -395,7 +395,7 @@ function TrackerView({
             <ChevronRight className="h-4 w-4 text-[#71717A]" />
           </button>
           <span className="text-sm font-semibold text-[#09090B]">
-            {MONTH_NAMES[calMonth]} {calYear}
+            {MONTH_NAMES[calMonth]}
           </span>
         </div>
       </div>
@@ -879,10 +879,7 @@ export default function SalesKPIPage() {
     return d;
   }, []);
 
-  // Tab state — staff defaults to 'weekly', admin defaults to 'tracker'
-  const [activeView, setActiveView] = useState<'tracker' | 'weekly' | 'data'>(
-    isAdmin ? 'tracker' : 'weekly'
-  );
+  const [activeView, setActiveView] = useState<'tracker' | 'weekly' | 'data'>('weekly');
 
   // Calendar / tracker state
   const [calYear, setCalYear] = useState(today.getFullYear());
@@ -944,32 +941,29 @@ export default function SalesKPIPage() {
   };
 
   const fetchCurrentTarget = useCallback(async () => {
-    const result = await fetchApi<SalesMonthlyTarget | null>('/api/entries/sales-kpi/monthly-targets/current/');
-    setCurrentTarget(result.data ?? null);
+    const year = today.getFullYear();
+    const month = today.getMonth() + 1;
+    const result = await fetchApi<{ results: SalesMonthlyTarget[] }>(
+      `/api/entries/sales-kpi/monthly-targets/?year=${year}&month=${month}`
+    );
+    setCurrentTarget(result.data?.results?.[0] ?? null);
     setCurrentTargetLoaded(true);
-  }, []);
+  }, [today]);
 
   const fetchCardData = useCallback(async () => {
-    const isCurrentMonth = cardYear === today.getFullYear() && cardMonth === (today.getMonth() + 1);
-
-    if (isCurrentMonth) {
-      setCardTarget(currentTarget);
-    } else {
-      const result = await fetchApi<{ results: SalesMonthlyTarget[] }>(
-        `/api/entries/sales-kpi/monthly-targets/?year=${cardYear}&month=${cardMonth}`
-      );
-      const targets = result.data?.results ?? [];
-      setCardTarget(targets[0] ?? null);
-    }
+    const targetResult = await fetchApi<{ results: SalesMonthlyTarget[] }>(
+      `/api/entries/sales-kpi/monthly-targets/?year=${cardYear}&month=${cardMonth}`
+    );
+    setCardTarget(targetResult.data?.results?.[0] ?? null);
 
     // Fetch entries for card month
     const firstDay = `${cardYear}-${String(cardMonth).padStart(2, '0')}-01`;
-    const lastDay = new Date(cardYear, cardMonth, 0).toISOString().split('T')[0];
+    const lastDay = toLocalDateString(new Date(cardYear, cardMonth, 0));
     const result = await fetchApi<{ results: SalesKPIEntry[] }>(
       `/api/entries/sales-kpi/?date_from=${firstDay}&date_to=${lastDay}&page_size=1000`
     );
     setCardEntries(result.data?.results ?? []);
-  }, [cardYear, cardMonth, currentTarget, today]);
+  }, [cardYear, cardMonth]);
 
   const fetchEntries = useCallback(async () => {
     setIsLoading(true);
@@ -1036,7 +1030,7 @@ export default function SalesKPIPage() {
 
   useEffect(() => {
     if (currentTargetLoaded) fetchCardData();
-  }, [cardYear, cardMonth, currentTargetLoaded, currentTarget, fetchCardData]);
+  }, [cardYear, cardMonth, currentTargetLoaded, fetchCardData]);
 
   useEffect(() => {
     fetchMonthEntries(calYear, calMonth);
@@ -1110,7 +1104,7 @@ export default function SalesKPIPage() {
     0
   );
   const cardClientsActual = cardEntries.reduce((sum, e) => sum + e.new_clients_acquired, 0);
-  const premiumTarget = cardTarget?.premium_target ? Number(cardTarget.premium_target) : null;
+  const premiumTarget = cardTarget?.premium_target != null ? Number(cardTarget.premium_target) : null;
   const clientsTarget = cardTarget?.clients_assigned ?? null;
 
   const TARGET_MULTIPLIER = 1.5;
@@ -1148,6 +1142,14 @@ export default function SalesKPIPage() {
     const val = sheetInlineValues[key];
     if (val === '' || val === undefined) {
       setSheetEditingKey(null);
+      return;
+    }
+    if (Number(val) <= 0) {
+      alert(
+        tab === 'premium'
+          ? 'Premium target must be greater than 0'
+          : 'Assigned clients must be greater than 0'
+      );
       return;
     }
     const existing = getSheetTarget(month);
@@ -1629,7 +1631,7 @@ export default function SalesKPIPage() {
                             <Input
                               id={key}
                               type="number"
-                              min="0"
+                              min="1"
                               autoFocus
                               placeholder={
                                 tab === 'premium'
@@ -1993,6 +1995,16 @@ function TargetModal({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (premiumTarget !== '' && Number(premiumTarget) <= 0) {
+      setError('Premium target must be greater than 0');
+      return;
+    }
+    if (clientsAssigned !== '' && Number(clientsAssigned) <= 0) {
+      setError('Assigned clients must be greater than 0');
+      return;
+    }
+
     setIsSubmitting(true);
 
     const body: Record<string, number | string> = {};
@@ -2060,7 +2072,7 @@ function TargetModal({
             </div>
             <Input
               type="number"
-              min="0"
+              min="1"
               step="1"
               placeholder="e.g. 150"
               value={premiumTarget}
@@ -2079,7 +2091,7 @@ function TargetModal({
             </div>
             <Input
               type="number"
-              min="0"
+              min="1"
               placeholder="e.g. 50"
               value={clientsAssigned}
               onChange={(e) => setClientsAssigned(e.target.value)}

@@ -213,7 +213,7 @@ function PersonalDailyTracker<T extends BaseModuleEntry>({
             <ChevronRight className="h-4 w-4 text-[#71717A]" />
           </button>
           <span className="text-sm font-semibold text-[#09090B] ml-1">
-            {MONTH_NAMES[calMonth]} {calYear}
+            {MONTH_NAMES[calMonth]}
           </span>
         </div>
       </div>
@@ -377,7 +377,7 @@ function TrackerView<T extends BaseModuleEntry>({
             <ChevronRight className="h-4 w-4 text-[#71717A]" />
           </button>
           <span className="text-sm font-semibold text-[#09090B]">
-            {MONTH_NAMES[calMonth]} {calYear}
+            {MONTH_NAMES[calMonth]}
           </span>
         </div>
       </div>
@@ -970,9 +970,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const [activeView, setActiveView] = useState<'tracker' | 'weekly' | 'data'>(
-    isAdmin ? 'tracker' : 'weekly'
-  );
+  const [activeView, setActiveView] = useState<'tracker' | 'weekly' | 'data'>('weekly');
 
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth());

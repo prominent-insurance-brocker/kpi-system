@@ -139,6 +139,16 @@ class SalesMonthlyTargetSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'year', 'month', 'premium_target', 'clients_assigned', 'created_at', 'updated_at']
         read_only_fields = ['id', 'user', 'created_at', 'updated_at']
 
+    def validate_premium_target(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Premium target must be greater than 0.")
+        return value
+
+    def validate_clients_assigned(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Assigned clients must be greater than 0.")
+        return value
+
 
 class MarineNewEntrySerializer(BaseEntrySerializer):
     class Meta:

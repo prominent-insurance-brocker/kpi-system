@@ -188,18 +188,14 @@ function PersonalDailyTracker<T extends BaseModuleEntry>({
       <div className="flex items-center justify-between px-5 py-2 border-b border-[#E4E4E4]">
         <div className="flex items-center gap-3">
           <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
-            <button className="px-3 py-1.5 bg-white text-[#09090B] border-r border-[#E4E4E4]">Month</button>
-            <button className="px-3 py-1.5 text-[#71717A] hover:bg-[#F9F9F9] transition-colors">Year</button>
+            <button className="px-3 py-1.5 bg-white text-[#09090B]">Month</button>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={onPrevMonth}
-            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
-          >
-            <ChevronLeft className="h-4 w-4 text-[#71717A]" />
-          </button>
+          <span className="text-sm font-semibold text-[#09090B] min-w-[120px]">
+            {MONTH_NAMES[calMonth]} {calYear}
+          </span>
           <button
             onClick={onGoToday}
             className="text-sm font-medium text-[#09090B] px-3 py-1 rounded-lg border border-[#E4E4E4] hover:bg-[#F3F3F3] transition-colors"
@@ -207,14 +203,17 @@ function PersonalDailyTracker<T extends BaseModuleEntry>({
             Today
           </button>
           <button
+            onClick={onPrevMonth}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4 text-[#71717A]" />
+          </button>
+          <button
             onClick={onNextMonth}
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
           >
             <ChevronRight className="h-4 w-4 text-[#71717A]" />
           </button>
-          <span className="text-sm font-semibold text-[#09090B] ml-1">
-            {MONTH_NAMES[calMonth]}
-          </span>
         </div>
       </div>
 
@@ -358,12 +357,9 @@ function TrackerView<T extends BaseModuleEntry>({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={onPrevMonth}
-            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
-          >
-            <ChevronLeft className="h-4 w-4 text-[#71717A]" />
-          </button>
+          <span className="text-sm font-semibold text-[#09090B] min-w-[120px]">
+            {MONTH_NAMES[calMonth]} {calYear}
+          </span>
           <button
             onClick={onGoToday}
             className="text-sm font-medium text-[#09090B] px-3 py-1 rounded-lg border border-[#E4E4E4] hover:bg-[#F3F3F3] transition-colors"
@@ -371,14 +367,17 @@ function TrackerView<T extends BaseModuleEntry>({
             Today
           </button>
           <button
+            onClick={onPrevMonth}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4 text-[#71717A]" />
+          </button>
+          <button
             onClick={onNextMonth}
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
           >
             <ChevronRight className="h-4 w-4 text-[#71717A]" />
           </button>
-          <span className="text-sm font-semibold text-[#09090B]">
-            {MONTH_NAMES[calMonth]}
-          </span>
         </div>
       </div>
 

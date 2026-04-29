@@ -32,6 +32,8 @@ import {
   type RoleFull,
   type ModuleInfo,
 } from '@/app/lib/api';
+import { toast } from 'sonner';
+import { useConfirm } from '@/app/components/ConfirmDialog';
 
 interface ModuleCategory {
   name: string;
@@ -72,6 +74,7 @@ function groupModulesByCategory(modules: ModuleInfo[]): ModuleCategory[] {
 }
 
 export default function RolesPage() {
+  const confirm = useConfirm();
   const [roles, setRoles] = useState<RoleFull[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -128,14 +131,21 @@ export default function RolesPage() {
 
   const handleDelete = async (role: RoleFull) => {
     if (role.user_count > 0) {
-      alert(`Cannot delete role. ${role.user_count} user(s) are assigned to this role.`);
+      toast.error(`Cannot delete role. ${role.user_count} user(s) are assigned to this role.`);
       return;
     }
-    if (!confirm(`Are you sure you want to delete "${role.name}"?`)) return;
+    const ok = await confirm({
+      title: 'Delete role?',
+      description: `Are you sure you want to delete "${role.name}"? This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     const result = await deleteRole(role.id);
     if (result.error) {
-      alert(result.error);
+      toast.error(result.error);
     } else {
+      toast.success('Role deleted');
       fetchRoles();
     }
   };

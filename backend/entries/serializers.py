@@ -17,10 +17,19 @@ from .models import (
 class BaseEntrySerializer(serializers.ModelSerializer):
     """Base serializer for all entry types."""
     added_by_name = serializers.SerializerMethodField()
+    on_behalf_of_name = serializers.SerializerMethodField()
     is_editable = serializers.SerializerMethodField()
+
+    # Subclasses set this to False for claim modules (motor_claim, medical_claim).
+    enforce_one_per_day = True
 
     def get_added_by_name(self, obj):
         return obj.added_by.get_full_name()
+
+    def get_on_behalf_of_name(self, obj):
+        if obj.on_behalf_of_id is None:
+            return None
+        return obj.on_behalf_of.get_full_name()
 
     def get_is_editable(self, obj):
         request = self.context.get('request')
@@ -33,16 +42,57 @@ class BaseEntrySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Accuracy must be between 0 and 100")
         return value
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if not self.enforce_one_per_day:
+            return attrs
+        request = self.context.get('request')
+        if request is None:
+            return attrs
+
+        date = attrs.get('date') or (self.instance and self.instance.date)
+        if date is None:
+            return attrs
+
+        # Effective owner: the target user when admin acts on behalf, else the request user.
+        target_user_id = None
+        request_user = request.user
+        if request_user.is_staff:
+            payload_target = request.data.get('added_by') if hasattr(request, 'data') else None
+            if payload_target:
+                try:
+                    target_user_id = int(payload_target)
+                except (ValueError, TypeError):
+                    target_user_id = None
+        if target_user_id is None:
+            target_user_id = request_user.id
+
+        from django.db.models import Q
+        Model = self.Meta.model
+        qs = Model.objects.filter(
+            Q(on_behalf_of_id=target_user_id)
+            | (Q(on_behalf_of__isnull=True) & Q(added_by_id=target_user_id)),
+            date=date,
+        )
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                {'date': 'An entry for this date already exists for this user.'}
+            )
+        return attrs
+
 
 class GeneralNewEntrySerializer(BaseEntrySerializer):
     class Meta:
         model = GeneralNewEntry
         fields = [
             'id', 'date', 'quotations', 'quotes_revised', 'quotes_converted',
-            'tat', 'accuracy', 'added_by', 'added_by_name', 'added_at',
-            'updated_at', 'is_editable'
+            'tat', 'accuracy', 'added_by', 'added_by_name',
+            'on_behalf_of', 'on_behalf_of_name',
+            'added_at', 'updated_at', 'is_editable'
         ]
-        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+        read_only_fields = ['id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
 
 
 class GeneralRenewalEntrySerializer(BaseEntrySerializer):
@@ -50,10 +100,11 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
         model = GeneralRenewalEntry
         fields = [
             'id', 'date', 'quotations', 'quotes_revised', 'quotes_converted',
-            'tat', 'accuracy', 'added_by', 'added_by_name', 'added_at',
-            'updated_at', 'is_editable'
+            'tat', 'accuracy', 'added_by', 'added_by_name',
+            'on_behalf_of', 'on_behalf_of_name',
+            'added_at', 'updated_at', 'is_editable'
         ]
-        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+        read_only_fields = ['id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
 
 
 class MotorNewEntrySerializer(BaseEntrySerializer):
@@ -61,10 +112,11 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
         model = MotorNewEntry
         fields = [
             'id', 'date', 'quotations', 'quotes_revised', 'quotes_converted',
-            'tat', 'accuracy', 'added_by', 'added_by_name', 'added_at',
-            'updated_at', 'is_editable'
+            'tat', 'accuracy', 'added_by', 'added_by_name',
+            'on_behalf_of', 'on_behalf_of_name',
+            'added_at', 'updated_at', 'is_editable'
         ]
-        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+        read_only_fields = ['id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
 
 
 class MotorRenewalEntrySerializer(BaseEntrySerializer):
@@ -72,12 +124,13 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
         model = MotorRenewalEntry
         fields = [
             'id', 'date', 'quotations', 'retention', 'tat', 'accuracy',
-            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
+            'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name', 'added_at', 'updated_at', 'is_editable'
         ]
-        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+        read_only_fields = ['id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
 
 
 class MotorClaimEntrySerializer(BaseEntrySerializer):
+    enforce_one_per_day = False
     tat_display = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
@@ -86,10 +139,10 @@ class MotorClaimEntrySerializer(BaseEntrySerializer):
         model = MotorClaimEntry
         fields = [
             'id', 'date', 'customer_name', 'status',
-            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable',
+            'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name', 'added_at', 'updated_at', 'is_editable',
             'tat_display', 'allowed_transitions', 'is_terminal'
         ]
-        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+        read_only_fields = ['id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
 
     def get_tat_display(self, obj):
         return obj.get_tat_display()
@@ -128,9 +181,9 @@ class SalesKPIEntrySerializer(BaseEntrySerializer):
             'id', 'date', 'leads_to_ops_team', 'quotes_from_ops_team',
             'quotes_to_client', 'total_conversions', 'new_clients_acquired',
             'gross_booked_premium',
-            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
+            'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name', 'added_at', 'updated_at', 'is_editable'
         ]
-        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+        read_only_fields = ['id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
 
 
 class SalesMonthlyTargetSerializer(serializers.ModelSerializer):
@@ -156,9 +209,9 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
         fields = [
             'id', 'date', 'gross_booked_premium', 'quotes_created',
             'new_clients_acquired', 'new_policies_issued',
-            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
+            'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name', 'added_at', 'updated_at', 'is_editable'
         ]
-        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+        read_only_fields = ['id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
 
 
 class MarineRenewalEntrySerializer(BaseEntrySerializer):
@@ -167,12 +220,13 @@ class MarineRenewalEntrySerializer(BaseEntrySerializer):
         fields = [
             'id', 'date', 'monthly_renewal_quotes_assigned', 'gross_booked_premium',
             'quotes_created', 'renewal_policies_issued',
-            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable'
+            'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name', 'added_at', 'updated_at', 'is_editable'
         ]
-        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+        read_only_fields = ['id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
 
 
 class MedicalClaimEntrySerializer(BaseEntrySerializer):
+    enforce_one_per_day = False
     tat_display = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
@@ -181,10 +235,10 @@ class MedicalClaimEntrySerializer(BaseEntrySerializer):
         model = MedicalClaimEntry
         fields = [
             'id', 'date', 'customer_name', 'status',
-            'added_by', 'added_by_name', 'added_at', 'updated_at', 'is_editable',
+            'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name', 'added_at', 'updated_at', 'is_editable',
             'tat_display', 'allowed_transitions', 'is_terminal'
         ]
-        read_only_fields = ['id', 'added_by', 'added_at', 'updated_at']
+        read_only_fields = ['id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
 
     def get_tat_display(self, obj):
         return obj.get_tat_display()

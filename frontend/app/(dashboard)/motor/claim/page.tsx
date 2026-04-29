@@ -15,6 +15,9 @@ import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate, formatDateTime } from '@/app/lib/date';
 import { toast } from 'sonner';
+import { useConfirm } from '@/app/components/ConfirmDialog';
+import { AddedByCell } from '@/app/components/KpiModulePage';
+import { FilterBar } from '@/app/components/FilterBar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 interface MotorClaimEntry {
@@ -24,6 +27,8 @@ interface MotorClaimEntry {
   status: string;
   added_by: number;
   added_by_name: string;
+  on_behalf_of: number | null;
+  on_behalf_of_name: string | null;
   added_at: string;
   is_editable: boolean;
   tat_display: string;
@@ -103,6 +108,7 @@ export default function MotorClaimPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { canSeeAllData } = useAuth();
+  const confirm = useConfirm();
   const [entries, setEntries] = useState<MotorClaimEntry[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -182,11 +188,11 @@ export default function MotorClaimPage() {
         fetchStats();
         toast.success(`Status updated to ${getStatusLabel(newStatus)}`);
       } else {
-        alert(result.error || 'Failed to update status');
+        toast.error(result.error || 'Failed to update status');
       }
     } catch (err) {
       console.error('Failed to update status:', err);
-      alert('Failed to update status');
+      toast.error('Failed to update status');
     }
   };
 
@@ -199,15 +205,26 @@ export default function MotorClaimPage() {
   };
 
   const handleDelete = async (entry: MotorClaimEntry) => {
-    if (!confirm('Are you sure you want to delete this entry?')) return;
+    const ok = await confirm({
+      title: 'Delete entry?',
+      description: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     const result = await fetchApi<void>(`/api/entries/motor-claim/${entry.id}/`, { method: 'DELETE' });
-    if (!result.error) { fetchEntries(); fetchStats(); }
-    else { alert(result.error || 'Failed to delete entry'); }
+    if (!result.error) {
+      toast.success('Entry deleted');
+      fetchEntries();
+      fetchStats();
+    } else {
+      toast.error(result.error || 'Failed to delete entry');
+    }
   };
 
   const columns = [
     { key: 'date', header: 'Date', render: (item: MotorClaimEntry) => formatDate(item.date) },
-    { key: 'added_by_name', header: 'Added By' },
+    { key: 'added_by_name', header: 'Added By', render: (item: MotorClaimEntry) => <AddedByCell entry={item} /> },
     { key: 'added_at', header: 'Added At', render: (item: MotorClaimEntry) => formatDateTime(item.added_at) },
     { key: 'customer_name', header: 'Customer Name' },
     {
@@ -237,43 +254,25 @@ export default function MotorClaimPage() {
         <div><h1 className="text-2xl font-bold">Motor Claim</h1><p className="text-muted-foreground">Manage motor claims</p></div>
         <Button onClick={() => { setEditingEntry(null); setError(''); setIsModalOpen(true); }}><Plus className="h-4 w-4 mr-2" /> Add Entry</Button>
       </div>
-      <div className="flex gap-4 items-end flex-wrap">
-        <div className="flex flex-col gap-2">
-          <Label>Date Range</Label>
-          <DateRangeFilter
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onChange={(from, to) => updateFilters({ dateFrom: from, dateTo: to, page: 1 })}
-          />
-          </div>
-        {canSeeAllData() && (
-          <div className="flex flex-col gap-2">
-            <Label>User</Label>
-            <Select value={userId || 'all'} onValueChange={(value) => updateFilters({ userId: value === 'all' ? '' : value, page: 1 })}>
-              <SelectTrigger className="w-[200px] shadow-none"><SelectValue placeholder="All Users" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Users</SelectItem>
-                {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id.toString()}>{user.full_name || user.email}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        <div className="flex flex-col gap-2">
-          <Label>Status</Label>
-          <Select value={statusFilter || 'all'} onValueChange={(value) => updateFilters({ status: value === 'all' ? '' : value, page: 1 })}>
-            <SelectTrigger className="w-[200px] shadow-none"><SelectValue placeholder="All Statuses" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              {STATUS_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {hasActiveFilters && <Button variant="outline" onClick={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', status: '', page: 1 })}>Clear Filters</Button>}
-      </div>
+      <FilterBar
+        dateRange={{
+          from: dateFrom,
+          to: dateTo,
+          onChange: (from, to) => updateFilters({ dateFrom: from, dateTo: to, page: 1 }),
+        }}
+        user={canSeeAllData() ? {
+          value: userId,
+          onChange: (v) => updateFilters({ userId: v, page: 1 }),
+          options: users.map((u) => ({ value: u.id.toString(), label: u.full_name || u.email })),
+        } : undefined}
+        status={{
+          value: statusFilter,
+          onChange: (v) => updateFilters({ status: v, page: 1 }),
+          options: STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        }}
+        hasActiveFilters={!!hasActiveFilters}
+        onClear={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', status: '', page: 1 })}
+      />
       {stats && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Card>

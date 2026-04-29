@@ -46,6 +46,9 @@ import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate, formatDateTime } from '@/app/lib/date';
 import { Progress } from '@/components/ui/progress';
+import { toast } from 'sonner';
+import { useConfirm } from '@/app/components/ConfirmDialog';
+import { AddedByCell } from '@/app/components/KpiModulePage';
 
 interface SalesKPIEntry {
   id: number;
@@ -58,6 +61,8 @@ interface SalesKPIEntry {
   gross_booked_premium: number;
   added_by: number;
   added_by_name: string;
+  on_behalf_of: number | null;
+  on_behalf_of_name: string | null;
   added_at: string;
   is_editable: boolean;
 }
@@ -772,12 +777,7 @@ function WeeklyView({
                     <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.total_conversions}</td>
                     <td className="px-5 py-3 text-sm font-medium text-[#374151]">{formatPremium(entry.gross_booked_premium)}</td>
                     <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <UserAvatar name={entry.added_by_name} />
-                        <span className="text-sm font-medium text-[#374151] truncate max-w-[120px]">
-                          {entry.added_by_name}
-                        </span>
-                      </div>
+                      <AddedByCell entry={entry} />
                     </td>
                     <td className="px-5 py-3">
                       <StatusBadge type={statusType} />
@@ -854,7 +854,7 @@ const dataColumns = [
     header: 'Gross Booked Premium',
     render: (item: SalesKPIEntry) => formatPremium(item.gross_booked_premium),
   },
-  { key: 'added_by_name', header: 'Added By' },
+  { key: 'added_by_name', header: 'Added By', render: (item: SalesKPIEntry) => <AddedByCell entry={item} /> },
   {
     key: 'added_at',
     header: 'Added On',
@@ -868,6 +868,7 @@ export default function SalesKPIPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { canSeeAllData, user } = useAuth();
+  const confirm = useConfirm();
 
   const isAdmin = canSeeAllData();
   const currentUserId = user?.id;
@@ -1088,12 +1089,19 @@ export default function SalesKPIPage() {
   };
 
   const handleDeleteEntry = async (entry: SalesKPIEntry) => {
-    if (!confirm('Are you sure you want to delete this entry?')) return;
+    const ok = await confirm({
+      title: 'Delete entry?',
+      description: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     const result = await fetchApi<void>(`/api/entries/sales-kpi/${entry.id}/`, { method: 'DELETE' });
     if (!result.error) {
+      toast.success('Entry deleted');
       refreshAll();
     } else {
-      alert(result.error || 'Failed to delete entry');
+      toast.error(result.error || 'Failed to delete entry');
     }
   };
 
@@ -1144,7 +1152,7 @@ export default function SalesKPIPage() {
       return;
     }
     if (Number(val) <= 0) {
-      alert(
+      toast.error(
         tab === 'premium'
           ? 'Premium target must be greater than 0'
           : 'Assigned clients must be greater than 0'
@@ -1478,6 +1486,7 @@ export default function SalesKPIPage() {
                     </Button>
                   )}
                 </div>
+                {/* TODO: confirm with PM whether to keep configurable. Hidden per Bug 11.
                 <Button
                   disabled={noCurrentTarget}
                   title={noCurrentTarget ? 'Set monthly targets first' : undefined}
@@ -1485,6 +1494,7 @@ export default function SalesKPIPage() {
                 >
                   <Plus className="h-4 w-4 mr-2" /> Add Entry
                 </Button>
+                */}
               </div>
 
               <DataTable

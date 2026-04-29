@@ -40,9 +40,12 @@ import {
 } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
 import { formatDateTime } from '@/app/lib/date';
+import { toast } from 'sonner';
+import { useConfirm } from '@/app/components/ConfirmDialog';
 
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
+  const confirm = useConfirm();
   const [users, setUsers] = useState<UserAdmin[]>([]);
   const [roles, setRoles] = useState<{ id: number; name: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -102,11 +105,18 @@ export default function UsersPage() {
   };
 
   const handleDelete = async (user: UserAdmin) => {
-    if (!confirm(`Are you sure you want to delete ${user.email}?`)) return;
+    const ok = await confirm({
+      title: 'Delete user?',
+      description: `Are you sure you want to delete ${user.email}? This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     const result = await deleteUser(user.id);
     if (result.error) {
-      alert(result.error);
+      toast.error(result.error);
     } else {
+      toast.success('User deleted');
       fetchUsers();
     }
   };
@@ -115,15 +125,17 @@ export default function UsersPage() {
     if (user.is_active) {
       const result = await deactivateUser(user.id);
       if (result.error) {
-        alert(result.error);
+        toast.error(result.error);
       } else {
+        toast.success('User deactivated');
         fetchUsers();
       }
     } else {
       const result = await activateUser(user.id);
       if (result.error) {
-        alert(result.error);
+        toast.error(result.error);
       } else {
+        toast.success('User activated');
         fetchUsers();
       }
     }

@@ -32,6 +32,8 @@ import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users } from 'lucide-r
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { formatDate } from '@/app/lib/date';
+import { toast } from 'sonner';
+import { useConfirm } from '@/app/components/ConfirmDialog';
 
 // ─── Shared types ────────────────────────────────────────────────────────────
 
@@ -40,9 +42,30 @@ export interface BaseModuleEntry {
   date: string;
   added_by: number;
   added_by_name: string;
+  on_behalf_of: number | null;
+  on_behalf_of_name: string | null;
   added_at: string;
   is_editable: boolean;
   [key: string]: unknown;
+}
+
+export function AddedByCell({ entry }: { entry: { added_by_name: string; on_behalf_of_name: string | null } }) {
+  const ownerName = entry.on_behalf_of_name || entry.added_by_name;
+  return (
+    <div className="flex items-center gap-2">
+      <UserAvatar name={ownerName} />
+      <div className="flex flex-col min-w-0">
+        <span className="text-sm font-medium text-[#374151] truncate max-w-[140px]">
+          {ownerName}
+        </span>
+        {entry.on_behalf_of_name && (
+          <span className="text-[10px] text-[#9CA3AF] truncate max-w-[140px]">
+            by admin: {entry.added_by_name}
+          </span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export interface WeeklyColumnSpec<T> {
@@ -94,6 +117,10 @@ function addDays(d: Date, n: number): Date {
   const r = new Date(d);
   r.setDate(r.getDate() + n);
   return r;
+}
+
+function ownerId(e: { added_by: number; on_behalf_of?: number | null }): number {
+  return e.on_behalf_of ?? e.added_by;
 }
 
 function sameDay(a: Date, b: Date): boolean {
@@ -224,7 +251,7 @@ function PersonalDailyTracker<T extends BaseModuleEntry>({
             const isSunday = d.getDay() === 0;
             const isToday = sameDay(d, today);
             const isPast = d < today && !isToday;
-            const hasEntry = monthEntries.some((e) => e.date === ds && e.added_by === currentUserId);
+            const hasEntry = monthEntries.some((e) => e.date === ds && ownerId(e) === currentUserId);
 
             let indicatorBg = '';
             let indicatorStyle: React.CSSProperties | undefined;
@@ -531,9 +558,9 @@ function WeeklyView<T extends BaseModuleEntry>({
     const ds = toLocalDateString(d);
     let entries = monthEntries.filter((e) => e.date === ds);
     if (weeklyUserFilter !== 'all') {
-      entries = entries.filter((e) => String(e.added_by) === weeklyUserFilter);
+      entries = entries.filter((e) => String(ownerId(e)) === weeklyUserFilter);
     } else if (!isAdmin) {
-      entries = entries.filter((e) => e.added_by === currentUserId);
+      entries = entries.filter((e) => ownerId(e) === currentUserId);
     }
     return entries.sort((a, b) => new Date(b.added_at).getTime() - new Date(a.added_at).getTime());
   };
@@ -642,8 +669,8 @@ function WeeklyView<T extends BaseModuleEntry>({
                       (e) =>
                         e.date === toLocalDateString(d) &&
                         (weeklyUserFilter === 'all'
-                          ? e.added_by === currentUserId
-                          : String(e.added_by) === weeklyUserFilter)
+                          ? ownerId(e) === currentUserId
+                          : String(ownerId(e)) === weeklyUserFilter)
                     )
                   : false;
 
@@ -683,7 +710,7 @@ function WeeklyView<T extends BaseModuleEntry>({
                         canAddToday && !todayEntryExists ? (
                           <Button
                             size="sm"
-                            className="h-8 px-3 text-xs font-medium bg-[#09090B] hover:bg-[#1a1a1a] text-white rounded-lg gap-1"
+                            className="h-8 px-3 text-xs font-medium rounded-lg gap-1"
                             onClick={() => onAddRecord(toLocalDateString(d))}
                           >
                             <Plus className="h-3.5 w-3.5" />
@@ -759,12 +786,7 @@ function WeeklyView<T extends BaseModuleEntry>({
                       );
                     })}
                     <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <UserAvatar name={entry.added_by_name} />
-                        <span className="text-sm font-medium text-[#374151] truncate max-w-[120px]">
-                          {entry.added_by_name}
-                        </span>
-                      </div>
+                      <AddedByCell entry={entry} />
                     </td>
                     <td className="px-5 py-3">
                       <StatusBadge type={statusType} />
@@ -899,12 +921,12 @@ function EntryModal<T extends BaseModuleEntry>({
               {error}
             </div>
           )}
-          <FormDatePicker
-            label="Date"
-            value={formData.date}
-            onChange={(date) => setFormData((prev) => ({ ...prev, date }))}
-            required
-          />
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-[#374151]">Date</Label>
+            <div className="h-9 px-3 flex items-center rounded-md border border-[#E4E4E4] bg-[#F9F9F9] text-sm text-[#374151]">
+              {formData.date ? formatDate(formData.date) : '—'}
+            </div>
+          </div>
           {modalFields.map((f) => (
             <div key={f.key} className="space-y-2">
               <Label className="text-sm font-medium text-[#374151]">{f.label}</Label>
@@ -962,6 +984,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { canSeeAllData, user } = useAuth();
+  const confirm = useConfirm();
 
   const isAdmin = canSeeAllData();
   const currentUserId = user?.id;
@@ -1005,17 +1028,36 @@ export function KpiModulePage<T extends BaseModuleEntry>({
     router.push(`?${params.toString()}`);
   };
 
-  const fetchMonthEntries = useCallback(async (year: number, month: number) => {
+  const fetchEntriesForMonths = useCallback(async (months: Array<[number, number]>) => {
     try {
-      const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-      const lastDay = toLocalDateString(new Date(year, month + 1, 0));
-      const params = new URLSearchParams({ date_from: firstDay, date_to: lastDay, page_size: '1000' });
-      const result = await fetchApi<{ results: T[] }>(`/api/entries/${apiSlug}/?${params}`);
-      setMonthEntries(result.data?.results || []);
+      const unique = Array.from(new Set(months.map(([y, m]) => `${y}-${m}`))).map((s) => {
+        const [y, m] = s.split('-').map(Number);
+        return [y, m] as [number, number];
+      });
+      const responses = await Promise.all(
+        unique.map(([year, month]) => {
+          const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+          const lastDay = toLocalDateString(new Date(year, month + 1, 0));
+          const params = new URLSearchParams({ date_from: firstDay, date_to: lastDay, page_size: '1000' });
+          return fetchApi<{ results: T[] }>(`/api/entries/${apiSlug}/?${params}`);
+        })
+      );
+      const merged = new Map<number, T>();
+      for (const res of responses) {
+        for (const entry of res.data?.results || []) {
+          merged.set(entry.id, entry);
+        }
+      }
+      setMonthEntries(Array.from(merged.values()));
     } catch {
       setMonthEntries([]);
     }
   }, [apiSlug]);
+
+  const fetchMonthEntries = useCallback(
+    (year: number, month: number) => fetchEntriesForMonths([[year, month]]),
+    [fetchEntriesForMonths]
+  );
 
   const fetchDataEntries = useCallback(async () => {
     setDataLoading(true);
@@ -1039,25 +1081,24 @@ export function KpiModulePage<T extends BaseModuleEntry>({
     getUsersForModule(moduleKey).then((res) => {
       if (res.data) {
         setModuleUsers(res.data);
-        if (res.data.length > 0) {
+        if (currentUserId) {
+          setWeeklyUserFilter(String(currentUserId));
+        } else if (res.data.length > 0) {
           setWeeklyUserFilter(String(res.data[0].id));
         }
       }
     });
-  }, [isAdmin, moduleKey]);
-
-  useEffect(() => {
-    fetchMonthEntries(calYear, calMonth);
-  }, [calYear, calMonth, fetchMonthEntries]);
+  }, [isAdmin, moduleKey, currentUserId]);
 
   useEffect(() => {
     const weekEndDay = addDays(weekStart, 6);
-    if (weekStart.getMonth() !== calMonth || weekStart.getFullYear() !== calYear) {
-      fetchMonthEntries(weekStart.getFullYear(), weekStart.getMonth());
-    } else if (weekEndDay.getMonth() !== calMonth) {
-      fetchMonthEntries(weekEndDay.getFullYear(), weekEndDay.getMonth());
-    }
-  }, [weekStart, calYear, calMonth, fetchMonthEntries]);
+    const months: Array<[number, number]> = [
+      [calYear, calMonth],
+      [weekStart.getFullYear(), weekStart.getMonth()],
+      [weekEndDay.getFullYear(), weekEndDay.getMonth()],
+    ];
+    fetchEntriesForMonths(months);
+  }, [calYear, calMonth, weekStart, fetchEntriesForMonths]);
 
   useEffect(() => {
     if (activeView === 'data') fetchDataEntries();
@@ -1075,7 +1116,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
 
   const todayStr = toLocalDateString(today);
   const todaySubmitted = monthEntries.some(
-    (e) => e.date === todayStr && e.added_by === currentUserId
+    (e) => e.date === todayStr && ownerId(e) === currentUserId
   );
 
   const handleSave = async (formData: Record<string, unknown>) => {
@@ -1103,7 +1144,13 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   };
 
   const handleDelete = async (entry: T) => {
-    if (!confirm('Are you sure you want to delete this entry?')) return;
+    const ok = await confirm({
+      title: 'Delete entry?',
+      description: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     const result = await fetchApi<void>(`/api/entries/${apiSlug}/${entry.id}/`, {
       method: 'DELETE',
     });
@@ -1111,7 +1158,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
       fetchMonthEntries(calYear, calMonth);
       if (activeView === 'data') fetchDataEntries();
     } else {
-      alert(result.error || 'Failed to delete entry');
+      toast.error(result.error || 'Failed to delete entry');
     }
   };
 
@@ -1131,14 +1178,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   const addedByColumn: DataColumnSpec<T> = {
     key: 'added_by_name',
     header: 'Added by',
-    render: (item: T) => (
-      <div className="flex items-center gap-2">
-        <UserAvatar name={item.added_by_name} />
-        <span className="text-sm font-medium text-[#374151] truncate max-w-[120px]">
-          {item.added_by_name}
-        </span>
-      </div>
-    ),
+    render: (item: T) => <AddedByCell entry={item} />,
   };
 
   const addedOnColumn: DataColumnSpec<T> = {
@@ -1192,15 +1232,17 @@ export function KpiModulePage<T extends BaseModuleEntry>({
           </div>
         )}
 
+        {/* TODO: confirm with PM whether to keep configurable. Hidden per Bug 11.
         <Button
           onClick={() => openAddModal()}
           disabled={todaySubmitted}
           title={todaySubmitted ? 'Already submitted today' : undefined}
-          className="h-9 px-4 text-sm font-medium bg-[#09090B] hover:bg-[#1a1a1a] text-white rounded-lg gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="h-9 px-4 text-sm font-medium rounded-lg gap-1.5"
         >
           <Plus className="h-4 w-4" />
           Add record
         </Button>
+        */}
       </div>
 
       <div className="flex-1 min-h-0">
@@ -1228,9 +1270,24 @@ export function KpiModulePage<T extends BaseModuleEntry>({
       monthEntries={monthEntries}
       today={today}
       weeklyColumns={weeklyColumns}
-      onPrevWeek={() => setWeekStart(d => addDays(d, -7))}
-      onNextWeek={() => setWeekStart(d => addDays(d, 7))}
-      onGoToCurrentWeek={() => setWeekStart(startOfWeek(today))}
+      onPrevWeek={() => {
+        const next = addDays(weekStart, -7);
+        setWeekStart(next);
+        setCalYear(next.getFullYear());
+        setCalMonth(next.getMonth());
+      }}
+      onNextWeek={() => {
+        const next = addDays(weekStart, 7);
+        setWeekStart(next);
+        setCalYear(next.getFullYear());
+        setCalMonth(next.getMonth());
+      }}
+      onGoToCurrentWeek={() => {
+        const next = startOfWeek(today);
+        setWeekStart(next);
+        setCalYear(today.getFullYear());
+        setCalMonth(today.getMonth());
+      }}
       onAddRecord={openAddModal}
       onEdit={openEditModal}
       onDelete={handleDelete}

@@ -12,12 +12,24 @@ class BaseEntry(models.Model):
         on_delete=models.CASCADE,
         related_name='%(class)s_entries'
     )
+    on_behalf_of = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='%(class)s_on_behalf_entries',
+        null=True,
+        blank=True,
+    )
     added_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         abstract = True
         ordering = ['-date', '-added_at']
+
+    @property
+    def owner(self):
+        """The effective record owner — on_behalf_of if set, else added_by."""
+        return self.on_behalf_of or self.added_by
 
     def is_editable(self):
         """Check if entry is within 30-minute edit window."""

@@ -1,5 +1,5 @@
 from rest_framework import viewsets, status, filters
-from django.db.models import Count
+from django.db.models import Count, Q
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -48,36 +48,53 @@ class BaseEntryViewSet(viewsets.ModelViewSet):
     module_key = None  # Override in subclasses for permission checking
 
     def get_queryset(self):
-        """Filter based on user's data visibility permission."""
+        """Filter based on user's data visibility permission.
+
+        Records are visible to a user under "own" scope when the user is either
+        the literal `added_by` OR the `on_behalf_of` (i.e. an admin entered for them).
+        """
         queryset = super().get_queryset()
         user = self.request.user
 
-        # Check if user can see all data
         can_see_all = (
             user.is_staff or
             (hasattr(user, 'role') and user.role and user.role.data_visibility == 'all')
         )
 
         if not can_see_all:
-            queryset = queryset.filter(added_by=user)
+            queryset = queryset.filter(Q(added_by=user) | Q(on_behalf_of=user))
 
-        # Apply user filter if provided and user has permission
         user_filter = self.request.query_params.get('user_id')
         if user_filter and can_see_all:
-            queryset = queryset.filter(added_by_id=user_filter)
+            # Filter to records where the target user is the effective owner.
+            queryset = queryset.filter(
+                Q(on_behalf_of_id=user_filter)
+                | (Q(on_behalf_of__isnull=True) & Q(added_by_id=user_filter))
+            )
 
         return queryset
 
+    def _resolve_on_behalf_of(self):
+        """If staff is creating on behalf of another user, return that user; else None."""
+        request_user = self.request.user
+        target = self.request.data.get('added_by')
+        if not (request_user.is_staff and target):
+            return None
+        if str(target) == str(request_user.id):
+            return None
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            return User.objects.get(id=target)
+        except (User.DoesNotExist, ValueError, TypeError):
+            return None
+
     def perform_create(self, serializer):
-        """Set the added_by field to the current user, or allow staff to specify."""
-        if self.request.user.is_staff and 'added_by' in self.request.data:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            try:
-                target_user = User.objects.get(id=self.request.data['added_by'])
-                serializer.save(added_by=target_user)
-            except User.DoesNotExist:
-                serializer.save(added_by=self.request.user)
+        """Record `added_by` = the actual creator; if a staff user is creating
+        on behalf of another user, also set `on_behalf_of` to that target user."""
+        on_behalf = self._resolve_on_behalf_of()
+        if on_behalf is not None:
+            serializer.save(added_by=self.request.user, on_behalf_of=on_behalf)
         else:
             serializer.save(added_by=self.request.user)
 
@@ -150,7 +167,11 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
         return super().get_queryset().prefetch_related('status_transitions')
 
     def perform_create(self, serializer):
-        instance = serializer.save(added_by=self.request.user)
+        on_behalf = self._resolve_on_behalf_of()
+        save_kwargs = {'added_by': self.request.user}
+        if on_behalf is not None:
+            save_kwargs['on_behalf_of'] = on_behalf
+        instance = serializer.save(**save_kwargs)
         MotorClaimStatusTransition.objects.create(
             entry=instance,
             from_status='',
@@ -277,7 +298,11 @@ class MedicalClaimEntryViewSet(BaseEntryViewSet):
         return super().get_queryset().prefetch_related('status_transitions')
 
     def perform_create(self, serializer):
-        instance = serializer.save(added_by=self.request.user)
+        on_behalf = self._resolve_on_behalf_of()
+        save_kwargs = {'added_by': self.request.user}
+        if on_behalf is not None:
+            save_kwargs['on_behalf_of'] = on_behalf
+        instance = serializer.save(**save_kwargs)
         MedicalClaimStatusTransition.objects.create(
             entry=instance,
             from_status='',

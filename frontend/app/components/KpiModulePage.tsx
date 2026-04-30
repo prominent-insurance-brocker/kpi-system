@@ -186,6 +186,7 @@ function PersonalDailyTracker<T extends BaseModuleEntry>({
   today,
   monthEntries,
   currentUserId,
+  userFullName,
   onPrevMonth,
   onNextMonth,
   onGoToday,
@@ -195,11 +196,13 @@ function PersonalDailyTracker<T extends BaseModuleEntry>({
   today: Date;
   monthEntries: T[];
   currentUserId: number | undefined;
+  userFullName: string;
   onPrevMonth: () => void;
   onNextMonth: () => void;
   onGoToday: () => void;
 }) {
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const trackerTitle = userFullName ? `${userFullName}'s Daily Tracker` : 'Daily Tracker';
 
   return (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
@@ -209,7 +212,7 @@ function PersonalDailyTracker<T extends BaseModuleEntry>({
           <path d="M1 6h14" stroke="currentColor" strokeWidth="1.5" />
           <path d="M5 1v2M11 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        <span className="text-sm font-semibold text-[#09090B]">Daily Tracker</span>
+        <span className="text-sm font-semibold text-[#09090B]">{trackerTitle}</span>
       </div>
 
       <div className="flex items-center justify-between px-5 py-2 border-b border-[#E4E4E4]">
@@ -353,17 +356,14 @@ function TrackerView<T extends BaseModuleEntry>({
           <path d="M1 6h14" stroke="currentColor" strokeWidth="1.5" />
           <path d="M5 1v2M11 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        <span className="text-sm font-semibold text-[#09090B]">Daily Tracker</span>
+        <span className="text-sm font-semibold text-[#09090B]">Team Daily Tracker</span>
       </div>
 
       <div className="bg-white flex items-center justify-between px-5 py-2 border-b border-[#E4E4E4] flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
-            <button className="px-3 py-1.5 bg-white text-[#09090B] border-r border-[#E4E4E4]">
+            <button className="px-3 py-1.5 bg-white text-[#09090B]">
               Month
-            </button>
-            <button className="px-3 py-1.5 text-[#71717A] hover:bg-[#F9F9F9] transition-colors">
-              Year
             </button>
           </div>
 
@@ -994,8 +994,11 @@ export function KpiModulePage<T extends BaseModuleEntry>({
 
   const [activeView, setActiveView] = useState<'tracker' | 'weekly' | 'data'>('weekly');
 
-  const [calYear, setCalYear] = useState(today.getFullYear());
-  const [calMonth, setCalMonth] = useState(today.getMonth());
+  // Independent calendar state per tracker (Item 7: navigation must not couple).
+  const [personalCalYear, setPersonalCalYear] = useState(today.getFullYear());
+  const [personalCalMonth, setPersonalCalMonth] = useState(today.getMonth());
+  const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());
+  const [teamCalMonth, setTeamCalMonth] = useState(today.getMonth());
   const [trackerUserFilter, setTrackerUserFilter] = useState('all');
 
   const [weekStart, setWeekStart] = useState<Date>(startOfWeek(today));
@@ -1054,10 +1057,22 @@ export function KpiModulePage<T extends BaseModuleEntry>({
     }
   }, [apiSlug]);
 
-  const fetchMonthEntries = useCallback(
-    (year: number, month: number) => fetchEntriesForMonths([[year, month]]),
-    [fetchEntriesForMonths]
-  );
+  const refetchAllMonths = useCallback(() => {
+    const weekEndDay = addDays(weekStart, 6);
+    fetchEntriesForMonths([
+      [personalCalYear, personalCalMonth],
+      [teamCalYear, teamCalMonth],
+      [weekStart.getFullYear(), weekStart.getMonth()],
+      [weekEndDay.getFullYear(), weekEndDay.getMonth()],
+    ]);
+  }, [
+    fetchEntriesForMonths,
+    personalCalYear,
+    personalCalMonth,
+    teamCalYear,
+    teamCalMonth,
+    weekStart,
+  ]);
 
   const fetchDataEntries = useCallback(async () => {
     setDataLoading(true);
@@ -1091,28 +1106,38 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   }, [isAdmin, moduleKey, currentUserId]);
 
   useEffect(() => {
-    const weekEndDay = addDays(weekStart, 6);
-    const months: Array<[number, number]> = [
-      [calYear, calMonth],
-      [weekStart.getFullYear(), weekStart.getMonth()],
-      [weekEndDay.getFullYear(), weekEndDay.getMonth()],
-    ];
-    fetchEntriesForMonths(months);
-  }, [calYear, calMonth, weekStart, fetchEntriesForMonths]);
+    refetchAllMonths();
+  }, [refetchAllMonths]);
 
   useEffect(() => {
     if (activeView === 'data') fetchDataEntries();
   }, [activeView, page, pageSize, dataDateRange, dataUserFilter, fetchDataEntries]);
 
-  const prevMonth = () => {
-    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
-    else setCalMonth(m => m - 1);
+  const prevPersonalMonth = () => {
+    if (personalCalMonth === 0) { setPersonalCalYear(y => y - 1); setPersonalCalMonth(11); }
+    else setPersonalCalMonth(m => m - 1);
   };
-  const nextMonth = () => {
-    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
-    else setCalMonth(m => m + 1);
+  const nextPersonalMonth = () => {
+    if (personalCalMonth === 11) { setPersonalCalYear(y => y + 1); setPersonalCalMonth(0); }
+    else setPersonalCalMonth(m => m + 1);
   };
-  const goToday = () => { setCalYear(today.getFullYear()); setCalMonth(today.getMonth()); };
+  const goPersonalToday = () => {
+    setPersonalCalYear(today.getFullYear());
+    setPersonalCalMonth(today.getMonth());
+  };
+
+  const prevTeamMonth = () => {
+    if (teamCalMonth === 0) { setTeamCalYear(y => y - 1); setTeamCalMonth(11); }
+    else setTeamCalMonth(m => m - 1);
+  };
+  const nextTeamMonth = () => {
+    if (teamCalMonth === 11) { setTeamCalYear(y => y + 1); setTeamCalMonth(0); }
+    else setTeamCalMonth(m => m + 1);
+  };
+  const goTeamToday = () => {
+    setTeamCalYear(today.getFullYear());
+    setTeamCalMonth(today.getMonth());
+  };
 
   const todayStr = toLocalDateString(today);
   const todaySubmitted = monthEntries.some(
@@ -1136,7 +1161,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
       setIsModalOpen(false);
       setEditingEntry(null);
       setModalDate('');
-      fetchMonthEntries(calYear, calMonth);
+      refetchAllMonths();
       if (activeView === 'data') fetchDataEntries();
     } else {
       setModalError(result.error || 'Failed to save entry');
@@ -1155,7 +1180,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
       method: 'DELETE',
     });
     if (!result.error) {
-      fetchMonthEntries(calYear, calMonth);
+      refetchAllMonths();
       if (activeView === 'data') fetchDataEntries();
     } else {
       toast.error(result.error || 'Failed to delete entry');
@@ -1270,24 +1295,9 @@ export function KpiModulePage<T extends BaseModuleEntry>({
       monthEntries={monthEntries}
       today={today}
       weeklyColumns={weeklyColumns}
-      onPrevWeek={() => {
-        const next = addDays(weekStart, -7);
-        setWeekStart(next);
-        setCalYear(next.getFullYear());
-        setCalMonth(next.getMonth());
-      }}
-      onNextWeek={() => {
-        const next = addDays(weekStart, 7);
-        setWeekStart(next);
-        setCalYear(next.getFullYear());
-        setCalMonth(next.getMonth());
-      }}
-      onGoToCurrentWeek={() => {
-        const next = startOfWeek(today);
-        setWeekStart(next);
-        setCalYear(today.getFullYear());
-        setCalMonth(today.getMonth());
-      }}
+      onPrevWeek={() => setWeekStart(addDays(weekStart, -7))}
+      onNextWeek={() => setWeekStart(addDays(weekStart, 7))}
+      onGoToCurrentWeek={() => setWeekStart(startOfWeek(today))}
       onAddRecord={openAddModal}
       onEdit={openEditModal}
       onDelete={handleDelete}
@@ -1324,14 +1334,15 @@ export function KpiModulePage<T extends BaseModuleEntry>({
         <h1 className="text-2xl font-bold text-[#09090B]">{title}</h1>
 
         <PersonalDailyTracker
-          calYear={calYear}
-          calMonth={calMonth}
+          calYear={personalCalYear}
+          calMonth={personalCalMonth}
           today={today}
           monthEntries={monthEntries}
           currentUserId={currentUserId}
-          onPrevMonth={prevMonth}
-          onNextMonth={nextMonth}
-          onGoToday={goToday}
+          userFullName={user?.full_name || ''}
+          onPrevMonth={prevPersonalMonth}
+          onNextMonth={nextPersonalMonth}
+          onGoToday={goPersonalToday}
         />
 
         <Tabs value={agentView} onValueChange={(v) => setActiveView(v as typeof activeView)} className="gap-0">
@@ -1370,14 +1381,15 @@ export function KpiModulePage<T extends BaseModuleEntry>({
       <h1 className="text-2xl font-bold text-[#09090B]">{title}</h1>
 
       <PersonalDailyTracker
-        calYear={calYear}
-        calMonth={calMonth}
+        calYear={personalCalYear}
+        calMonth={personalCalMonth}
         today={today}
         monthEntries={monthEntries}
         currentUserId={currentUserId}
-        onPrevMonth={prevMonth}
-        onNextMonth={nextMonth}
-        onGoToday={goToday}
+        userFullName={user?.full_name || ''}
+        onPrevMonth={prevPersonalMonth}
+        onNextMonth={nextPersonalMonth}
+        onGoToday={goPersonalToday}
       />
 
       <Tabs value={activeView} onValueChange={(v) => setActiveView(v as typeof activeView)} className="gap-0">
@@ -1406,16 +1418,16 @@ export function KpiModulePage<T extends BaseModuleEntry>({
 
         <TabsContent value="tracker" className="mt-4">
           <TrackerView
-            calYear={calYear}
-            calMonth={calMonth}
+            calYear={teamCalYear}
+            calMonth={teamCalMonth}
             monthEntries={monthEntries}
             moduleUsers={moduleUsers}
             trackerUserFilter={trackerUserFilter}
             deptLabel={deptLabel}
             onTrackerUserFilterChange={setTrackerUserFilter}
-            onPrevMonth={prevMonth}
-            onNextMonth={nextMonth}
-            onGoToday={goToday}
+            onPrevMonth={prevTeamMonth}
+            onNextMonth={nextTeamMonth}
+            onGoToday={goTeamToday}
           />
         </TabsContent>
         <TabsContent value="weekly" className="mt-4">

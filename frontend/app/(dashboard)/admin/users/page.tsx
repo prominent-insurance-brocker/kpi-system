@@ -365,6 +365,7 @@ function UserForm({
       <div className="space-y-2">
         <Label>Role</Label>
         <Select
+          key={roles.length}
           value={formData.role_id?.toString() || 'none'}
           onValueChange={(value) =>
             setFormData({ ...formData, role_id: value === 'none' ? null : Number(value) })

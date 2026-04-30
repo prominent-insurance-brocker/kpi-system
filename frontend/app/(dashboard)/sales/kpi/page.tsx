@@ -58,6 +58,8 @@ interface SalesKPIEntry {
   quotes_to_client: number;
   total_conversions: number;
   new_clients_acquired: number;
+  existing_clients: number;
+  existing_clients_closed: number;
   gross_booked_premium: number;
   added_by: number;
   added_by_name: string;
@@ -174,6 +176,7 @@ function PersonalDailyTracker({
   today,
   monthEntries,
   currentUserId,
+  userFullName,
   onPrevMonth,
   onNextMonth,
   onGoToday,
@@ -183,11 +186,13 @@ function PersonalDailyTracker({
   today: Date;
   monthEntries: SalesKPIEntry[];
   currentUserId: number | undefined;
+  userFullName: string;
   onPrevMonth: () => void;
   onNextMonth: () => void;
   onGoToday: () => void;
 }) {
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const trackerTitle = userFullName ? `${userFullName}'s Daily Tracker` : 'Daily Tracker';
 
   return (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
@@ -198,7 +203,7 @@ function PersonalDailyTracker({
           <path d="M1 6h14" stroke="currentColor" strokeWidth="1.5" />
           <path d="M5 1v2M11 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        <span className="text-sm font-semibold text-[#09090B]">Daily Tracker</span>
+        <span className="text-sm font-semibold text-[#09090B]">{trackerTitle}</span>
       </div>
 
       {/* Controls row */}
@@ -346,19 +351,16 @@ function TrackerView({
           <path d="M1 6h14" stroke="currentColor" strokeWidth="1.5" />
           <path d="M5 1v2M11 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        <span className="text-sm font-semibold text-[#09090B]">Daily Tracker</span>
+        <span className="text-sm font-semibold text-[#09090B]">Team Daily Tracker</span>
       </div>
 
       {/* Controls row */}
       <div className="bg-white flex items-center justify-between px-5 py-2 border-b border-[#E4E4E4] flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          {/* Month/Year toggle */}
+          {/* Month toggle */}
           <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
-            <button className="px-3 py-1.5 bg-white text-[#09090B] border-r border-[#E4E4E4]">
+            <button className="px-3 py-1.5 bg-white text-[#09090B]">
               Month
-            </button>
-            <button className="px-3 py-1.5 text-[#71717A] hover:bg-[#F9F9F9] transition-colors">
-              Year
             </button>
           </div>
 
@@ -850,6 +852,16 @@ const dataColumns = [
     tooltip: 'Number of new clients acquired',
   },
   {
+    key: 'existing_clients',
+    header: 'Existing Clients',
+    tooltip: 'Number of existing clients under my account',
+  },
+  {
+    key: 'existing_clients_closed',
+    header: 'Existing Clients Closed',
+    tooltip: 'How many existing clients did I close',
+  },
+  {
     key: 'gross_booked_premium',
     header: 'Gross Booked Premium',
     render: (item: SalesKPIEntry) => formatPremium(item.gross_booked_premium),
@@ -1131,8 +1143,6 @@ export default function SalesKPIPage() {
     if (noCurrentTarget) setIsTargetModalOpen(true);
   }, [noCurrentTarget]);
 
-  const hasActiveFilters = dateFrom || dateTo || userId;
-
   // Determine which target to edit in the modal (card month's target)
   const targetForModal: SalesMonthlyTarget | null = isCurrentMonthCard
     ? currentTarget
@@ -1368,6 +1378,7 @@ export default function SalesKPIPage() {
               today={today}
               monthEntries={monthEntries}
               currentUserId={currentUserId}
+              userFullName={user?.full_name || ''}
               onPrevMonth={prevMonth}
               onNextMonth={nextMonth}
               onGoToday={goToday}
@@ -1476,14 +1487,6 @@ export default function SalesKPIPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                  )}
-                  {hasActiveFilters && (
-                    <Button
-                      variant="outline"
-                      onClick={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', page: 1 })}
-                    >
-                      Clear Filters
-                    </Button>
                   )}
                 </div>
                 {/* TODO: confirm with PM whether to keep configurable. Hidden per Bug 11.
@@ -1758,6 +1761,8 @@ function EntryModal({
     quotes_to_client: '',
     total_conversions: '',
     new_clients_acquired: '',
+    existing_clients: '',
+    existing_clients_closed: '',
     gross_booked_premium: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1771,6 +1776,8 @@ function EntryModal({
         quotes_to_client: String(entry.quotes_to_client),
         total_conversions: String(entry.total_conversions),
         new_clients_acquired: String(entry.new_clients_acquired),
+        existing_clients: String(entry.existing_clients),
+        existing_clients_closed: String(entry.existing_clients_closed),
         gross_booked_premium: String(entry.gross_booked_premium),
       });
     } else {
@@ -1781,6 +1788,8 @@ function EntryModal({
         quotes_to_client: '',
         total_conversions: '',
         new_clients_acquired: '',
+        existing_clients: '',
+        existing_clients_closed: '',
         gross_booked_premium: '',
       });
     }
@@ -1796,6 +1805,8 @@ function EntryModal({
       quotes_to_client: Number(formData.quotes_to_client),
       total_conversions: Number(formData.total_conversions),
       new_clients_acquired: Number(formData.new_clients_acquired),
+      existing_clients: Number(formData.existing_clients),
+      existing_clients_closed: Number(formData.existing_clients_closed),
       gross_booked_premium: Number(formData.gross_booked_premium),
     });
     setIsSubmitting(false);
@@ -1900,6 +1911,51 @@ function EntryModal({
                     value={formData.quotes_from_ops_team}
                     onChange={(e) =>
                       setFormData({ ...formData, quotes_from_ops_team: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Client Retention */}
+            <div>
+              <h3 className="text-base font-semibold text-[#343434] mb-3">
+                Client Retention
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1">
+                    Existing Clients
+                    <Tooltip text="Number of existing clients under my account">
+                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
+                    </Tooltip>
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="Enter count"
+                    value={formData.existing_clients}
+                    onChange={(e) =>
+                      setFormData({ ...formData, existing_clients: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1">
+                    Existing Clients Closed
+                    <Tooltip text="How many existing clients did I close">
+                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
+                    </Tooltip>
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="Enter count"
+                    value={formData.existing_clients_closed}
+                    onChange={(e) =>
+                      setFormData({ ...formData, existing_clients_closed: e.target.value })
                     }
                     required
                   />

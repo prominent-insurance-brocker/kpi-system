@@ -44,7 +44,7 @@ Services: PostgreSQL, Metabase (:3001), backend (:8000), frontend (:3000). A rev
 ## Key Domain Concepts
 
 - **11 Modules**: general_new, general_renewal, general_claim (placeholder), motor_new, motor_renewal, motor_claim, sales_premium_data, sales_kpi, marine_new, marine_renewal, medical_claim
-- **Claim modules** (motor_claim, medical_claim): Per-customer status tracking with state machine (claims_opened → claims_pending → claims_resolved/claims_rejected), calculated TAT, and status transition history
+- **Claim modules** (motor_claim, medical_claim): Per-customer status tracking with state machine (claims_opened → claims_in_progress → claims_resolved/claims_rejected), calculated TAT, and status transition history
 - **RBAC**: Each user has one Role. Roles grant per-module access + data visibility (`all` or `own`)
 - **30-minute edit window**: Users can only edit their own entries within 30 minutes of creation
 - **Magic link auth**: No passwords. Users enter email, receive a single-use login link

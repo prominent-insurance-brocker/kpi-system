@@ -44,14 +44,14 @@ interface FilterUser {
 
 interface MedicalClaimStats {
   claims_opened: number;
-  claims_pending: number;
+  claims_in_progress: number;
   claims_resolved: number;
   claims_rejected: number;
 }
 
 const STATUS_OPTIONS = [
   { value: 'claims_opened', label: 'Claims Opened' },
-  { value: 'claims_pending', label: 'Claims Pending' },
+  { value: 'claims_in_progress', label: 'Claims In Progress' },
   { value: 'claims_resolved', label: 'Claims Resolved' },
   { value: 'claims_rejected', label: 'Claims Rejected' },
 ];
@@ -63,7 +63,7 @@ const getStatusLabel = (value: string) => {
 
 const STATUS_COLORS: Record<string, string> = {
   claims_opened: 'bg-blue-100 text-blue-800',
-  claims_pending: 'bg-yellow-100 text-yellow-800',
+  claims_in_progress: 'bg-yellow-100 text-yellow-800',
   claims_resolved: 'bg-green-100 text-green-800',
   claims_rejected: 'bg-red-100 text-red-800',
 };
@@ -284,10 +284,10 @@ export default function MedicalClaimPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Claims Pending</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Claims In Progress</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{stats.claims_pending}</div>
+              <div className="text-2xl font-bold text-yellow-600">{stats.claims_in_progress}</div>
             </CardContent>
           </Card>
           <Card>

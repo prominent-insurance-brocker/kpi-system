@@ -5,7 +5,8 @@
       "Bash(xargs basename *)",
       "Bash(./.venv/Scripts/python.exe manage.py makemigrations entries --name add_on_behalf_of)",
       "Bash(./.venv/Scripts/python.exe manage.py migrate)",
-      "Bash(./.venv/Scripts/python.exe -c \"import django; django.setup\\(\\) if False else None; from django.core.management import call_command; call_command\\('check'\\)\")"
+      "Bash(./.venv/Scripts/python.exe -c \"import django; django.setup\\(\\) if False else None; from django.core.management import call_command; call_command\\('check'\\)\")",
+      "Bash(serializers\")"
     ]
   }
 }

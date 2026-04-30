@@ -358,7 +358,7 @@ class MedicalClaimEntryViewSet(BaseEntryViewSet):
 
         counts = {
             'claims_opened': 0,
-            'claims_pending': 0,
+            'claims_in_progress': 0,
             'claims_resolved': 0,
             'claims_rejected': 0,
         }

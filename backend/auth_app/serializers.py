@@ -28,7 +28,12 @@ class UserSerializer(serializers.ModelSerializer):
 class UserAdminSerializer(serializers.ModelSerializer):
     """Serializer for admin user management."""
     role_name = serializers.SerializerMethodField()
-    role_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    role_id = serializers.PrimaryKeyRelatedField(
+        source='role',
+        queryset=Role.objects.all(),
+        allow_null=True,
+        required=False,
+    )
 
     class Meta:
         model = CustomUser
@@ -42,40 +47,15 @@ class UserAdminSerializer(serializers.ModelSerializer):
     def get_role_name(self, obj):
         return obj.role.name if obj.role else None
 
-    def to_representation(self, instance):
-        """Add role_id to the output."""
-        ret = super().to_representation(instance)
-        ret['role_id'] = instance.role_id
-        return ret
-
     def create(self, validated_data):
-        # Extract role_id and convert to role
-        role_id = validated_data.pop('role_id', None)
-        role = None
-        if role_id:
-            role = Role.objects.filter(id=role_id).first()
-
-        # Create user without password (magic link only)
+        # Magic-link auth: no password.
+        role = validated_data.pop('role', None)
         user = CustomUser.objects.create_user(
             email=validated_data['email'],
-            password=None,  # No password for magic link auth
+            password=None,
             full_name=validated_data.get('full_name', ''),
             role=role,
             is_staff=validated_data.get('is_staff', False),
             is_active=validated_data.get('is_active', True),
         )
         return user
-
-    def update(self, instance, validated_data):
-        # Handle role_id separately
-        role_id = validated_data.pop('role_id', None)
-        if role_id is not None:
-            instance.role = Role.objects.filter(id=role_id).first()
-        elif 'role_id' in self.initial_data and self.initial_data['role_id'] is None:
-            instance.role = None
-
-        # Update other fields
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        return instance

@@ -280,7 +280,7 @@ def get_documentation():
         "new_clients_acquired, and gross_booked_premium (actual gross premium booked, decimal currency amount).",
 
         "The 'Medical Claim' module (entries_medicalclaimentry) tracks medical insurance claims: "
-        "customer_name (name of the customer) and status (one of 'claims_opened', 'claims_pending', 'claims_resolved').",
+        "customer_name (name of the customer) and status (one of 'claims_opened', 'claims_in_progress', 'claims_resolved', 'claims_rejected').",
 
         "All entry tables have an added_by_id foreign key to auth_app_customuser. "
         "To find who entered data, JOIN with auth_app_customuser ON added_by_id = auth_app_customuser.id.",
@@ -355,7 +355,7 @@ def get_example_queries():
                 "sql": """
                     SELECT COUNT(*) AS total_pending_medical_claims
                     FROM entries_medicalclaimentry
-                    WHERE status = 'claims_pending';
+                    WHERE status = 'claims_in_progress';
                 """,
             },
             {
@@ -470,7 +470,7 @@ def get_example_queries():
                 "sql": """
                     SELECT COUNT(*) AS total_pending_medical_claims
                     FROM entries_medicalclaimentry
-                    WHERE status = 'claims_pending';
+                    WHERE status = 'claims_in_progress';
                 """,
             },
             {

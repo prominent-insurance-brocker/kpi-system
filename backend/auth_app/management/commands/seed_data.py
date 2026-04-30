@@ -461,6 +461,7 @@ class Command(BaseCommand):
             if not user:
                 continue
             for entry_date in dates:
+                existing = random.randint(20, 80)
                 _, created = SalesKPIEntry.objects.get_or_create(
                     date=entry_date,
                     added_by=user,
@@ -470,6 +471,8 @@ class Command(BaseCommand):
                         'quotes_to_client': random.randint(10, 99),
                         'total_conversions': random.randint(10, 99),
                         'new_clients_acquired': random.randint(10, 99),
+                        'existing_clients': existing,
+                        'existing_clients_closed': random.randint(0, existing),
                         'gross_booked_premium': Decimal(str(random.randint(50000, 200000))),
                     }
                 )
@@ -484,7 +487,7 @@ class Command(BaseCommand):
             'Sara Ibrahim', 'Khalid Omar', 'Noor Ali', 'Yusuf Mahmoud',
             'Layla Ahmed', 'Hassan Mustafa', 'Amira Saleh',
         ]
-        statuses = ['claims_opened', 'claims_pending', 'claims_resolved']
+        statuses = ['claims_opened', 'claims_in_progress', 'claims_resolved']
         count = 0
         for user in users:
             if not user:

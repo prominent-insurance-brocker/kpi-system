@@ -576,7 +576,9 @@ function WeeklyView({
       ? `${formatShortDate(weekStart)} – ${formatShortDate(weekEndDay)}, ${weekEndDay.getFullYear()}`
       : `${formatShortDate(weekStart)}, ${weekStart.getFullYear()} – ${formatShortDate(weekEndDay)}, ${weekEndDay.getFullYear()}`;
 
-  const effectiveUserId = weeklyUserFilter !== 'all' ? Number(weeklyUserFilter) : currentUserId;
+  // Admin can only add records for themselves; viewing another user is read-only.
+  const isViewingSelf =
+    weeklyUserFilter === 'all' || weeklyUserFilter === String(currentUserId);
 
   return (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
@@ -660,7 +662,7 @@ function WeeklyView({
                 let statusType: 'submitted' | 'not_submitted' | 'upcoming' = 'upcoming';
                 if (past && !isSun) statusType = 'not_submitted';
 
-                const canAddToday = isToday && !isSun;
+                const canAddToday = isToday && !isSun && isViewingSelf;
                 const todayEntryExists = isToday
                   ? monthEntries.some(
                       (e) =>
@@ -719,7 +721,7 @@ function WeeklyView({
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      {!isSun && (
+                      {!isSun && isViewingSelf && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button className="w-8 h-8 flex items-center justify-center rounded-md text-[#9CA3AF] hover:text-[#09090B] hover:bg-[#F3F3F3] transition-colors">
@@ -800,7 +802,7 @@ function WeeklyView({
                               Edit
                             </DropdownMenuItem>
                           )}
-                          {(entry.added_by === effectiveUserId || isAdmin) && (
+                          {entry.added_by === currentUserId && (
                             <DropdownMenuItem
                               onClick={() => onDelete(entry)}
                               className="cursor-pointer px-3 py-2 text-sm text-red-600 rounded-md"
@@ -913,7 +915,6 @@ export default function SalesKPIPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<SalesKPIEntry | null>(null);
   const [modalInitialDate, setModalInitialDate] = useState('');
-  const [modalUserOverride, setModalUserOverride] = useState<number | undefined>(undefined);
   const [error, setError] = useState('');
 
   // Target state
@@ -1078,22 +1079,15 @@ export default function SalesKPIPage() {
       ? `/api/entries/sales-kpi/${editingEntry.id}/`
       : `/api/entries/sales-kpi/`;
 
-    const body: Record<string, unknown> = { ...formData };
-    // Admins creating/editing on behalf of another user (via Tracker/Weekly)
-    if (!editingEntry && isAdmin && modalUserOverride) {
-      body.added_by = modalUserOverride;
-    }
-
     const result = await fetchApi<SalesKPIEntry>(endpoint, {
       method: editingEntry ? 'PATCH' : 'POST',
-      body: JSON.stringify(body),
+      body: JSON.stringify(formData),
     });
 
     if (result.data) {
       setIsModalOpen(false);
       setEditingEntry(null);
       setModalInitialDate('');
-      setModalUserOverride(undefined);
       refreshAll();
     } else {
       setError(result.error || 'Failed to save entry');
@@ -1216,7 +1210,7 @@ export default function SalesKPIPage() {
     setCalMonth(today.getMonth());
   };
 
-  const openAddModal = (date?: string, userOverride?: number) => {
+  const openAddModal = (date?: string) => {
     if (noCurrentTarget) {
       setIsTargetModalOpen(true);
       return;
@@ -1224,7 +1218,6 @@ export default function SalesKPIPage() {
     setEditingEntry(null);
     setError('');
     setModalInitialDate(date || toLocalDateString(today));
-    setModalUserOverride(userOverride);
     setIsModalOpen(true);
   };
 
@@ -1232,16 +1225,11 @@ export default function SalesKPIPage() {
     setEditingEntry(entry);
     setError('');
     setModalInitialDate('');
-    setModalUserOverride(undefined);
     setIsModalOpen(true);
   };
 
   const onWeeklyAdd = (dateStr: string) => {
-    const override =
-      isAdmin && weeklyUserFilter && weeklyUserFilter !== 'all'
-        ? Number(weeklyUserFilter)
-        : undefined;
-    openAddModal(dateStr, override);
+    openAddModal(dateStr);
   };
 
   return (
@@ -1511,6 +1499,7 @@ export default function SalesKPIPage() {
                 onEdit={openEditModal}
                 onDelete={handleDeleteEntry}
                 canEdit={(entry) => entry.is_editable}
+                canDelete={(entry) => entry.added_by === currentUserId}
                 isLoading={isLoading}
               />
             </div>
@@ -1525,7 +1514,6 @@ export default function SalesKPIPage() {
             setEditingEntry(null);
             setError('');
             setModalInitialDate('');
-            setModalUserOverride(undefined);
           }}
           onSave={handleSaveEntry}
           entry={editingEntry}

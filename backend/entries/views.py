@@ -74,57 +74,33 @@ class BaseEntryViewSet(viewsets.ModelViewSet):
 
         return queryset
 
-    def _resolve_on_behalf_of(self):
-        """If staff is creating on behalf of another user, return that user; else None."""
-        request_user = self.request.user
-        target = self.request.data.get('added_by')
-        if not (request_user.is_staff and target):
-            return None
-        if str(target) == str(request_user.id):
-            return None
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        try:
-            return User.objects.get(id=target)
-        except (User.DoesNotExist, ValueError, TypeError):
-            return None
-
     def perform_create(self, serializer):
-        """Record `added_by` = the actual creator; if a staff user is creating
-        on behalf of another user, also set `on_behalf_of` to that target user."""
-        on_behalf = self._resolve_on_behalf_of()
-        if on_behalf is not None:
-            serializer.save(added_by=self.request.user, on_behalf_of=on_behalf)
-        else:
-            serializer.save(added_by=self.request.user)
+        """Always create as the requesting user. Admins cannot create on behalf of others."""
+        serializer.save(added_by=self.request.user)
 
     def update(self, request, *args, **kwargs):
-        """Check ownership and edit window before updating. Staff can edit any entry."""
+        """Only the creator can edit, and only within the 30-minute window."""
         instance = self.get_object()
 
-        if not request.user.is_staff:
-            # Check ownership
-            if instance.added_by != request.user:
-                return Response(
-                    {'error': 'You can only edit your own entries'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        if instance.added_by != request.user:
+            return Response(
+                {'error': 'You can only edit your own entries'},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
-            # Check 30-minute edit window
-            if not instance.is_editable():
-                return Response(
-                    {'error': 'Edit window has expired (30 minutes)'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        if not instance.is_editable():
+            return Response(
+                {'error': 'Edit window has expired (30 minutes)'},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
-        """Check ownership before deleting (staff can delete any)."""
+        """Only the creator can delete."""
         instance = self.get_object()
 
-        # Check ownership for non-staff
-        if instance.added_by != request.user and not request.user.is_staff:
+        if instance.added_by != request.user:
             return Response(
                 {'error': 'You can only delete your own entries'},
                 status=status.HTTP_403_FORBIDDEN
@@ -167,11 +143,7 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
         return super().get_queryset().prefetch_related('status_transitions')
 
     def perform_create(self, serializer):
-        on_behalf = self._resolve_on_behalf_of()
-        save_kwargs = {'added_by': self.request.user}
-        if on_behalf is not None:
-            save_kwargs['on_behalf_of'] = on_behalf
-        instance = serializer.save(**save_kwargs)
+        instance = serializer.save(added_by=self.request.user)
         MotorClaimStatusTransition.objects.create(
             entry=instance,
             from_status='',
@@ -298,11 +270,7 @@ class MedicalClaimEntryViewSet(BaseEntryViewSet):
         return super().get_queryset().prefetch_related('status_transitions')
 
     def perform_create(self, serializer):
-        on_behalf = self._resolve_on_behalf_of()
-        save_kwargs = {'added_by': self.request.user}
-        if on_behalf is not None:
-            save_kwargs['on_behalf_of'] = on_behalf
-        instance = serializer.save(**save_kwargs)
+        instance = serializer.save(added_by=self.request.user)
         MedicalClaimStatusTransition.objects.create(
             entry=instance,
             from_status='',

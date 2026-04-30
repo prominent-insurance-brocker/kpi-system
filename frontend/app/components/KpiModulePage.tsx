@@ -30,6 +30,7 @@ import { fetchApi, getUsersForModule } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
 import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users } from 'lucide-react';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
+import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { formatDate } from '@/app/lib/date';
 import { toast } from 'sonner';
@@ -575,8 +576,6 @@ function WeeklyView<T extends BaseModuleEntry>({
       ? `${formatShortDate(weekStart)} – ${formatShortDate(weekEndDay)}, ${weekEndDay.getFullYear()}`
       : `${formatShortDate(weekStart)}, ${weekStart.getFullYear()} – ${formatShortDate(weekEndDay)}, ${weekEndDay.getFullYear()}`;
 
-  const effectiveUserId = weeklyUserFilter !== 'all' ? Number(weeklyUserFilter) : currentUserId;
-
   return (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
       <div className={`sticky ${navStickyTop} z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4]`}>
@@ -655,7 +654,10 @@ function WeeklyView<T extends BaseModuleEntry>({
                 let statusType: 'submitted' | 'not_submitted' | 'upcoming' = 'upcoming';
                 if (past && !isSun) statusType = 'not_submitted';
 
-                const canAddToday = isToday && !isSun;
+                // Admin can only add records for themselves; viewing another user is read-only.
+                const isViewingSelf =
+                  weeklyUserFilter === 'all' || weeklyUserFilter === String(currentUserId);
+                const canAddToday = isToday && !isSun && isViewingSelf;
                 const todayEntryExists = isToday
                   ? monthEntries.some(
                       (e) =>
@@ -714,7 +716,7 @@ function WeeklyView<T extends BaseModuleEntry>({
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      {!isSun && (
+                      {!isSun && isViewingSelf && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button className="w-8 h-8 flex items-center justify-center rounded-md text-[#9CA3AF] hover:text-[#09090B] hover:bg-[#F3F3F3] transition-colors">
@@ -799,7 +801,7 @@ function WeeklyView<T extends BaseModuleEntry>({
                               Edit
                             </DropdownMenuItem>
                           )}
-                          {(entry.added_by === effectiveUserId || isAdmin) && (
+                          {entry.added_by === currentUserId && (
                             <DropdownMenuItem
                               onClick={() => onDelete(entry)}
                               className="cursor-pointer px-3 py-2 text-sm text-red-600 rounded-md"
@@ -819,30 +821,6 @@ function WeeklyView<T extends BaseModuleEntry>({
       </div>
     </div>
   );
-}
-
-// ─── Date range helpers ──────────────────────────────────────────────────────
-
-type DateRangeOption = 'all' | 'this_month' | 'last_month' | 'this_year';
-
-function getDateRange(option: DateRangeOption): { date_from?: string; date_to?: string } {
-  const now = new Date();
-  if (option === 'this_month') {
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    return { date_from: toLocalDateString(firstDay), date_to: toLocalDateString(lastDay) };
-  }
-  if (option === 'last_month') {
-    const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
-    return { date_from: toLocalDateString(firstDay), date_to: toLocalDateString(lastDay) };
-  }
-  if (option === 'this_year') {
-    const firstDay = new Date(now.getFullYear(), 0, 1);
-    const lastDay = new Date(now.getFullYear(), 11, 31);
-    return { date_from: toLocalDateString(firstDay), date_to: toLocalDateString(lastDay) };
-  }
-  return {};
 }
 
 // ─── Entry Modal ─────────────────────────────────────────────────────────────
@@ -996,7 +974,8 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   const [weekStart, setWeekStart] = useState<Date>(startOfWeek(today));
   const [weeklyUserFilter, setWeeklyUserFilter] = useState('all');
 
-  const [dataDateRange, setDataDateRange] = useState<DateRangeOption>('all');
+  const [dataDateFrom, setDataDateFrom] = useState('');
+  const [dataDateTo, setDataDateTo] = useState('');
   const [dataUserFilter, setDataUserFilter] = useState('all');
 
   const [monthEntries, setMonthEntries] = useState<T[]>([]);
@@ -1070,9 +1049,8 @@ export function KpiModulePage<T extends BaseModuleEntry>({
     setDataLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
-      const range = getDateRange(dataDateRange);
-      if (range.date_from) params.set('date_from', range.date_from);
-      if (range.date_to) params.set('date_to', range.date_to);
+      if (dataDateFrom) params.set('date_from', dataDateFrom);
+      if (dataDateTo) params.set('date_to', dataDateTo);
       if (dataUserFilter !== 'all') params.set('user_id', dataUserFilter);
       const result = await fetchApi<{ results: T[]; count: number }>(`/api/entries/${apiSlug}/?${params}`);
       setDataEntries(result.data?.results || []);
@@ -1081,7 +1059,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
       setDataEntries([]);
     }
     setDataLoading(false);
-  }, [page, pageSize, dataDateRange, dataUserFilter, apiSlug]);
+  }, [page, pageSize, dataDateFrom, dataDateTo, dataUserFilter, apiSlug]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -1103,7 +1081,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
 
   useEffect(() => {
     if (activeView === 'data') fetchDataEntries();
-  }, [activeView, page, pageSize, dataDateRange, dataUserFilter, fetchDataEntries]);
+  }, [activeView, page, pageSize, dataDateFrom, dataDateTo, dataUserFilter, fetchDataEntries]);
 
   const prevPersonalMonth = () => {
     if (personalCalMonth === 0) { setPersonalCalYear(y => y - 1); setPersonalCalMonth(11); }
@@ -1141,13 +1119,9 @@ export function KpiModulePage<T extends BaseModuleEntry>({
     const endpoint = editingEntry
       ? `/api/entries/${apiSlug}/${editingEntry.id}/`
       : `/api/entries/${apiSlug}/`;
-    const body: Record<string, unknown> = { ...formData };
-    if (isAdmin && weeklyUserFilter && weeklyUserFilter !== 'all') {
-      body.added_by = Number(weeklyUserFilter);
-    }
     const result = await fetchApi<T>(endpoint, {
       method: editingEntry ? 'PATCH' : 'POST',
-      body: JSON.stringify(body),
+      body: JSON.stringify(formData),
     });
     if (result.data) {
       setIsModalOpen(false);
@@ -1218,36 +1192,39 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   const dataViewContent = (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm flex flex-col" style={{ height: 'calc(100vh - 20rem)' }}>
       <div className="flex items-center justify-end px-5 py-4 border-b border-[#E4E4E4] flex-wrap gap-3 shrink-0">
-        {isAdmin && (
-          <div className="flex items-center gap-2 mr-auto">
-            <Select value={dataDateRange} onValueChange={(v) => { setDataDateRange(v as DateRangeOption); updateParams({ page: 1 }); }}>
-              <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 w-auto min-w-[120px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Time</SelectItem>
-                <SelectItem value="this_month">This Month</SelectItem>
-                <SelectItem value="last_month">Last Month</SelectItem>
-                <SelectItem value="this_year">This Year</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={dataUserFilter} onValueChange={(v) => { setDataUserFilter(v); updateParams({ page: 1 }); }}>
-              <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 gap-1.5 w-auto min-w-[130px]">
-                <Users className="h-3.5 w-3.5 text-[#71717A]" />
-                <SelectValue placeholder="All Users" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Users</SelectItem>
-                {moduleUsers.map((u) => (
-                  <SelectItem key={u.id} value={String(u.id)}>
-                    {u.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="flex items-end gap-3 mr-auto">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-[#71717A]">Date Range</span>
+            <DateRangeFilter
+              dateFrom={dataDateFrom}
+              dateTo={dataDateTo}
+              onChange={(from, to) => {
+                setDataDateFrom(from);
+                setDataDateTo(to);
+                updateParams({ page: 1 });
+              }}
+            />
           </div>
-        )}
+          {isAdmin && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-[#71717A]">User</span>
+              <Select value={dataUserFilter} onValueChange={(v) => { setDataUserFilter(v); updateParams({ page: 1 }); }}>
+                <SelectTrigger className="h-9 text-sm border-[#E4E4E4] rounded-lg px-3 gap-1.5 w-auto min-w-[160px]">
+                  <Users className="h-3.5 w-3.5 text-[#71717A]" />
+                  <SelectValue placeholder="All Users" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Users</SelectItem>
+                  {moduleUsers.map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
 
         {/* TODO: confirm with PM whether to keep configurable. Hidden per Bug 11.
         <Button
@@ -1274,6 +1251,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
           onEdit={openEditModal}
           onDelete={handleDelete}
           canEdit={(entry) => entry.is_editable}
+          canDelete={(entry) => entry.added_by === currentUserId}
           isLoading={dataLoading}
           height="h-full !border-0 !rounded-none"
         />

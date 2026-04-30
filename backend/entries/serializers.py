@@ -54,26 +54,8 @@ class BaseEntrySerializer(serializers.ModelSerializer):
         if date is None:
             return attrs
 
-        # Effective owner: the target user when admin acts on behalf, else the request user.
-        target_user_id = None
-        request_user = request.user
-        if request_user.is_staff:
-            payload_target = request.data.get('added_by') if hasattr(request, 'data') else None
-            if payload_target:
-                try:
-                    target_user_id = int(payload_target)
-                except (ValueError, TypeError):
-                    target_user_id = None
-        if target_user_id is None:
-            target_user_id = request_user.id
-
-        from django.db.models import Q
         Model = self.Meta.model
-        qs = Model.objects.filter(
-            Q(on_behalf_of_id=target_user_id)
-            | (Q(on_behalf_of__isnull=True) & Q(added_by_id=target_user_id)),
-            date=date,
-        )
+        qs = Model.objects.filter(date=date, added_by=request.user)
         if self.instance is not None:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():

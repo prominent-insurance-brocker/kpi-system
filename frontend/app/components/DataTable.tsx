@@ -58,6 +58,7 @@ interface DataTableProps<T> {
   onEdit?: (item: T) => void;
   onDelete?: (item: T) => void;
   canEdit?: (item: T) => boolean;
+  canDelete?: (item: T) => boolean;
   isLoading?: boolean;
   height?: string;
 }
@@ -73,6 +74,7 @@ export function DataTable<T extends { id: number }>({
   onEdit,
   onDelete,
   canEdit,
+  canDelete,
   isLoading,
   height = 'h-[calc(100vh-270px)]',
 }: DataTableProps<T>) {
@@ -168,7 +170,7 @@ export function DataTable<T extends { id: number }>({
                                 Edit
                               </DropdownMenuItem>
                             )}
-                            {onDelete && (
+                            {onDelete && (!canDelete || canDelete(item)) && (
                               <DropdownMenuItem
                                 onClick={() => onDelete(item)}
                                 className="cursor-pointer px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md"

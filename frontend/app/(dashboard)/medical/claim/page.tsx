@@ -107,7 +107,8 @@ function InlineStatusSelect({
 export default function MedicalClaimPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { canSeeAllData } = useAuth();
+  const { canSeeAllData, user } = useAuth();
+  const currentUserId = user?.id;
   const confirm = useConfirm();
   const [entries, setEntries] = useState<MedicalClaimEntry[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -251,7 +252,9 @@ export default function MedicalClaimPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div><h1 className="text-2xl font-bold">Medical Claim</h1><p className="text-muted-foreground">Manage medical claims</p></div>
-        <Button onClick={() => { setEditingEntry(null); setError(''); setIsModalOpen(true); }}><Plus className="h-4 w-4 mr-2" /> Add Entry</Button>
+        {(!userId || userId === String(currentUserId)) && (
+          <Button onClick={() => { setEditingEntry(null); setError(''); setIsModalOpen(true); }}><Plus className="h-4 w-4 mr-2" /> Add Entry</Button>
+        )}
       </div>
       <FilterBar
         dateRange={{
@@ -308,7 +311,7 @@ export default function MedicalClaimPage() {
           </Card>
         </div>
       )}
-      <DataTable columns={columns} data={entries} totalCount={totalCount} page={page} pageSize={pageSize} onPageChange={(p) => updateFilters({ page: p })} onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })} onEdit={(entry) => { setEditingEntry(entry); setError(''); setIsModalOpen(true); }} onDelete={handleDelete} canEdit={(entry) => entry.is_editable} isLoading={isLoading} />
+      <DataTable columns={columns} data={entries} totalCount={totalCount} page={page} pageSize={pageSize} onPageChange={(p) => updateFilters({ page: p })} onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })} onEdit={(entry) => { setEditingEntry(entry); setError(''); setIsModalOpen(true); }} onDelete={handleDelete} canEdit={(entry) => entry.is_editable} canDelete={(entry) => entry.added_by === currentUserId} isLoading={isLoading} />
       <Dialog open={isModalOpen} onOpenChange={() => { setIsModalOpen(false); setEditingEntry(null); setError(''); }}>
         <DialogContent className='p-0'>
           <DialogHeader className='border-b border-[#E4E4E4] p-4'><DialogTitle>{editingEntry ? 'Edit Entry' : 'Add New Entry'}</DialogTitle></DialogHeader>

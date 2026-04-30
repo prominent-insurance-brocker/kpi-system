@@ -624,18 +624,18 @@ function WeeklyView<T extends BaseModuleEntry>({
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#F9F9F9] border-b border-[#E4E4E4]">
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide w-[140px]">
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[140px]">
                 Day
               </th>
               {weeklyColumns.map((col) => (
-                <th key={col.key} className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
+                <th key={col.key} className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
                   {col.header}
                 </th>
               ))}
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide">
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
                 Added by
               </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] uppercase tracking-wide w-[180px]">
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[180px]">
                 Status
               </th>
               <th className="w-12" />

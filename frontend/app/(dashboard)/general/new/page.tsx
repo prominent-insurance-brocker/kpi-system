@@ -18,9 +18,9 @@ export default function GeneralNewPage() {
       title="General New"
       deptLabel="General New DEPT."
       weeklyColumns={[
-        { key: 'quotations', header: 'No. of Quotes Created' },
-        { key: 'quotes_converted', header: 'No. of Quotes Converted' },
-        { key: 'quotes_revised', header: 'No. of Quotes Revised' },
+        { key: 'quotations', header: 'No. of quotes created' },
+        { key: 'quotes_converted', header: 'No. of quotes converted' },
+        { key: 'quotes_revised', header: 'No. of quotes revised' },
         { key: 'tat', header: 'TAT' },
         { key: 'accuracy', header: 'Accuracy', render: (v) => `${v}%` },
       ]}

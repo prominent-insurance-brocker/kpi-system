@@ -17,8 +17,8 @@ export default function MotorRenewalPage() {
       title="Motor Renewal"
       deptLabel="Motor Renewal DEPT."
       weeklyColumns={[
-        { key: 'quotations', header: 'No. of Quotes Created' },
-        { key: 'retention', header: 'No. of Quotes Converted' },
+        { key: 'quotations', header: 'No. of quotes created' },
+        { key: 'retention', header: 'No. of quotes converted' },
         { key: 'tat', header: 'TAT' },
         { key: 'accuracy', header: 'Accuracy', render: (v) => `${v}%` },
       ]}

@@ -1,9 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MetabaseFrame } from '@/components/metabase-frame';
 import { API_BASE_URL } from '@/app/lib/api';
+import { useAuth } from '@/app/context/AuthContext';
+import { firstAccessibleRoute } from '@/app/lib/navigation';
 
 interface DashboardStats {
   general_new: { total_quotations: number; total_converted: number };
@@ -14,8 +17,16 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!authLoading && user && !user.is_staff) {
+      router.replace(firstAccessibleRoute(user) ?? '/login');
+    }
+  }, [authLoading, user, router]);
 
   useEffect(() => {
     // For now, show placeholder stats

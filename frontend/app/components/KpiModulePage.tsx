@@ -50,20 +50,12 @@ export interface BaseModuleEntry {
 }
 
 export function AddedByCell({ entry }: { entry: { added_by_name: string; on_behalf_of_name: string | null } }) {
-  const ownerName = entry.on_behalf_of_name || entry.added_by_name;
   return (
     <div className="flex items-center gap-2">
-      <UserAvatar name={ownerName} />
-      <div className="flex flex-col min-w-0">
-        <span className="text-sm font-medium text-[#374151] truncate max-w-[140px]">
-          {ownerName}
-        </span>
-        {entry.on_behalf_of_name && (
-          <span className="text-[10px] text-[#9CA3AF] truncate max-w-[140px]">
-            by admin: {entry.added_by_name}
-          </span>
-        )}
-      </div>
+      <UserAvatar name={entry.added_by_name} />
+      <span className="text-sm font-medium text-[#374151] truncate max-w-[140px]">
+        {entry.added_by_name}
+      </span>
     </div>
   );
 }

@@ -700,9 +700,9 @@ function WeeklyView({
                         </span>
                       </div>
                     </td>
-                    <td className="px-5 py-3"><span className="text-[#D1D5DB]">—</span></td>
-                    <td className="px-5 py-3"><span className="text-[#D1D5DB]">—</span></td>
-                    <td className="px-5 py-3"><span className="text-[#D1D5DB]">—</span></td>
+                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
+                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
+                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
                     <td className="px-5 py-3" />
                     <td className="px-5 py-3">
                       {!isSun && (

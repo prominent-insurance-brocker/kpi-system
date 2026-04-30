@@ -19,19 +19,19 @@ export default function MotorRenewalPage() {
       weeklyColumns={[
         { key: 'quotations', header: 'No. of quotes created' },
         { key: 'retention', header: 'No. of quotes converted' },
-        { key: 'tat', header: 'TAT' },
+        { key: 'tat', header: 'TAT (in Days)' },
         { key: 'accuracy', header: 'Accuracy', render: (v) => `${v}%` },
       ]}
       dataColumns={[
         { key: 'quotations', header: 'No. of Quotes Created' },
         { key: 'retention', header: 'No. of Quotes Converted' },
-        { key: 'tat', header: 'TAT', render: (item) => String(item.tat) },
+        { key: 'tat', header: 'TAT (in Days)', render: (item) => String(item.tat) },
         { key: 'accuracy', header: 'Accuracy', render: (item) => `${item.accuracy}%` },
       ]}
       modalFields={[
-        { key: 'quotations', label: 'No. of Quotes Created', min: 0 },
-        { key: 'retention', label: 'No. of Quotes Converted', min: 0 },
-        { key: 'tat', label: 'TAT', min: 0 },
+        { key: 'quotations', label: 'No. of quotes created', min: 0 },
+        { key: 'retention', label: 'No. of quotes converted', min: 0 },
+        { key: 'tat', label: 'TAT (in Days)', min: 0 },
         { key: 'accuracy', label: 'Accuracy (%)', min: 0, max: 100, step: 0.01 },
       ]}
     />

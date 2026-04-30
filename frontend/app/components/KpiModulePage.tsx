@@ -696,7 +696,9 @@ function WeeklyView<T extends BaseModuleEntry>({
                       </div>
                     </td>
                     {weeklyColumns.map((col) => (
-                      <td key={col.key} className="px-5 py-3"><span className="text-[#D1D5DB]">—</span></td>
+                      <td key={col.key} className="px-5 py-3">
+                        {!isSun && <span className="text-[#D1D5DB]">—</span>}
+                      </td>
                     ))}
                     <td className="px-5 py-3" />
                     <td className="px-5 py-3">

@@ -32,9 +32,9 @@ export default function GeneralNewPage() {
         { key: 'accuracy', header: 'Accuracy', render: (item) => `${item.accuracy}%` },
       ]}
       modalFields={[
-        { key: 'quotations', label: 'No. of Quotes Created', min: 0 },
-        { key: 'quotes_revised', label: 'No. of Quotes Revised', min: 0 },
-        { key: 'quotes_converted', label: 'No. of Quotes Converted', min: 0 },
+        { key: 'quotations', label: 'No. of quotes created', min: 0 },
+        { key: 'quotes_revised', label: 'No. of quotes revised', min: 0 },
+        { key: 'quotes_converted', label: 'No. of quotes converted', min: 0 },
         { key: 'tat', label: 'TAT', min: 0 },
         { key: 'accuracy', label: 'Accuracy (%)', min: 0, max: 100, step: 0.01 },
       ]}

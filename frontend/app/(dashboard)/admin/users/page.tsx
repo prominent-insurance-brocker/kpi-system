@@ -302,33 +302,25 @@ function UserForm({
   onClose: () => void;
   error: string;
 }) {
-  const [formData, setFormData] = useState({
-    email: '',
-    full_name: '',
-    role_id: null as number | null,
-    is_staff: false,
-    is_active: true,
+  const buildInitial = (u: UserAdmin | null) => ({
+    email: u?.email ?? '',
+    full_name: u?.full_name ?? '',
+    role_id: u?.role_id ?? (null as number | null),
+    is_staff: u?.is_staff ?? false,
+    is_active: u?.is_active ?? true,
   });
+
+  // Lazy initializer reads the user prop on FIRST render so Radix Select
+  // mounts with the correct value already in place — avoids the well-known
+  // Radix bug where the trigger label doesn't refresh after value prop change.
+  const [formData, setFormData] = useState(() => buildInitial(user));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // If the user prop changes while the form is mounted (rare, since the
+  // Dialog unmounts content on close), resync.
   useEffect(() => {
-    if (user) {
-      setFormData({
-        email: user.email,
-        full_name: user.full_name,
-        role_id: user.role_id,
-        is_staff: user.is_staff,
-        is_active: user.is_active,
-      });
-    } else {
-      setFormData({
-        email: '',
-        full_name: '',
-        role_id: null,
-        is_staff: false,
-        is_active: true,
-      });
-    }
+    setFormData(buildInitial(user));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {

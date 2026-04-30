@@ -742,6 +742,9 @@ function WeeklyView<T extends BaseModuleEntry>({
 
               return entries.map((entry, eIdx) => {
                 const statusType: 'submitted' | 'not_submitted' | 'upcoming' = 'submitted';
+                const canEditEntry = entry.is_editable;
+                const canDeleteEntry = entry.added_by === currentUserId;
+                const showActions = canEditEntry || canDeleteEntry;
 
                 return (
                   <tr
@@ -788,31 +791,33 @@ function WeeklyView<T extends BaseModuleEntry>({
                       <StatusBadge type={statusType} />
                     </td>
                     <td className="px-3 py-3">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="w-8 h-8 flex items-center justify-center rounded-md text-[#9CA3AF] hover:text-[#09090B] hover:bg-[#F3F3F3] transition-colors">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-[149px] bg-white border border-[#E4E4E4] rounded-lg p-1 shadow-md">
-                          {entry.is_editable && (
-                            <DropdownMenuItem
-                              onClick={() => onEdit(entry)}
-                              className="cursor-pointer px-3 py-2 text-sm text-[#09090B] rounded-md"
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                          )}
-                          {entry.added_by === currentUserId && (
-                            <DropdownMenuItem
-                              onClick={() => onDelete(entry)}
-                              className="cursor-pointer px-3 py-2 text-sm text-red-600 rounded-md"
-                            >
-                              Delete
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {showActions && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="w-8 h-8 flex items-center justify-center rounded-md text-[#9CA3AF] hover:text-[#09090B] hover:bg-[#F3F3F3] transition-colors">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-[149px] bg-white border border-[#E4E4E4] rounded-lg p-1 shadow-md">
+                            {canEditEntry && (
+                              <DropdownMenuItem
+                                onClick={() => onEdit(entry)}
+                                className="cursor-pointer px-3 py-2 text-sm text-[#09090B] rounded-md"
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                            )}
+                            {canDeleteEntry && (
+                              <DropdownMenuItem
+                                onClick={() => onDelete(entry)}
+                                className="cursor-pointer px-3 py-2 text-sm text-red-600 rounded-md"
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </td>
                   </tr>
                 );

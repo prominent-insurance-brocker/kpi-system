@@ -140,50 +140,57 @@ export function DataTable<T extends { id: number }>({
                   </td>
                 </tr>
               ) : (
-                data.map((item) => (
-                  <tr key={item.id} className="h-16 border-b border-[#EDEDED]">
-                    {columns.map((col) => (
-                      <td
-                        key={col.key as string}
-                        className="px-5 py-4 text-[#303030] text-sm font-medium whitespace-nowrap"
-                      >
-                        {col.render ? col.render(item) : getValue(item, col.key as string)}
-                      </td>
-                    ))}
-                    {(onEdit || onDelete) && (
-                      <td className="px-3 py-4 w-[100px] sticky right-0 bg-white">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100">
-                              <MoreHorizontal className="h-4 w-4 text-[#09090B]" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="w-[149px] bg-white border border-[#D4D4D4] rounded-lg p-0.5 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] flex flex-col gap-2"
-                          >
-                            {onEdit && (!canEdit || canEdit(item)) && (
-                              <DropdownMenuItem
-                                onClick={() => onEdit(item)}
-                                className="cursor-pointer px-3 py-2 text-sm text-[#09090B] hover:bg-[#F3F3F3] rounded-md"
+                data.map((item) => {
+                  const showEdit = !!onEdit && (!canEdit || canEdit(item));
+                  const showDelete = !!onDelete && (!canDelete || canDelete(item));
+                  const showActions = showEdit || showDelete;
+                  return (
+                    <tr key={item.id} className="h-16 border-b border-[#EDEDED]">
+                      {columns.map((col) => (
+                        <td
+                          key={col.key as string}
+                          className="px-5 py-4 text-[#303030] text-sm font-medium whitespace-nowrap"
+                        >
+                          {col.render ? col.render(item) : getValue(item, col.key as string)}
+                        </td>
+                      ))}
+                      {(onEdit || onDelete) && (
+                        <td className="px-3 py-4 w-[100px] sticky right-0 bg-white">
+                          {showActions && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100">
+                                  <MoreHorizontal className="h-4 w-4 text-[#09090B]" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="end"
+                                className="w-[149px] bg-white border border-[#D4D4D4] rounded-lg p-0.5 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] flex flex-col gap-2"
                               >
-                                Edit
-                              </DropdownMenuItem>
-                            )}
-                            {onDelete && (!canDelete || canDelete(item)) && (
-                              <DropdownMenuItem
-                                onClick={() => onDelete(item)}
-                                className="cursor-pointer px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md"
-                              >
-                                Delete
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    )}
-                  </tr>
-                ))
+                                {showEdit && (
+                                  <DropdownMenuItem
+                                    onClick={() => onEdit!(item)}
+                                    className="cursor-pointer px-3 py-2 text-sm text-[#09090B] hover:bg-[#F3F3F3] rounded-md"
+                                  >
+                                    Edit
+                                  </DropdownMenuItem>
+                                )}
+                                {showDelete && (
+                                  <DropdownMenuItem
+                                    onClick={() => onDelete!(item)}
+                                    className="cursor-pointer px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md"
+                                  >
+                                    Delete
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

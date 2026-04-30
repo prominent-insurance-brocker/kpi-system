@@ -364,25 +364,31 @@ function UserForm({
       </div>
       <div className="space-y-2">
         <Label>Role</Label>
-        <Select
-          key={roles.length}
-          value={formData.role_id?.toString() || 'none'}
-          onValueChange={(value) =>
-            setFormData({ ...formData, role_id: value === 'none' ? null : Number(value) })
-          }
-        >
-          <SelectTrigger className="w-full shadow-none">
-            <SelectValue placeholder="Select a role" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">No Role</SelectItem>
-            {roles.map((role) => (
-              <SelectItem key={role.id} value={role.id.toString()}>
-                {role.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {roles.length === 0 ? (
+          <div className="h-9 px-3 flex items-center rounded-md border border-[#E4E4E4] bg-[#F9F9F9] text-sm text-[#9CA3AF]">
+            Loading roles…
+          </div>
+        ) : (
+          <Select
+            key={`${user?.id ?? 'new'}-${roles.length}`}
+            value={formData.role_id?.toString() ?? 'none'}
+            onValueChange={(value) =>
+              setFormData({ ...formData, role_id: value === 'none' ? null : Number(value) })
+            }
+          >
+            <SelectTrigger className="w-full shadow-none">
+              <SelectValue placeholder="Select a role" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No Role</SelectItem>
+              {roles.map((role) => (
+                <SelectItem key={role.id} value={role.id.toString()}>
+                  {role.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
       <div className="flex items-center space-x-4">
         <div className="flex items-center space-x-2">

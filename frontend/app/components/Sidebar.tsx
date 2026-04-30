@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp, Anchor, HeartPulse } from 'lucide-react';
@@ -169,8 +170,15 @@ export function Sidebar() {
   return (
     <aside className="w-[274px] bg-white border-r border-[#E4E4E4] h-screen sticky top-0 flex flex-col pb-12">
       {/* Logo section */}
-      <div className="px-6 py-[0.97rem] border-b border-[#E4E4E4] ">
-        <h1 className="text-2xl font-bold text-[#141416]">KPI System</h1>
+      <div className="px-6 py-3 border-b border-[#E4E4E4] flex items-center">
+        <Image
+          src="/prominent-logo.png"
+          alt="Prominent Insurance Brokers"
+          width={220}
+          height={56}
+          priority
+          className="h-10 w-auto object-contain"
+        />
       </div>
       {/* Navigation */}
       <nav className="px-4 py-3 flex-1 overflow-y-auto">

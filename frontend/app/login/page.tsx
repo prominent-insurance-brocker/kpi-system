@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, FormEvent, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -67,7 +68,17 @@ export default function LoginPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
+          <CardHeader className="text-center space-y-3">
+            <div className="flex justify-center">
+              <Image
+                src="/prominent-logo.png"
+                alt="Prominent Insurance Brokers"
+                width={320}
+                height={80}
+                priority
+                className="h-16 w-auto object-contain"
+              />
+            </div>
             <CardTitle className="text-2xl">Check your email</CardTitle>
             <CardDescription>
               We sent a login link to <span className="font-medium">{email}</span>
@@ -98,7 +109,17 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
+        <CardHeader className="text-center space-y-3">
+          <div className="flex justify-center">
+            <Image
+              src="/prominent-logo.png"
+              alt="Prominent Insurance Brokers"
+              width={320}
+              height={80}
+              priority
+              className="h-16 w-auto object-contain"
+            />
+          </div>
           <CardTitle className="text-2xl">Sign in to KPI System</CardTitle>
           <CardDescription>Enter your email to receive a magic link</CardDescription>
         </CardHeader>

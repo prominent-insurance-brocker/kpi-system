@@ -1481,6 +1481,14 @@ export default function SalesKPIPage() {
                       </Select>
                     </div>
                   )}
+                  {(dateFrom || dateTo || userId) && (
+                    <Button
+                      variant="outline"
+                      onClick={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', page: 1 })}
+                    >
+                      Clear Filters
+                    </Button>
+                  )}
                 </div>
                 {/* TODO: confirm with PM whether to keep configurable. Hidden per Bug 11.
                 <Button

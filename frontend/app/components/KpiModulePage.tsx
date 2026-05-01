@@ -1231,6 +1231,20 @@ export function KpiModulePage<T extends BaseModuleEntry>({
               </Select>
             </div>
           )}
+          {(dataDateFrom || dataDateTo || dataUserFilter !== 'all') && (
+            <Button
+              variant="outline"
+              className="h-9"
+              onClick={() => {
+                setDataDateFrom('');
+                setDataDateTo('');
+                setDataUserFilter('all');
+                updateParams({ page: 1 });
+              }}
+            >
+              Clear Filters
+            </Button>
+          )}
         </div>
 
         {/* TODO: confirm with PM whether to keep configurable. Hidden per Bug 11.

@@ -195,7 +195,6 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
   onGoToday: () => void;
 }) {
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
-  const trackerTitle = userFullName ? `${userFullName}'s Daily Tracker` : 'Daily Tracker';
 
   return (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
@@ -205,7 +204,16 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
           <path d="M1 6h14" stroke="currentColor" strokeWidth="1.5" />
           <path d="M5 1v2M11 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        <span className="text-sm font-semibold text-[#09090B]">{trackerTitle}</span>
+        <span className="text-sm font-semibold">
+          {userFullName ? (
+            <>
+              <span className="text-[#6366F1]">{userFullName}</span>
+              <span className="text-[#09090B]">&apos;s Daily Tracker</span>
+            </>
+          ) : (
+            <span className="text-[#09090B]">Daily Tracker</span>
+          )}
+        </span>
       </div>
 
       <div className="flex items-center justify-between px-5 py-2 border-b border-[#E4E4E4]">
@@ -349,7 +357,10 @@ export function TrackerView<T extends BaseModuleEntry>({
           <path d="M1 6h14" stroke="currentColor" strokeWidth="1.5" />
           <path d="M5 1v2M11 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        <span className="text-sm font-semibold text-[#09090B]">Team Daily Tracker</span>
+        <span className="text-sm font-semibold">
+          <span className="text-[#6366F1]">Team</span>
+          <span className="text-[#09090B]"> Daily Tracker</span>
+        </span>
       </div>
 
       <div className="bg-white flex items-center justify-between px-5 py-2 border-b border-[#E4E4E4] flex-wrap gap-3">
@@ -407,7 +418,7 @@ export function TrackerView<T extends BaseModuleEntry>({
             <tr className="border-b border-[#E4E4E4]">
               <th className="sticky left-0 z-30 bg-[#F9F9F9] px-4 py-3 text-left min-w-[180px] border-r border-[#E4E4E4]">
                 <div className="text-sm font-semibold text-[#09090B]">{deptLabel}</div>
-                <div className="text-xs text-[#71717A]">{visibleUsers.length} members</div>
+                <div className="text-xs text-[#71717A]">{moduleUsers.length} members</div>
               </th>
               {calDays.map((d) => {
                 const isSun = d.getDay() === 0;

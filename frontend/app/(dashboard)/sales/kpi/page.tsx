@@ -969,19 +969,21 @@ export default function SalesKPIPage() {
   }, [today]);
 
   const fetchCardData = useCallback(async () => {
+    if (!currentUserId) return;
     const targetResult = await fetchApi<{ results: SalesMonthlyTarget[] }>(
       `/api/entries/sales-kpi/monthly-targets/?year=${cardYear}&month=${cardMonth}`
     );
     setCardTarget(targetResult.data?.results?.[0] ?? null);
 
-    // Fetch entries for card month
+    // Monthly Target progress is always personal — scope to the logged-in user
+    // even when admins (who can see all data) are viewing the page.
     const firstDay = `${cardYear}-${String(cardMonth).padStart(2, '0')}-01`;
     const lastDay = toLocalDateString(new Date(cardYear, cardMonth, 0));
     const result = await fetchApi<{ results: SalesKPIEntry[] }>(
-      `/api/entries/sales-kpi/?date_from=${firstDay}&date_to=${lastDay}&page_size=1000`
+      `/api/entries/sales-kpi/?date_from=${firstDay}&date_to=${lastDay}&user_id=${currentUserId}&page_size=1000`
     );
     setCardEntries(result.data?.results ?? []);
-  }, [cardYear, cardMonth]);
+  }, [cardYear, cardMonth, currentUserId]);
 
   const fetchEntries = useCallback(async () => {
     setIsLoading(true);

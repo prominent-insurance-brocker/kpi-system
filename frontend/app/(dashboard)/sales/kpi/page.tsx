@@ -638,13 +638,28 @@ function WeeklyView({
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[140px]">
                 Day
               </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
-                New clients acquired
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
+                Leads to ops team
               </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
+                Quotes from ops team
+              </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
+                Quotes to client
+              </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
                 Total conversions
               </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
+                New clients acquired
+              </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
+                Existing clients
+              </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
+                Existing clients closed
+              </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
                 Gross booked premium
               </th>
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
@@ -705,6 +720,11 @@ function WeeklyView({
                         </span>
                       </div>
                     </td>
+                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
+                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
+                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
+                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
+                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
                     <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
                     <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
                     <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
@@ -785,8 +805,13 @@ function WeeklyView({
                     ) : (
                       <td className="px-5 py-3" />
                     )}
-                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.new_clients_acquired}</td>
+                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.leads_to_ops_team}</td>
+                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.quotes_from_ops_team}</td>
+                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.quotes_to_client}</td>
                     <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.total_conversions}</td>
+                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.new_clients_acquired}</td>
+                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.existing_clients}</td>
+                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.existing_clients_closed}</td>
                     <td className="px-5 py-3 text-sm font-medium text-[#374151]">{formatPremium(entry.gross_booked_premium)}</td>
                     <td className="px-5 py-3">
                       <AddedByCell entry={entry} />
@@ -1011,23 +1036,43 @@ export default function SalesKPIPage() {
     setIsLoading(false);
   }, [page, pageSize, dateFrom, dateTo, userId]);
 
-  const fetchMonthEntries = useCallback(async (year: number, month: number) => {
-    try {
-      const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-      const lastDay = toLocalDateString(new Date(year, month + 1, 0));
-      const params = new URLSearchParams({
-        date_from: firstDay,
-        date_to: lastDay,
-        page_size: '1000',
-      });
-      const result = await fetchApi<{ results: SalesKPIEntry[] }>(
-        `/api/entries/sales-kpi/?${params}`
-      );
-      setMonthEntries(result.data?.results ?? []);
-    } catch {
-      setMonthEntries([]);
-    }
-  }, []);
+  const fetchEntriesForMonths = useCallback(
+    async (months: Array<[number, number]>) => {
+      try {
+        const unique = Array.from(new Set(months.map(([y, m]) => `${y}-${m}`))).map((s) => {
+          const [y, m] = s.split('-').map(Number);
+          return [y, m] as [number, number];
+        });
+        const responses = await Promise.all(
+          unique.map(([year, month]) => {
+            const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+            const lastDay = toLocalDateString(new Date(year, month + 1, 0));
+            const params = new URLSearchParams({
+              date_from: firstDay,
+              date_to: lastDay,
+              page_size: '1000',
+            });
+            return fetchApi<{ results: SalesKPIEntry[] }>(`/api/entries/sales-kpi/?${params}`);
+          })
+        );
+        const merged = new Map<number, SalesKPIEntry>();
+        for (const res of responses) {
+          for (const entry of res.data?.results ?? []) {
+            merged.set(entry.id, entry);
+          }
+        }
+        setMonthEntries(Array.from(merged.values()));
+      } catch {
+        setMonthEntries([]);
+      }
+    },
+    []
+  );
+
+  const fetchMonthEntries = useCallback(
+    (year: number, month: number) => fetchEntriesForMonths([[year, month]]),
+    [fetchEntriesForMonths]
+  );
 
   const fetchSheetTargets = useCallback(async () => {
     const result = await fetchApi<{ results: SalesMonthlyTarget[] }>(
@@ -1057,19 +1102,17 @@ export default function SalesKPIPage() {
     if (currentTargetLoaded) fetchCardData();
   }, [cardYear, cardMonth, currentTargetLoaded, fetchCardData]);
 
-  useEffect(() => {
-    fetchMonthEntries(calYear, calMonth);
-  }, [calYear, calMonth, fetchMonthEntries]);
-
-  // Re-fetch when week navigation crosses the calendar month boundary
+  // Single coordinated fetch: pulls every month any visible view needs
+  // (Daily Tracker month, plus the months the current week straddles) and
+  // merges the results so neither side overwrites the other.
   useEffect(() => {
     const weekEndDay = addDays(weekStart, 6);
-    if (weekStart.getMonth() !== calMonth || weekStart.getFullYear() !== calYear) {
-      fetchMonthEntries(weekStart.getFullYear(), weekStart.getMonth());
-    } else if (weekEndDay.getMonth() !== calMonth) {
-      fetchMonthEntries(weekEndDay.getFullYear(), weekEndDay.getMonth());
-    }
-  }, [weekStart, calYear, calMonth, fetchMonthEntries]);
+    fetchEntriesForMonths([
+      [calYear, calMonth],
+      [weekStart.getFullYear(), weekStart.getMonth()],
+      [weekEndDay.getFullYear(), weekEndDay.getMonth()],
+    ]);
+  }, [calYear, calMonth, weekStart, fetchEntriesForMonths]);
 
   useEffect(() => {
     if (activeView === 'data') fetchEntries();

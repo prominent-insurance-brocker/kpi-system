@@ -649,7 +649,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[180px]">
                 Status
               </th>
-              <th className="w-12" />
+              <th className="w-12 sticky right-0 z-20 bg-[#F9F9F9]" />
             </tr>
           </thead>
           <tbody className="divide-y divide-[#F3F3F3]">

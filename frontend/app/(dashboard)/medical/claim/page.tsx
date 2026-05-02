@@ -125,6 +125,7 @@ export default function MedicalClaimPage() {
   const dateTo = searchParams.get('dateTo') || '';
   const userId = searchParams.get('userId') || '';
   const statusFilter = searchParams.get('status') || '';
+  const customerName = searchParams.get('customerName') || '';
 
   const updateFilters = (updates: Record<string, string | number>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -152,6 +153,7 @@ export default function MedicalClaimPage() {
       if (dateTo) params.set('date_to', dateTo);
       if (userId) params.set('user_id', userId);
       if (statusFilter) params.set('status', statusFilter);
+      if (customerName) params.set('customer_name', customerName);
       const result = await fetchApi<{ results: MedicalClaimEntry[]; count: number }>(`/api/entries/medical-claim/?${params}`);
       setEntries(result.data?.results || []);
       setTotalCount(result.data?.count || 0);
@@ -173,7 +175,7 @@ export default function MedicalClaimPage() {
   };
 
   useEffect(() => { fetchUsers(); }, []);
-  useEffect(() => { fetchEntries(); fetchStats(); }, [page, pageSize, dateFrom, dateTo, userId, statusFilter]);
+  useEffect(() => { fetchEntries(); fetchStats(); }, [page, pageSize, dateFrom, dateTo, userId, statusFilter, customerName]);
 
   const updateStatus = async (entryId: number, newStatus: string) => {
     try {
@@ -246,7 +248,7 @@ export default function MedicalClaimPage() {
     { key: 'tat_display', header: 'TAT' },
   ];
 
-  const hasActiveFilters = dateFrom || dateTo || userId || statusFilter;
+  const hasActiveFilters = dateFrom || dateTo || userId || statusFilter || customerName;
 
   return (
     <div className="p-6 space-y-6">
@@ -257,6 +259,12 @@ export default function MedicalClaimPage() {
         )}
       </div>
       <FilterBar
+        search={{
+          value: customerName,
+          onChange: (v) => updateFilters({ customerName: v, page: 1 }),
+          placeholder: 'Search customer name…',
+          label: 'Customer',
+        }}
         dateRange={{
           from: dateFrom,
           to: dateTo,
@@ -273,7 +281,7 @@ export default function MedicalClaimPage() {
           options: STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
         }}
         hasActiveFilters={!!hasActiveFilters}
-        onClear={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', status: '', page: 1 })}
+        onClear={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', status: '', customerName: '', page: 1 })}
       />
       {stats && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

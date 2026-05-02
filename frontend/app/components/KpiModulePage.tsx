@@ -82,7 +82,7 @@ export interface ModalFieldSpec {
   placeholder?: string;
 }
 
-interface ModuleUser {
+export interface ModuleUser {
   id: number;
   email: string;
   full_name: string;
@@ -90,14 +90,14 @@ interface ModuleUser {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function toLocalDateString(d: Date): string {
+export function toLocalDateString(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
-function startOfWeek(d: Date): Date {
+export function startOfWeek(d: Date): Date {
   const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   const mon = new Date(d);
@@ -106,17 +106,17 @@ function startOfWeek(d: Date): Date {
   return mon;
 }
 
-function addDays(d: Date, n: number): Date {
+export function addDays(d: Date, n: number): Date {
   const r = new Date(d);
   r.setDate(r.getDate() + n);
   return r;
 }
 
-function ownerId(e: { added_by: number; on_behalf_of?: number | null }): number {
+export function ownerId(e: { added_by: number; on_behalf_of?: number | null }): number {
   return e.on_behalf_of ?? e.added_by;
 }
 
-function sameDay(a: Date, b: Date): boolean {
+export function sameDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
@@ -124,16 +124,16 @@ function sameDay(a: Date, b: Date): boolean {
   );
 }
 
-const MONTH_NAMES = [
+export const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
-const SHORT_DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
+export const SHORT_DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+export const WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
 
 // ─── Status Badge ────────────────────────────────────────────────────────────
 
-function StatusBadge({ type }: { type: 'submitted' | 'not_submitted' | 'upcoming' }) {
+export function StatusBadge({ type }: { type: 'submitted' | 'not_submitted' | 'upcoming' }) {
   if (type === 'submitted') {
     return (
       <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[#16A34A]">
@@ -160,7 +160,7 @@ function StatusBadge({ type }: { type: 'submitted' | 'not_submitted' | 'upcoming
 
 // ─── User Avatar ─────────────────────────────────────────────────────────────
 
-function UserAvatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 'md' }) {
+export function UserAvatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 'md' }) {
   const dim = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-8 h-8 text-sm';
   return (
     <span
@@ -173,7 +173,7 @@ function UserAvatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 'md' })
 
 // ─── Personal Daily Tracker ──────────────────────────────────────────────────
 
-function PersonalDailyTracker<T extends BaseModuleEntry>({
+export function PersonalDailyTracker<T extends BaseModuleEntry>({
   calYear,
   calMonth,
   today,
@@ -298,7 +298,7 @@ function PersonalDailyTracker<T extends BaseModuleEntry>({
 
 // ─── Tracker View ────────────────────────────────────────────────────────────
 
-function TrackerView<T extends BaseModuleEntry>({
+export function TrackerView<T extends BaseModuleEntry>({
   calYear,
   calMonth,
   monthEntries,
@@ -508,7 +508,7 @@ function TrackerView<T extends BaseModuleEntry>({
 
 // ─── Weekly View ─────────────────────────────────────────────────────────────
 
-function WeeklyView<T extends BaseModuleEntry>({
+export function WeeklyView<T extends BaseModuleEntry>({
   weekStart,
   monthEntries,
   today,

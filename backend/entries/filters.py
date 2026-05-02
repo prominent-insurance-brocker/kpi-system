@@ -12,8 +12,9 @@ class EntryFilter(django_filters.FilterSet):
 
 
 class ClaimEntryFilter(EntryFilter):
-    """Filter for claim entries — adds a status filter."""
+    """Filter for claim entries — adds a status filter and customer-name search."""
     status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
+    customer_name = django_filters.CharFilter(field_name='customer_name', lookup_expr='icontains')
 
     class Meta:
-        fields = ['date_from', 'date_to', 'user_id', 'status']
+        fields = ['date_from', 'date_to', 'user_id', 'status', 'customer_name']

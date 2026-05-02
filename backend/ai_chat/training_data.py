@@ -83,17 +83,6 @@ def get_ddl_statements():
             );
             """,
             """
-            CREATE TABLE entries_salespremiumdataentry (
-                id SERIAL PRIMARY KEY,
-                date DATE NOT NULL,
-                gross_booked_premium NUMERIC(15, 2) NOT NULL,
-                target NUMERIC(15, 2) NOT NULL,
-                added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
-                added_at TIMESTAMPTZ NOT NULL,
-                updated_at TIMESTAMPTZ NOT NULL
-            );
-            """,
-            """
             CREATE TABLE entries_saleskpientry (
                 id SERIAL PRIMARY KEY,
                 date DATE NOT NULL,
@@ -195,17 +184,6 @@ def get_ddl_statements():
                 claims_closed INTEGER UNSIGNED NOT NULL,
                 pending_cases INTEGER UNSIGNED NOT NULL,
                 tat INTEGER UNSIGNED NOT NULL,
-                added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
-                added_at DATETIME NOT NULL,
-                updated_at DATETIME NOT NULL
-            );
-            """,
-            """
-            CREATE TABLE entries_salespremiumdataentry (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date DATE NOT NULL,
-                gross_booked_premium DECIMAL(15, 2) NOT NULL,
-                target DECIMAL(15, 2) NOT NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at DATETIME NOT NULL,
                 updated_at DATETIME NOT NULL
@@ -336,9 +314,8 @@ def get_example_queries():
                 "sql": """
                     SELECT
                         SUM(gross_booked_premium) AS total_premium,
-                        SUM(target) AS total_target,
-                        ROUND(SUM(gross_booked_premium) - SUM(target), 2) AS variance
-                    FROM entries_salespremiumdataentry
+                        ROUND(SUM(gross_booked_premium), 2) AS total_premium_rounded
+                    FROM entries_saleskpientry
                     WHERE date >= date_trunc('year', CURRENT_DATE)
                       AND date <= CURRENT_DATE;
                 """,
@@ -387,8 +364,6 @@ def get_example_queries():
                         SELECT added_by_id FROM entries_motorrenewalentry
                         UNION ALL
                         SELECT added_by_id FROM entries_motorclaimentry
-                        UNION ALL
-                        SELECT added_by_id FROM entries_salespremiumdataentry
                         UNION ALL
                         SELECT added_by_id FROM entries_saleskpientry
                         UNION ALL
@@ -447,13 +422,12 @@ def get_example_queries():
                 """,
             },
             {
-                "question": "What is the total gross booked premium vs target for this year?",
+                "question": "What is the total gross booked premium for this year?",
                 "sql": """
                     SELECT
                         SUM(gross_booked_premium) AS total_premium,
-                        SUM(target) AS total_target,
-                        ROUND(SUM(gross_booked_premium) - SUM(target), 2) AS variance
-                    FROM entries_salespremiumdataentry
+                        ROUND(SUM(gross_booked_premium), 2) AS total_premium_rounded
+                    FROM entries_saleskpientry
                     WHERE date >= date('now', 'start of year')
                       AND date <= date('now');
                 """,
@@ -502,8 +476,6 @@ def get_example_queries():
                         SELECT added_by_id FROM entries_motorrenewalentry
                         UNION ALL
                         SELECT added_by_id FROM entries_motorclaimentry
-                        UNION ALL
-                        SELECT added_by_id FROM entries_salespremiumdataentry
                         UNION ALL
                         SELECT added_by_id FROM entries_saleskpientry
                         UNION ALL

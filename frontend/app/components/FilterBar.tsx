@@ -1,6 +1,8 @@
 "use client";
 
+import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -14,6 +16,12 @@ import { DateRangeFilter } from "@/components/ui/date-range-filter";
 export type FilterBarOption = { value: string; label: string };
 
 export interface FilterBarProps {
+  search?: {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+    label?: string;
+  };
   dateRange?: {
     from: string;
     to: string;
@@ -35,9 +43,24 @@ export interface FilterBarProps {
   hasActiveFilters?: boolean;
 }
 
-export function FilterBar({ dateRange, user, status, onClear, hasActiveFilters }: FilterBarProps) {
+export function FilterBar({ search, dateRange, user, status, onClear, hasActiveFilters }: FilterBarProps) {
   return (
     <div className="flex gap-4 items-end flex-wrap">
+      {search && (
+        <div className="flex flex-col gap-2">
+          <Label>{search.label ?? "Search"}</Label>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF] pointer-events-none" />
+            <Input
+              type="search"
+              value={search.value}
+              onChange={(e) => search.onChange(e.target.value)}
+              placeholder={search.placeholder ?? "Search…"}
+              className="w-[240px] pl-8 shadow-none"
+            />
+          </div>
+        </div>
+      )}
       {dateRange && (
         <div className="flex flex-col gap-2">
           <Label>Date Range</Label>

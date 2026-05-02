@@ -20,12 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { DataTable, Tooltip } from '@/app/components/DataTable';
 import { fetchApi, getUsersForModule } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
@@ -39,8 +33,6 @@ import {
   Calendar,
   X,
   Check,
-  Users,
-  MoreHorizontal,
 } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
@@ -48,11 +40,21 @@ import { formatDate, formatDateTime } from '@/app/lib/date';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { useConfirm } from '@/app/components/ConfirmDialog';
-import { AddedByCell } from '@/app/components/KpiModulePage';
+import {
+  AddedByCell,
+  PersonalDailyTracker,
+  TrackerView,
+  WeeklyView,
+  toLocalDateString,
+  startOfWeek,
+  addDays,
+  MONTH_NAMES,
+  type BaseModuleEntry,
+  type ModuleUser,
+  type WeeklyColumnSpec,
+} from '@/app/components/KpiModulePage';
 
-interface SalesKPIEntry {
-  id: number;
-  date: string;
+interface SalesKPIEntry extends BaseModuleEntry {
   leads_to_ops_team: number;
   quotes_from_ops_team: number;
   quotes_to_client: number;
@@ -61,12 +63,6 @@ interface SalesKPIEntry {
   existing_clients: number;
   existing_clients_closed: number;
   gross_booked_premium: number;
-  added_by: number;
-  added_by_name: string;
-  on_behalf_of: number | null;
-  on_behalf_of_name: string | null;
-  added_at: string;
-  is_editable: boolean;
 }
 
 interface SalesMonthlyTarget {
@@ -76,51 +72,6 @@ interface SalesMonthlyTarget {
   month: number;
   premium_target: string | null;
   clients_assigned: number | null;
-}
-
-interface ModuleUser {
-  id: number;
-  email: string;
-  full_name: string;
-}
-
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-const SHORT_DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
-
-// ─── helpers ────────────────────────────────────────────────────────────────
-
-function toLocalDateString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-function startOfWeek(d: Date): Date {
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  const mon = new Date(d);
-  mon.setDate(d.getDate() + diff);
-  mon.setHours(0, 0, 0, 0);
-  return mon;
-}
-
-function addDays(d: Date, n: number): Date {
-  const r = new Date(d);
-  r.setDate(r.getDate() + n);
-  return r;
-}
-
-function sameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
 }
 
 function formatPremium(val: number | string | null | undefined): string {
@@ -133,736 +84,41 @@ function formatPremium(val: number | string | null | undefined): string {
   });
 }
 
-// ─── Status Badge ─────────────────────────────────────────────────────────────
+// ─── Weekly column config (driving the shared WeeklyView) ───────────────────
 
-function StatusBadge({ type }: { type: 'submitted' | 'not_submitted' | 'upcoming' }) {
-  if (type === 'submitted') {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[#16A34A]">
-        <span className="w-2 h-2 rounded-full bg-[#16A34A] shrink-0" />
-        Submitted
-      </span>
-    );
-  }
-  if (type === 'not_submitted') {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[#DC2626]">
-        <span className="w-2 h-2 rounded-full bg-[#DC2626] shrink-0" />
-        Not submitted
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[#71717A]">
-      <span className="w-2 h-2 rounded-full bg-[#D4D4D4] shrink-0" />
-      Upcoming
-    </span>
-  );
-}
-
-// ─── User Avatar ──────────────────────────────────────────────────────────────
-
-function UserAvatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 'md' }) {
-  const dim = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-8 h-8 text-sm';
-  return (
-    <span
-      className={`${dim} rounded-full bg-[#6366F1] text-white flex items-center justify-center font-semibold uppercase shrink-0`}
-    >
-      {name.charAt(0)}
-    </span>
-  );
-}
-
-// ─── Personal Daily Tracker ───────────────────────────────────────────────────
-
-function PersonalDailyTracker({
-  calYear,
-  calMonth,
-  today,
-  monthEntries,
-  currentUserId,
-  userFullName,
-  onPrevMonth,
-  onNextMonth,
-  onGoToday,
-}: {
-  calYear: number;
-  calMonth: number;
-  today: Date;
-  monthEntries: SalesKPIEntry[];
-  currentUserId: number | undefined;
-  userFullName: string;
-  onPrevMonth: () => void;
-  onNextMonth: () => void;
-  onGoToday: () => void;
-}) {
-  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
-  const trackerTitle = userFullName ? `${userFullName}'s Daily Tracker` : 'Daily Tracker';
-
-  return (
-    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
-      {/* Card header */}
-      <div className="flex items-center gap-2 px-5 py-2.5 border-b border-[#E4E4E4]">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#6366F1]">
-          <rect x="1" y="2" width="14" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M1 6h14" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M5 1v2M11 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-        <span className="text-sm font-semibold text-[#09090B]">{trackerTitle}</span>
-      </div>
-
-      {/* Controls row */}
-      <div className="flex items-center justify-between px-5 py-2 border-b border-[#E4E4E4]">
-        <div className="flex items-center gap-3">
-          {/* Month/Year toggle */}
-          <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
-            <button className="px-3 py-1.5 bg-white text-[#09090B]">Month</button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-[#09090B] min-w-[120px]">
-            {MONTH_NAMES[calMonth]} {calYear}
-          </span>
-          <button
-            onClick={onGoToday}
-            className="text-sm font-medium text-[#09090B] px-3 py-1 rounded-lg border border-[#E4E4E4] hover:bg-[#F3F3F3] transition-colors"
-          >
-            Today
-          </button>
-          <button
-            onClick={onPrevMonth}
-            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
-          >
-            <ChevronLeft className="h-4 w-4 text-[#71717A]" />
-          </button>
-          <button
-            onClick={onNextMonth}
-            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
-          >
-            <ChevronRight className="h-4 w-4 text-[#71717A]" />
-          </button>
-        </div>
-      </div>
-
-      {/* Day columns strip */}
-      <div className="px-4 py-2.5 overflow-x-auto">
-        <div className="flex w-full border border-[#E4E4E4] rounded-lg overflow-hidden">
-          {Array.from({ length: daysInMonth }, (_, i) => new Date(calYear, calMonth, i + 1)).map((d, i) => {
-            const ds = toLocalDateString(d);
-            const isSunday = d.getDay() === 0;
-            const isToday = sameDay(d, today);
-            const isPast = d < today && !isToday;
-            const hasEntry = monthEntries.some((e) => e.date === ds && e.added_by === currentUserId);
-
-            let indicatorBg = '';
-            let indicatorStyle: React.CSSProperties | undefined;
-            if (isSunday) {
-              indicatorStyle = {
-                backgroundImage: 'repeating-linear-gradient(135deg,#D1D5DB 0,#D1D5DB 1px,transparent 1px,transparent 6px)',
-                backgroundColor: '#F9FAFB',
-              };
-            } else if (hasEntry) {
-              indicatorBg = 'bg-[#DCFCE7]';
-            } else if (isToday) {
-              indicatorBg = 'bg-[#EEF2FF]';
-            } else if (isPast) {
-              indicatorBg = 'bg-[#FEE2E2]';
-            }
-
-            return (
-              <div
-                key={d.getDate()}
-                className={`flex-1 flex flex-col items-center select-none ${i > 0 ? 'border-l border-[#E4E4E4]' : ''}`}
-              >
-                {/* Day number + abbreviation */}
-                <div className="flex flex-col items-center justify-center h-16 w-full">
-                  <span className={`text-[11px] font-semibold leading-none ${
-                    isToday
-                      ? 'w-[22px] h-[22px] flex items-center justify-center rounded-full bg-[#4F46E5] text-white text-[11px]'
-                      : isSunday
-                      ? 'text-[#9CA3AF]'
-                      : 'text-[#09090B]'
-                  }`}>
-                    {d.getDate()}
-                  </span>
-                  <span className={`text-[9px] mt-0.5 leading-none ${isSunday ? 'text-[#9CA3AF]' : 'text-[#71717A]'}`}>
-                    {SHORT_DAY[d.getDay()]}
-                  </span>
-                </div>
-                {/* Colored indicator */}
-                <div
-                  className={`w-full h-16 border-t border-[#E4E4E4] ${indicatorBg}`}
-                  style={indicatorStyle}
-                />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Tracker View (admin matrix) ──────────────────────────────────────────────
-
-function TrackerView({
-  calYear,
-  calMonth,
-  monthEntries,
-  moduleUsers,
-  trackerUserFilter,
-  onTrackerUserFilterChange,
-  onPrevMonth,
-  onNextMonth,
-  onGoToday,
-}: {
-  calYear: number;
-  calMonth: number;
-  monthEntries: SalesKPIEntry[];
-  moduleUsers: ModuleUser[];
-  trackerUserFilter: string;
-  onTrackerUserFilterChange: (v: string) => void;
-  onPrevMonth: () => void;
-  onNextMonth: () => void;
-  onGoToday: () => void;
-}) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
-  const calDays: Date[] = Array.from(
-    { length: daysInMonth },
-    (_, i) => new Date(calYear, calMonth, i + 1)
-  );
-
-  const entryMap = new Map<string, Set<number>>();
-  for (const e of monthEntries) {
-    if (!entryMap.has(e.date)) entryMap.set(e.date, new Set());
-    entryMap.get(e.date)!.add(e.added_by);
-  }
-
-  const visibleUsers =
-    trackerUserFilter === 'all'
-      ? moduleUsers
-      : moduleUsers.filter((u) => String(u.id) === trackerUserFilter);
-
-  return (
-    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
-      {/* Card header */}
-      <div className="flex items-center gap-2 px-5 py-2.5 border-b border-[#E4E4E4]">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#6366F1]">
-          <rect x="1" y="2" width="14" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M1 6h14" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M5 1v2M11 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-        <span className="text-sm font-semibold text-[#09090B]">Team Daily Tracker</span>
-      </div>
-
-      {/* Controls row */}
-      <div className="bg-white flex items-center justify-between px-5 py-2 border-b border-[#E4E4E4] flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          {/* Month toggle */}
-          <div className="flex items-center rounded-lg border border-[#E4E4E4] overflow-hidden text-xs font-medium">
-            <button className="px-3 py-1.5 bg-white text-[#09090B]">
-              Month
-            </button>
-          </div>
-
-          {/* All Users dropdown */}
-          <Select value={trackerUserFilter} onValueChange={onTrackerUserFilterChange}>
-            <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 gap-1.5 w-auto min-w-[120px]">
-              <Users className="h-3.5 w-3.5 text-[#71717A]" />
-              <SelectValue placeholder="All Users" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Users</SelectItem>
-              {moduleUsers.map((u) => (
-                <SelectItem key={u.id} value={String(u.id)}>
-                  {u.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-[#09090B] min-w-[120px]">
-            {MONTH_NAMES[calMonth]} {calYear}
-          </span>
-          <button
-            onClick={onGoToday}
-            className="text-sm font-medium text-[#09090B] px-3 py-1 rounded-lg border border-[#E4E4E4] hover:bg-[#F3F3F3] transition-colors"
-          >
-            Today
-          </button>
-          <button
-            onClick={onPrevMonth}
-            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
-          >
-            <ChevronLeft className="h-4 w-4 text-[#71717A]" />
-          </button>
-          <button
-            onClick={onNextMonth}
-            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
-          >
-            <ChevronRight className="h-4 w-4 text-[#71717A]" />
-          </button>
-        </div>
-      </div>
-
-      {/* Grid — scrollable independently so sticky thead works */}
-      <div className="overflow-auto max-h-[calc(100vh-15rem)] scrollbar-hide">
-        <table className="border-collapse w-full min-w-max">
-          <thead className="sticky top-0 z-20">
-            <tr className="border-b border-[#E4E4E4]">
-              {/* Dept header spanning user column */}
-              <th className="sticky left-0 z-30 bg-[#F9F9F9] px-4 py-3 text-left min-w-[180px] border-r border-[#E4E4E4]">
-                <div className="text-sm font-semibold text-[#09090B]">Sales KPI DEPT.</div>
-                <div className="text-xs text-[#71717A]">{visibleUsers.length} members</div>
-              </th>
-              {calDays.map((d) => {
-                const isSun = d.getDay() === 0;
-                const isToday = sameDay(d, today);
-                return (
-                  <th
-                    key={d.getDate()}
-                    className={`px-1 py-2 text-center min-w-[36px] border-l border-[#E4E4E4] ${
-                      isToday ? 'bg-[#EEF2FF]' : 'bg-[#F9F9F9]'
-                    }`}
-                  >
-                    <div className="flex flex-col items-center gap-0.5">
-                      <span
-                        className={`text-[10px] font-medium ${
-                          isSun ? 'text-[#9CA3AF]' : 'text-[#71717A]'
-                        }`}
-                      >
-                        {SHORT_DAY[d.getDay()]}
-                      </span>
-                      <span
-                        className={`text-xs font-semibold leading-none ${
-                          isToday
-                            ? 'w-5 h-5 flex items-center justify-center rounded-full bg-[#4F46E5] text-white'
-                            : isSun
-                            ? 'text-[#9CA3AF]'
-                            : 'text-[#09090B]'
-                        }`}
-                      >
-                        {d.getDate()}
-                      </span>
-                    </div>
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#E4E4E4]">
-            {visibleUsers.length === 0 ? (
-              <tr>
-                <td colSpan={daysInMonth + 1} className="px-4 py-8 text-center text-sm text-[#71717A]">
-                  No users found
-                </td>
-              </tr>
-            ) : (
-              visibleUsers.map((user) => (
-                <tr key={user.id} className="hover:bg-[#FAFAFA] transition-colors">
-                  <td className="sticky left-0 z-10 bg-white hover:bg-[#FAFAFA] px-4 py-3 min-w-[180px] border-r border-[#E4E4E4]">
-                    <div className="flex items-center gap-2">
-                      <UserAvatar name={user.full_name} />
-                      <span className="text-sm font-medium text-[#09090B] truncate max-w-[120px]">
-                        {user.full_name}
-                      </span>
-                    </div>
-                  </td>
-                  {calDays.map((d) => {
-                    const ds = toLocalDateString(d);
-                    const isSun = d.getDay() === 0;
-                    const isToday = sameDay(d, today);
-                    const isPast = d < today && !isToday;
-                    const hasEntry = entryMap.get(ds)?.has(user.id) ?? false;
-
-                    let cellBg = '';
-                    let cellStyle: React.CSSProperties | undefined;
-
-                    if (isSun) {
-                      cellStyle = {
-                        backgroundImage:
-                          'repeating-linear-gradient(135deg,#D1D5DB 0,#D1D5DB 1px,transparent 1px,transparent 6px)',
-                        backgroundColor: '#F9FAFB',
-                      };
-                    } else if (hasEntry) {
-                      cellBg = isToday ? 'bg-[#DCFCE7]' : 'bg-[#DCFCE7]';
-                    } else if (isToday) {
-                      cellBg = 'bg-[#EEF2FF]';
-                    } else if (isPast) {
-                      cellBg = 'bg-[#FEE2E2]';
-                    }
-
-                    return (
-                      <td
-                        key={d.getDate()}
-                        className={`px-1 py-2 border-l border-[#E4E4E4] ${cellBg}`}
-                        style={cellStyle}
-                      >
-                        <div className="w-8 h-8" />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// ─── Weekly View ─────────────────────────────────────────────────────────────
-
-function WeeklyView({
-  weekStart,
-  monthEntries,
-  today,
-  onPrevWeek,
-  onNextWeek,
-  onGoToCurrentWeek,
-  onAddRecord,
-  onEdit,
-  onDelete,
-  moduleUsers,
-  weeklyUserFilter,
-  onWeeklyUserFilterChange,
-  isAdmin,
-  currentUserId,
-  navStickyTop = 'top-16',
-  tableMaxHeight = 'calc(100vh - 15rem)',
-}: {
-  weekStart: Date;
-  monthEntries: SalesKPIEntry[];
-  today: Date;
-  onPrevWeek: () => void;
-  onNextWeek: () => void;
-  onGoToCurrentWeek: () => void;
-  onAddRecord: (date: string) => void;
-  onEdit: (entry: SalesKPIEntry) => void;
-  onDelete: (entry: SalesKPIEntry) => void;
-  moduleUsers: ModuleUser[];
-  weeklyUserFilter: string;
-  onWeeklyUserFilterChange: (v: string) => void;
-  isAdmin: boolean;
-  currentUserId: number | undefined;
-  navStickyTop?: string;
-  tableMaxHeight?: string;
-}) {
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-
-  const getEntriesForDay = (d: Date): SalesKPIEntry[] => {
-    const ds = toLocalDateString(d);
-    let entries = monthEntries.filter((e) => e.date === ds);
-    if (weeklyUserFilter !== 'all') {
-      entries = entries.filter((e) => String(e.added_by) === weeklyUserFilter);
-    } else if (!isAdmin) {
-      entries = entries.filter((e) => e.added_by === currentUserId);
-    }
-    return entries.sort((a, b) => new Date(b.added_at).getTime() - new Date(a.added_at).getTime());
-  };
-
-  const isPastDay = (d: Date) => {
-    const s = new Date(d); s.setHours(0, 0, 0, 0);
-    const t = new Date(today); t.setHours(0, 0, 0, 0);
-    return s < t;
-  };
-
-  const weekEndDay = addDays(weekStart, 6);
-  const formatShortDate = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const weekDateRangeLabel =
-    weekStart.getFullYear() === weekEndDay.getFullYear()
-      ? `${formatShortDate(weekStart)} – ${formatShortDate(weekEndDay)}, ${weekEndDay.getFullYear()}`
-      : `${formatShortDate(weekStart)}, ${weekStart.getFullYear()} – ${formatShortDate(weekEndDay)}, ${weekEndDay.getFullYear()}`;
-
-  // Admin can only add records for themselves; viewing another user is read-only.
-  const isViewingSelf =
-    weeklyUserFilter === 'all' || weeklyUserFilter === String(currentUserId);
-
-  return (
-    <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm">
-      {/* Sticky week nav bar */}
-      <div className={`sticky ${navStickyTop} z-10 bg-white rounded-t-2xl flex items-center justify-between px-5 py-4 border-b border-[#E4E4E4]`}>
-        <div className="flex items-center gap-2">
-          {isAdmin && (
-            <Select value={weeklyUserFilter} onValueChange={onWeeklyUserFilterChange}>
-              <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 gap-1.5 w-auto min-w-[130px]">
-                <Users className="h-3.5 w-3.5 text-[#71717A]" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {moduleUsers.map((u) => (
-                  <SelectItem key={u.id} value={String(u.id)}>
-                    {u.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-[#09090B] min-w-[160px]">{weekDateRangeLabel}</span>
-          <button
-            onClick={onGoToCurrentWeek}
-            className="text-sm font-medium text-[#09090B] px-3 py-1 rounded-lg border border-[#E4E4E4] hover:bg-[#F3F3F3] transition-colors"
-          >
-            This Week
-          </button>
-          <button
-            onClick={onPrevWeek}
-            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
-          >
-            <ChevronLeft className="h-4 w-4 text-[#71717A]" />
-          </button>
-          <button
-            onClick={onNextWeek}
-            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F3F3F3] transition-colors"
-          >
-            <ChevronRight className="h-4 w-4 text-[#71717A]" />
-          </button>
-        </div>
-      </div>
-
-      {/* Table — scrollable container so sticky thead works relative to it */}
-      <div className="overflow-auto scrollbar-hide" style={{ maxHeight: tableMaxHeight }}>
-        <table className="border-collapse min-w-max">
-          <thead className="sticky top-0 z-10">
-            <tr className="bg-[#F9F9F9] border-b border-[#E4E4E4]">
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[140px]">
-                Day
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
-                Leads to ops team
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
-                Quotes from ops team
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
-                Quotes to client
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
-                Total conversions
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
-                New clients acquired
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
-                Existing clients
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
-                Existing clients closed
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide whitespace-nowrap">
-                Gross booked premium
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
-                Added by
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[180px]">
-                Status
-              </th>
-              <th className="w-12" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#F3F3F3]">
-            {weekDays.map((d, idx) => {
-              const isSun = d.getDay() === 0;
-              const isToday = sameDay(d, today);
-              const entries = getEntriesForDay(d);
-              const past = isPastDay(d);
-
-              if (entries.length === 0) {
-                let statusType: 'submitted' | 'not_submitted' | 'upcoming' = 'upcoming';
-                if (past && !isSun) statusType = 'not_submitted';
-
-                const canAddToday = isToday && !isSun && isViewingSelf;
-                const todayEntryExists = isToday
-                  ? monthEntries.some(
-                      (e) =>
-                        e.date === toLocalDateString(d) &&
-                        (weeklyUserFilter === 'all'
-                          ? e.added_by === currentUserId
-                          : String(e.added_by) === weeklyUserFilter)
-                    )
-                  : false;
-
-                return (
-                  <tr
-                    key={toLocalDateString(d)}
-                    className={`h-[64px] transition-colors ${
-                      isSun
-                        ? 'bg-[#FAFAFA] opacity-60'
-                        : isToday
-                        ? 'bg-[#F5F3FF] hover:bg-[#EEF2FF]'
-                        : 'bg-white hover:bg-[#FAFAFA]'
-                    }`}
-                  >
-                    <td className="px-5 py-3">
-                      <div className="flex flex-col gap-0.5">
-                        {isToday ? (
-                          <span className="inline-flex items-center justify-center bg-[#4F46E5] text-white text-xs font-semibold px-2 py-0.5 rounded-md w-fit">
-                            {WEEKDAY_NAMES[idx]}
-                          </span>
-                        ) : (
-                          <span className="text-sm font-semibold leading-tight text-[#09090B]">
-                            {WEEKDAY_NAMES[idx]}
-                          </span>
-                        )}
-                        <span className="text-xs text-[#9CA3AF] leading-tight">
-                          {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
-                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
-                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
-                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
-                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
-                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
-                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
-                    <td className="px-5 py-3">{!isSun && <span className="text-[#D1D5DB]">—</span>}</td>
-                    <td className="px-5 py-3" />
-                    <td className="px-5 py-3">
-                      {!isSun && (
-                        canAddToday && !todayEntryExists ? (
-                          <Button
-                            size="sm"
-                            className="h-8 px-3 text-xs font-medium bg-[#09090B] hover:bg-[#1a1a1a] text-white rounded-lg gap-1"
-                            onClick={() => onAddRecord(toLocalDateString(d))}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                            Add record
-                          </Button>
-                        ) : (
-                          <StatusBadge type={statusType} />
-                        )
-                      )}
-                    </td>
-                    <td className="px-3 py-3">
-                      {!isSun && isViewingSelf && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="w-8 h-8 flex items-center justify-center rounded-md text-[#9CA3AF] hover:text-[#09090B] hover:bg-[#F3F3F3] transition-colors">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-[149px] bg-white border border-[#E4E4E4] rounded-lg p-1 shadow-md">
-                            <DropdownMenuItem
-                              onClick={() => onAddRecord(toLocalDateString(d))}
-                              className="cursor-pointer px-3 py-2 text-sm text-[#09090B] rounded-md"
-                            >
-                              Add record
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </td>
-                  </tr>
-                );
-              }
-
-              return entries.map((entry, eIdx) => {
-                const statusType: 'submitted' | 'not_submitted' | 'upcoming' = 'submitted';
-                const canEditEntry = entry.is_editable;
-                const canDeleteEntry = entry.added_by === currentUserId;
-                const showActions = canEditEntry || canDeleteEntry;
-
-                return (
-                  <tr
-                    key={`${toLocalDateString(d)}-${entry.id}`}
-                    className={`h-[64px] transition-colors ${
-                      isSun
-                        ? 'bg-[#FAFAFA] opacity-60'
-                        : isToday
-                        ? 'bg-[#F0FDF4] hover:bg-[#ECFDF5]'
-                        : 'bg-white hover:bg-[#FAFAFA]'
-                    }`}
-                  >
-                    {eIdx === 0 ? (
-                      <td className="px-5 py-3">
-                        <div className="flex flex-col gap-0.5">
-                          {isToday ? (
-                            <span className="inline-flex items-center justify-center bg-[#4F46E5] text-white text-xs font-semibold px-2 py-0.5 rounded-md w-fit">
-                              {WEEKDAY_NAMES[idx]}
-                            </span>
-                          ) : (
-                            <span className="text-sm font-semibold leading-tight text-[#09090B]">
-                              {WEEKDAY_NAMES[idx]}
-                            </span>
-                          )}
-                          <span className="text-xs text-[#9CA3AF] leading-tight">
-                            {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </span>
-                        </div>
-                      </td>
-                    ) : (
-                      <td className="px-5 py-3" />
-                    )}
-                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.leads_to_ops_team}</td>
-                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.quotes_from_ops_team}</td>
-                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.quotes_to_client}</td>
-                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.total_conversions}</td>
-                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.new_clients_acquired}</td>
-                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.existing_clients}</td>
-                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{entry.existing_clients_closed}</td>
-                    <td className="px-5 py-3 text-sm font-medium text-[#374151]">{formatPremium(entry.gross_booked_premium)}</td>
-                    <td className="px-5 py-3">
-                      <AddedByCell entry={entry} />
-                    </td>
-                    <td className="px-5 py-3">
-                      <StatusBadge type={statusType} />
-                    </td>
-                    <td className="px-3 py-3">
-                      {showActions && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="w-8 h-8 flex items-center justify-center rounded-md text-[#9CA3AF] hover:text-[#09090B] hover:bg-[#F3F3F3] transition-colors">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-[149px] bg-white border border-[#E4E4E4] rounded-lg p-1 shadow-md">
-                            {canEditEntry && (
-                              <DropdownMenuItem
-                                onClick={() => onEdit(entry)}
-                                className="cursor-pointer px-3 py-2 text-sm text-[#09090B] rounded-md"
-                              >
-                                Edit
-                              </DropdownMenuItem>
-                            )}
-                            {canDeleteEntry && (
-                              <DropdownMenuItem
-                                onClick={() => onDelete(entry)}
-                                className="cursor-pointer px-3 py-2 text-sm text-red-600 rounded-md"
-                              >
-                                Delete
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </td>
-                  </tr>
-                );
-              });
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
+// Order mirrors the entry modal's field order: Clients & Premium →
+// Lead-to-Quote → Client Retention → Quote-to-Conversion.
+const weeklyColumns: WeeklyColumnSpec<SalesKPIEntry>[] = [
+  { key: 'new_clients_acquired', header: 'New clients acquired' },
+  {
+    key: 'gross_booked_premium',
+    header: 'Gross booked premium',
+    render: (v) => formatPremium(v as number | string | null),
+  },
+  { key: 'leads_to_ops_team', header: 'Leads to ops team' },
+  { key: 'quotes_from_ops_team', header: 'Quotes from ops team' },
+  { key: 'existing_clients', header: 'Existing clients' },
+  { key: 'existing_clients_closed', header: 'Existing clients closed' },
+  { key: 'quotes_to_client', header: 'Quotes to client' },
+  { key: 'total_conversions', header: 'Total conversions' },
+];
 
 // ─── Data View columns ───────────────────────────────────────────────────────
 
+// Order mirrors the entry modal's field order: Clients & Premium →
+// Lead-to-Quote → Client Retention → Quote-to-Conversion.
 const dataColumns = [
   { key: 'date', header: 'Record date', render: (item: SalesKPIEntry) => formatDate(item.date) },
+  {
+    key: 'new_clients_acquired',
+    header: 'New clients acquired',
+    tooltip: 'Number of new clients acquired',
+  },
+  {
+    key: 'gross_booked_premium',
+    header: 'Gross booked premium',
+    render: (item: SalesKPIEntry) => formatPremium(item.gross_booked_premium),
+  },
   {
     key: 'leads_to_ops_team',
     header: 'Leads to ops team',
@@ -872,21 +128,6 @@ const dataColumns = [
     key: 'quotes_from_ops_team',
     header: 'Quotes from ops team',
     tooltip: 'Number of quotes received from the operations team',
-  },
-  {
-    key: 'quotes_to_client',
-    header: 'Quotes to client',
-    tooltip: 'Number of quotes submitted to the client',
-  },
-  {
-    key: 'total_conversions',
-    header: 'Total conversions',
-    tooltip: 'Total number of conversions',
-  },
-  {
-    key: 'new_clients_acquired',
-    header: 'New clients acquired',
-    tooltip: 'Number of new clients acquired',
   },
   {
     key: 'existing_clients',
@@ -899,9 +140,14 @@ const dataColumns = [
     tooltip: 'How many existing clients did I close',
   },
   {
-    key: 'gross_booked_premium',
-    header: 'Gross booked premium',
-    render: (item: SalesKPIEntry) => formatPremium(item.gross_booked_premium),
+    key: 'quotes_to_client',
+    header: 'Quotes to client',
+    tooltip: 'Number of quotes submitted to the client',
+  },
+  {
+    key: 'total_conversions',
+    header: 'Total conversions',
+    tooltip: 'Total number of conversions',
   },
   { key: 'added_by_name', header: 'Added by', render: (item: SalesKPIEntry) => <AddedByCell entry={item} /> },
   {
@@ -1472,6 +718,7 @@ export default function SalesKPIPage() {
                 monthEntries={monthEntries}
                 moduleUsers={moduleUsers}
                 trackerUserFilter={trackerUserFilter}
+                deptLabel="Sales KPI DEPT."
                 onTrackerUserFilterChange={setTrackerUserFilter}
                 onPrevMonth={prevMonth}
                 onNextMonth={nextMonth}
@@ -1485,6 +732,7 @@ export default function SalesKPIPage() {
               weekStart={weekStart}
               monthEntries={monthEntries}
               today={today}
+              weeklyColumns={weeklyColumns}
               onPrevWeek={() => setWeekStart((d) => addDays(d, -7))}
               onNextWeek={() => setWeekStart((d) => addDays(d, 7))}
               onGoToCurrentWeek={() => setWeekStart(startOfWeek(today))}

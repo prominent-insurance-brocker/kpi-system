@@ -220,8 +220,10 @@ class SalesMonthlyTargetViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        queryset = SalesMonthlyTarget.objects.all() if user.is_staff else SalesMonthlyTarget.objects.filter(user=user)
+        # Monthly targets are PER-USER. Admins are users too — they have their
+        # own targets and must not see/edit other users' targets here. The
+        # data_visibility='all' rule applies to entries, not personal targets.
+        queryset = SalesMonthlyTarget.objects.filter(user=self.request.user)
         year = self.request.query_params.get('year')
         month = self.request.query_params.get('month')
         if year:

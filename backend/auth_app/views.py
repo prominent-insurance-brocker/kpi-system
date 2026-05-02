@@ -10,6 +10,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from roles.permissions import IsAdminUser
@@ -185,13 +186,41 @@ class VerifyMagicLinkView(APIView):
 
 
 class LogoutView(APIView):
-    """Logout and clear JWT cookies."""
+    """Logout: blacklist the refresh token server-side, then clear cookies.
+
+    Two things have to happen for a real logout:
+
+    1. **Blacklist the refresh token.** Otherwise anyone who has a copy
+       (DevTools, network capture, leaked cookie) can keep minting new
+       access tokens for the lifetime of the refresh token (7-30 days).
+    2. **Delete the cookies with the same attributes used to set them.** A
+       bare ``response.delete_cookie('name')`` produces a non-Secure
+       Set-Cookie header; many browsers refuse to overwrite the original
+       Secure cookie with a non-Secure one, so the cookie sticks around
+       and the user effectively stays logged in. Pass matching
+       ``samesite``/``secure``/``path`` so the deletion lands.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # 1. Blacklist the refresh token if present and parseable.
+        refresh_cookie = request.COOKIES.get('refresh_token')
+        if refresh_cookie:
+            try:
+                RefreshToken(refresh_cookie).blacklist()
+            except TokenError:
+                # Already blacklisted, expired, or malformed — nothing to do.
+                pass
+
+        # 2. Clear cookies with attributes that match VerifyMagicLinkView.
         response = Response({'message': 'Logout successful'})
-        response.delete_cookie('access_token')
-        response.delete_cookie('refresh_token')
+        cookie_kwargs = {
+            'path': '/',
+            'samesite': 'Lax',
+            'secure': not settings.DEBUG,
+        }
+        response.delete_cookie('access_token', **cookie_kwargs)
+        response.delete_cookie('refresh_token', **cookie_kwargs)
         return response
 
 

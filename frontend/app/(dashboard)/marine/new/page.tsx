@@ -29,10 +29,10 @@ export default function MarineNewPage() {
         { key: 'new_policies_issued', header: 'New policies issued' },
       ]}
       modalFields={[
-        { key: 'gross_booked_premium', label: 'Gross Booked Premium', min: 0, step: 0.01 },
-        { key: 'quotes_created', label: 'Quotes Created', min: 0 },
-        { key: 'new_clients_acquired', label: 'New Clients Acquired', min: 0 },
-        { key: 'new_policies_issued', label: 'New Policies Issued', min: 0 },
+        { key: 'gross_booked_premium', label: 'Gross booked premium', min: 0, step: 0.01 },
+        { key: 'quotes_created', label: 'Quotes created', min: 0 },
+        { key: 'new_clients_acquired', label: 'New clients acquired', min: 0 },
+        { key: 'new_policies_issued', label: 'New policies issued', min: 0 },
       ]}
     />
   );

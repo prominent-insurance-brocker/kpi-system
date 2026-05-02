@@ -22,14 +22,14 @@ export default function GeneralRenewalPage() {
         { key: 'quotes_converted', header: 'No. of quotes converted' },
         { key: 'quotes_revised', header: 'No. of quotes revised' },
         { key: 'tat', header: 'TAT (In Days)' },
-        { key: 'accuracy', header: 'Accuracy', render: (v) => `${v}%` },
+        { key: 'accuracy', header: 'Accuracy (%)', render: (v) => `${v}%` },
       ]}
       dataColumns={[
-        { key: 'quotations', header: 'No. of Quotes Created' },
-        { key: 'quotes_converted', header: 'No. of Quotes Converted' },
-        { key: 'quotes_revised', header: 'No. of Quotes Revised' },
+        { key: 'quotations', header: 'No. of quotes created' },
+        { key: 'quotes_converted', header: 'No. of quotes converted' },
+        { key: 'quotes_revised', header: 'No. of quotes revised' },
         { key: 'tat', header: 'TAT (In Days)', render: (item) => String(item.tat) },
-        { key: 'accuracy', header: 'Accuracy', render: (item) => `${item.accuracy}%` },
+        { key: 'accuracy', header: 'Accuracy (%)', render: (item) => `${item.accuracy}%` },
       ]}
       modalFields={[
         { key: 'quotations', label: 'No. of quotes created', min: 0 },

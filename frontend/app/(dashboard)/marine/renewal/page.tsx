@@ -29,10 +29,10 @@ export default function MarineRenewalPage() {
         { key: 'renewal_policies_issued', header: 'Renewal policies issued' },
       ]}
       modalFields={[
-        { key: 'monthly_renewal_quotes_assigned', label: 'Monthly Renewal Quotes Assigned', min: 0 },
-        { key: 'gross_booked_premium', label: 'Gross Booked Premium', min: 0, step: 0.01 },
-        { key: 'quotes_created', label: 'Quotes Created', min: 0 },
-        { key: 'renewal_policies_issued', label: 'Renewal Policies Issued', min: 0 },
+        { key: 'monthly_renewal_quotes_assigned', label: 'Monthly renewal quotes assigned', min: 0 },
+        { key: 'gross_booked_premium', label: 'Gross booked premium', min: 0, step: 0.01 },
+        { key: 'quotes_created', label: 'Quotes created', min: 0 },
+        { key: 'renewal_policies_issued', label: 'Renewal policies issued', min: 0 },
       ]}
     />
   );

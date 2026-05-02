@@ -639,13 +639,13 @@ function WeeklyView({
                 Day
               </th>
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
-                New clients
+                New clients acquired
               </th>
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
-                Conversions
+                Total conversions
               </th>
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
-                Premium
+                Gross booked premium
               </th>
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
                 Added by
@@ -837,51 +837,51 @@ function WeeklyView({
 // ─── Data View columns ───────────────────────────────────────────────────────
 
 const dataColumns = [
-  { key: 'date', header: 'Record Date', render: (item: SalesKPIEntry) => formatDate(item.date) },
+  { key: 'date', header: 'Record date', render: (item: SalesKPIEntry) => formatDate(item.date) },
   {
     key: 'leads_to_ops_team',
-    header: 'Leads Ops Team',
+    header: 'Leads to ops team',
     tooltip: 'Number of leads handed over to the operations team',
   },
   {
     key: 'quotes_from_ops_team',
-    header: 'Quotes Ops Team',
+    header: 'Quotes from ops team',
     tooltip: 'Number of quotes received from the operations team',
   },
   {
     key: 'quotes_to_client',
-    header: 'Quotes to Client',
+    header: 'Quotes to client',
     tooltip: 'Number of quotes submitted to the client',
   },
   {
     key: 'total_conversions',
-    header: 'Conversions',
+    header: 'Total conversions',
     tooltip: 'Total number of conversions',
   },
   {
     key: 'new_clients_acquired',
-    header: 'New Clients',
+    header: 'New clients acquired',
     tooltip: 'Number of new clients acquired',
   },
   {
     key: 'existing_clients',
-    header: 'Existing Clients',
+    header: 'Existing clients',
     tooltip: 'Number of existing clients under my account',
   },
   {
     key: 'existing_clients_closed',
-    header: 'Existing Clients Closed',
+    header: 'Existing clients closed',
     tooltip: 'How many existing clients did I close',
   },
   {
     key: 'gross_booked_premium',
-    header: 'Gross Booked Premium',
+    header: 'Gross booked premium',
     render: (item: SalesKPIEntry) => formatPremium(item.gross_booked_premium),
   },
-  { key: 'added_by_name', header: 'Added By', render: (item: SalesKPIEntry) => <AddedByCell entry={item} /> },
+  { key: 'added_by_name', header: 'Added by', render: (item: SalesKPIEntry) => <AddedByCell entry={item} /> },
   {
     key: 'added_at',
-    header: 'Added On',
+    header: 'Added on',
     render: (item: SalesKPIEntry) => formatDateTime(item.added_at),
   },
 ];
@@ -1848,7 +1848,7 @@ function EntryModal({
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">
-                    New Clients Acquired
+                    New clients acquired
                     <Tooltip text="Number of new clients acquired">
                       <Info className="h-3 w-3 text-[#71717A] cursor-help" />
                     </Tooltip>
@@ -1866,7 +1866,7 @@ function EntryModal({
                 </div>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">
-                    Gross Booked Premium
+                    Gross booked premium
                     <Tooltip text="Total gross premium booked today">
                       <Info className="h-3 w-3 text-[#71717A] cursor-help" />
                     </Tooltip>
@@ -1892,7 +1892,7 @@ function EntryModal({
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">
-                    Leads to Ops Team
+                    Leads to ops team
                     <Tooltip text="Number of leads handed over to the operations team">
                       <Info className="h-3 w-3 text-[#71717A] cursor-help" />
                     </Tooltip>
@@ -1908,7 +1908,7 @@ function EntryModal({
                 </div>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">
-                    Quotes From Ops Team
+                    Quotes from ops team
                     <Tooltip text="Number of quotes received from the operations team">
                       <Info className="h-3 w-3 text-[#71717A] cursor-help" />
                     </Tooltip>
@@ -1935,7 +1935,7 @@ function EntryModal({
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">
-                    Existing Clients
+                    Existing clients
                     <Tooltip text="Number of existing clients under my account">
                       <Info className="h-3 w-3 text-[#71717A] cursor-help" />
                     </Tooltip>
@@ -1953,7 +1953,7 @@ function EntryModal({
                 </div>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">
-                    Existing Clients Closed
+                    Existing clients closed
                     <Tooltip text="How many existing clients did I close">
                       <Info className="h-3 w-3 text-[#71717A] cursor-help" />
                     </Tooltip>
@@ -1980,7 +1980,7 @@ function EntryModal({
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">
-                    Quotes to Client
+                    Quotes to client
                     <Tooltip text="Number of quotes submitted to the client">
                       <Info className="h-3 w-3 text-[#71717A] cursor-help" />
                     </Tooltip>
@@ -1998,7 +1998,7 @@ function EntryModal({
                 </div>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">
-                    Total Conversions
+                    Total conversions
                     <Tooltip text="Total number of conversions">
                       <Info className="h-3 w-3 text-[#71717A] cursor-help" />
                     </Tooltip>

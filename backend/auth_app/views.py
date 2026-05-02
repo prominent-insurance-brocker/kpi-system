@@ -213,14 +213,21 @@ class LogoutView(APIView):
                 pass
 
         # 2. Clear cookies with attributes that match VerifyMagicLinkView.
+        # Django 4.2's `delete_cookie` doesn't accept ``secure`` — and without
+        # it, the browser refuses to overwrite the original Secure cookie in
+        # production. Use set_cookie with max_age=0 so we can pin every
+        # attribute (path / samesite / secure / httponly) to match the set.
         response = Response({'message': 'Logout successful'})
-        cookie_kwargs = {
+        clear_kwargs = {
+            'value': '',
+            'max_age': 0,
             'path': '/',
             'samesite': 'Lax',
             'secure': not settings.DEBUG,
+            'httponly': True,
         }
-        response.delete_cookie('access_token', **cookie_kwargs)
-        response.delete_cookie('refresh_token', **cookie_kwargs)
+        response.set_cookie('access_token', **clear_kwargs)
+        response.set_cookie('refresh_token', **clear_kwargs)
         return response
 
 

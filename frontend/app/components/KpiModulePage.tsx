@@ -52,9 +52,9 @@ export interface BaseModuleEntry {
 
 export function AddedByCell({ entry }: { entry: { added_by_name: string; on_behalf_of_name: string | null } }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 whitespace-nowrap">
       <UserAvatar name={entry.added_by_name} />
-      <span className="text-sm font-medium text-[#374151] truncate max-w-[140px]">
+      <span className="text-sm font-medium text-[#374151] whitespace-nowrap">
         {entry.added_by_name}
       </span>
     </div>
@@ -457,7 +457,7 @@ export function TrackerView<T extends BaseModuleEntry>({
                   <td className="sticky left-0 z-10 bg-white hover:bg-[#FAFAFA] px-4 py-3 min-w-[180px] border-r border-[#E4E4E4]">
                     <div className="flex items-center gap-2">
                       <UserAvatar name={user.full_name} />
-                      <span className="text-sm font-medium text-[#09090B] truncate max-w-[120px]">
+                      <span className="text-sm font-medium text-[#09090B] whitespace-nowrap">
                         {user.full_name}
                       </span>
                     </div>

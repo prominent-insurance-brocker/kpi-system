@@ -632,7 +632,7 @@ function WeeklyView({
 
       {/* Table — scrollable container so sticky thead works relative to it */}
       <div className="overflow-auto scrollbar-hide" style={{ maxHeight: tableMaxHeight }}>
-        <table className="w-full border-collapse">
+        <table className="border-collapse min-w-max">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#F9F9F9] border-b border-[#E4E4E4]">
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[140px]">
@@ -1081,18 +1081,22 @@ export default function SalesKPIPage() {
     setSheetTargets(result.data?.results ?? []);
   }, [sheetYear]);
 
-  // Load module users for admin (used by Tracker, Weekly, and Data user filters)
+  // Load module users for admin (used by Tracker, Weekly, and Data user filters).
+  // Default the weekly user filter to the logged-in user so the admin lands on
+  // their own week rather than the alphabetically-first agent's.
   useEffect(() => {
     if (!isAdmin) return;
     getUsersForModule('sales_kpi').then((result) => {
       if (result.data) {
         setModuleUsers(result.data);
-        if (result.data.length > 0) {
+        if (currentUserId) {
+          setWeeklyUserFilter(String(currentUserId));
+        } else if (result.data.length > 0) {
           setWeeklyUserFilter(String(result.data[0].id));
         }
       }
     });
-  }, [isAdmin]);
+  }, [isAdmin, currentUserId]);
 
   useEffect(() => {
     fetchCurrentTarget();

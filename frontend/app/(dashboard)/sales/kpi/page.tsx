@@ -123,9 +123,14 @@ function sameDay(a: Date, b: Date): boolean {
   );
 }
 
-function formatPremium(val: number | null | undefined): string {
-  if (val == null) return '0';
-  return Math.round(Number(val)).toLocaleString('en-IN');
+function formatPremium(val: number | string | null | undefined): string {
+  if (val == null || val === '') return '0.00';
+  const n = Number(val);
+  if (!Number.isFinite(n)) return '0.00';
+  return n.toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
@@ -1646,7 +1651,8 @@ export default function SalesKPIPage() {
                             <Input
                               id={key}
                               type="number"
-                              min="1"
+                              min={tab === 'premium' ? '0.01' : '1'}
+                              step={tab === 'premium' ? '0.01' : '1'}
                               autoFocus
                               placeholder={
                                 tab === 'premium'
@@ -2140,9 +2146,9 @@ function TargetModal({
             </div>
             <Input
               type="number"
-              min="1"
-              step="1"
-              placeholder="e.g. 150"
+              min="0.01"
+              step="0.01"
+              placeholder="e.g. 150.00"
               value={premiumTarget}
               onChange={(e) => setPremiumTarget(e.target.value)}
             />

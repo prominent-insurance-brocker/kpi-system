@@ -142,12 +142,11 @@ export async function verifyMagicLink(
   token: string,
   rememberMe: boolean
 ): Promise<ApiResponse<LoginResponse>> {
-  const params = new URLSearchParams({
-    token,
-    remember_me: rememberMe.toString(),
-  });
-  return fetchApi<LoginResponse>(`/api/auth/magic-link/verify/?${params}`, {
-    method: 'GET',
+  // POST so corp inbox link-scanners (which only do GET) can't consume the
+  // token before the user clicks "Sign in" on the verify page.
+  return fetchApi<LoginResponse>('/api/auth/magic-link/verify/', {
+    method: 'POST',
+    body: JSON.stringify({ token, remember_me: rememberMe }),
   });
 }
 

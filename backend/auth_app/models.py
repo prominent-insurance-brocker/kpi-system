@@ -75,10 +75,16 @@ class MagicLink(models.Model):
         return f"MagicLink for {self.user.email}"
 
     @classmethod
-    def create_for_user(cls, user, expiry_minutes=30):
-        """Create a new magic link for a user, invalidating all previous unused tokens."""
-        # Invalidate all previous unused tokens for this user
-        cls.objects.filter(user=user, is_used=False).update(is_used=True)
+    def create_for_user(cls, user, expiry_minutes=30, invalidate_prior=True):
+        """Create a new magic link for a user.
+
+        By default, all previous unused tokens for this user are invalidated.
+        Pass ``invalidate_prior=False`` for batch flows (e.g. the daily-cron
+        emailer) where killing the user's outstanding link would lock them out
+        of an already-delivered email they haven't clicked yet.
+        """
+        if invalidate_prior:
+            cls.objects.filter(user=user, is_used=False).update(is_used=True)
 
         token = secrets.token_urlsafe(48)
         expires_at = timezone.now() + timedelta(minutes=expiry_minutes)

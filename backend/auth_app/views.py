@@ -95,12 +95,23 @@ If you didn't request this, please ignore this email.""",
 
 
 class VerifyMagicLinkView(APIView):
-    """Verify a magic link token and issue JWT tokens."""
+    """Verify a magic link token and issue JWT tokens.
+
+    POST-only by design: corp inbox security scanners (Outlook ATP, Mimecast,
+    Proofpoint, etc.) GET every URL in incoming email to scan it. If this
+    endpoint were a GET that mutated state, the scanner would consume the
+    token before the real user could click it — surfacing a spurious "Link
+    expired or already used" error. Requiring POST means the token is only
+    consumed on a confirmed user click from the verify page.
+    """
     permission_classes = [AllowAny]
 
-    def get(self, request):
-        token = request.query_params.get('token')
-        remember_me = request.query_params.get('remember_me', 'false').lower() == 'true'
+    def post(self, request):
+        token = request.data.get('token') or request.query_params.get('token')
+        remember_me_raw = request.data.get(
+            'remember_me', request.query_params.get('remember_me', 'false')
+        )
+        remember_me = str(remember_me_raw).lower() == 'true'
 
         if not token:
             return Response(

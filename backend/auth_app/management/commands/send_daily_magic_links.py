@@ -65,7 +65,14 @@ class Command(BaseCommand):
 
         for user in active_users:
             try:
-                magic_link = MagicLink.create_for_user(user, expiry_minutes=expiry_minutes)
+                # Don't invalidate prior unused tokens — yesterday's email may
+                # still be unread; killing it would surface a confusing
+                # "expired" error when the user finally clicks it.
+                magic_link = MagicLink.create_for_user(
+                    user,
+                    expiry_minutes=expiry_minutes,
+                    invalidate_prior=False,
+                )
                 link_url = f"{settings.FRONTEND_URL}/auth/verify?token={magic_link.token}"
 
                 if dry_run:

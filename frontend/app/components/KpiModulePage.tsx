@@ -649,7 +649,9 @@ export function WeeklyView<T extends BaseModuleEntry>({
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[180px]">
                 Status
               </th>
-              <th className="w-12 sticky right-0 z-20 bg-[#F9F9F9]" />
+              <th className="px-3 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[100px] sticky right-0 z-20 bg-[#F9F9F9]">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#F3F3F3]">
@@ -679,6 +681,11 @@ export function WeeklyView<T extends BaseModuleEntry>({
                     )
                   : false;
 
+                const emptyRowBg = isSun
+                  ? 'bg-[#FAFAFA]'
+                  : isToday
+                  ? 'bg-[#F5F3FF]'
+                  : 'bg-white';
                 return (
                   <tr
                     key={toLocalDateString(d)}
@@ -728,7 +735,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
                         )
                       )}
                     </td>
-                    <td className="px-3 py-3">
+                    <td className={`px-3 py-3 sticky right-0 z-10 ${emptyRowBg}`}>
                       {!isSun && isViewingSelf && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -756,6 +763,11 @@ export function WeeklyView<T extends BaseModuleEntry>({
                 const canEditEntry = entry.is_editable;
                 const canDeleteEntry = entry.added_by === currentUserId;
                 const showActions = canEditEntry || canDeleteEntry;
+                const entryRowBg = isSun
+                  ? 'bg-[#FAFAFA]'
+                  : isToday
+                  ? 'bg-[#F0FDF4]'
+                  : 'bg-white';
 
                 return (
                   <tr
@@ -801,7 +813,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
                     <td className="px-5 py-3">
                       <StatusBadge type={statusType} />
                     </td>
-                    <td className="px-3 py-3">
+                    <td className={`px-3 py-3 sticky right-0 z-10 ${entryRowBg}`}>
                       {showActions && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

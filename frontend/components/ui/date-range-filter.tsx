@@ -104,6 +104,17 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
   const [isCustomMode, setIsCustomMode] = React.useState(false)
   const justOpenedRef = React.useRef(false)
 
+  // When the parent clears the filter (props become empty), reset internal
+  // custom-mode state so the trigger label drops back to "All Time" and the
+  // standalone calendar-icon button hides.
+  React.useEffect(() => {
+    if (!dateFrom && !dateTo) {
+      setIsCustomMode(false)
+      setTempRange(undefined)
+      setIsCalendarOpen(false)
+    }
+  }, [dateFrom, dateTo])
+
   const detectedPreset = detectPreset(dateFrom, dateTo)
   const currentPreset = isCustomMode ? "custom" : detectedPreset
 

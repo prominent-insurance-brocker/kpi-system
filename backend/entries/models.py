@@ -204,7 +204,6 @@ class SalesKPIEntry(BaseEntry):
     quotes_to_client = models.PositiveIntegerField()
     total_conversions = models.PositiveIntegerField()
     new_clients_acquired = models.PositiveIntegerField()
-    existing_clients = models.PositiveIntegerField(default=0)
     existing_clients_closed = models.PositiveIntegerField(default=0)
     gross_booked_premium = models.DecimalField(max_digits=15, decimal_places=2)
 

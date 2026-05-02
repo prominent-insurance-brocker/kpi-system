@@ -461,7 +461,6 @@ class Command(BaseCommand):
             if not user:
                 continue
             for entry_date in dates:
-                existing = random.randint(20, 80)
                 _, created = SalesKPIEntry.objects.get_or_create(
                     date=entry_date,
                     added_by=user,
@@ -471,8 +470,7 @@ class Command(BaseCommand):
                         'quotes_to_client': random.randint(10, 99),
                         'total_conversions': random.randint(10, 99),
                         'new_clients_acquired': random.randint(10, 99),
-                        'existing_clients': existing,
-                        'existing_clients_closed': random.randint(0, existing),
+                        'existing_clients_closed': random.randint(0, 20),
                         'gross_booked_premium': Decimal(str(random.randint(50000, 200000))),
                     }
                 )

@@ -60,7 +60,6 @@ interface SalesKPIEntry extends BaseModuleEntry {
   quotes_to_client: number;
   total_conversions: number;
   new_clients_acquired: number;
-  existing_clients: number;
   existing_clients_closed: number;
   gross_booked_premium: number;
 }
@@ -86,10 +85,9 @@ function formatPremium(val: number | string | null | undefined): string {
 
 // ─── Weekly column config (driving the shared WeeklyView) ───────────────────
 
-// Order mirrors the entry modal's field order: Clients & Premium →
-// Lead-to-Quote → Client Retention → Quote-to-Conversion.
+// Order mirrors the entry modal's field order: Gross booked premium →
+// Lead-to-Quote → Deals Acquired → Quote-to-Conversion.
 const weeklyColumns: WeeklyColumnSpec<SalesKPIEntry>[] = [
-  { key: 'new_clients_acquired', header: 'New clients acquired' },
   {
     key: 'gross_booked_premium',
     header: 'Gross booked premium',
@@ -97,23 +95,18 @@ const weeklyColumns: WeeklyColumnSpec<SalesKPIEntry>[] = [
   },
   { key: 'leads_to_ops_team', header: 'Leads to ops team' },
   { key: 'quotes_from_ops_team', header: 'Quotes from ops team' },
-  { key: 'existing_clients', header: 'Existing clients' },
-  { key: 'existing_clients_closed', header: 'Existing clients closed' },
+  { key: 'new_clients_acquired', header: 'New clients acquired' },
+  { key: 'existing_clients_closed', header: 'Existing clients closed today' },
   { key: 'quotes_to_client', header: 'Quotes to client' },
   { key: 'total_conversions', header: 'Total conversions' },
 ];
 
 // ─── Data View columns ───────────────────────────────────────────────────────
 
-// Order mirrors the entry modal's field order: Clients & Premium →
-// Lead-to-Quote → Client Retention → Quote-to-Conversion.
+// Order mirrors the entry modal's field order: Gross booked premium →
+// Lead-to-Quote → Deals Acquired → Quote-to-Conversion.
 const dataColumns = [
   { key: 'date', header: 'Record date', render: (item: SalesKPIEntry) => formatDate(item.date) },
-  {
-    key: 'new_clients_acquired',
-    header: 'New clients acquired',
-    tooltip: 'Number of new clients acquired',
-  },
   {
     key: 'gross_booked_premium',
     header: 'Gross booked premium',
@@ -130,14 +123,14 @@ const dataColumns = [
     tooltip: 'Number of quotes received from the operations team',
   },
   {
-    key: 'existing_clients',
-    header: 'Existing clients',
-    tooltip: 'Number of existing clients under my account',
+    key: 'new_clients_acquired',
+    header: 'New clients acquired',
+    tooltip: 'Number of new clients acquired',
   },
   {
     key: 'existing_clients_closed',
-    header: 'Existing clients closed',
-    tooltip: 'How many existing clients did I close',
+    header: 'Existing clients closed today',
+    tooltip: 'How many existing clients did I close today?',
   },
   {
     key: 'quotes_to_client',
@@ -1073,7 +1066,6 @@ function EntryModal({
     quotes_to_client: '',
     total_conversions: '',
     new_clients_acquired: '',
-    existing_clients: '',
     existing_clients_closed: '',
     gross_booked_premium: '',
   });
@@ -1088,7 +1080,6 @@ function EntryModal({
         quotes_to_client: String(entry.quotes_to_client),
         total_conversions: String(entry.total_conversions),
         new_clients_acquired: String(entry.new_clients_acquired),
-        existing_clients: String(entry.existing_clients),
         existing_clients_closed: String(entry.existing_clients_closed),
         gross_booked_premium: String(entry.gross_booked_premium),
       });
@@ -1100,7 +1091,6 @@ function EntryModal({
         quotes_to_client: '',
         total_conversions: '',
         new_clients_acquired: '',
-        existing_clients: '',
         existing_clients_closed: '',
         gross_booked_premium: '',
       });
@@ -1117,7 +1107,6 @@ function EntryModal({
       quotes_to_client: Number(formData.quotes_to_client),
       total_conversions: Number(formData.total_conversions),
       new_clients_acquired: Number(formData.new_clients_acquired),
-      existing_clients: Number(formData.existing_clients),
       existing_clients_closed: Number(formData.existing_clients_closed),
       gross_booked_premium: Number(formData.gross_booked_premium),
     });
@@ -1143,50 +1132,25 @@ function EntryModal({
             required
           />
           <div className="space-y-5">
-            {/* New Clients + Premium */}
-            <div>
-              <h3 className="text-base font-semibold text-[#343434] mb-3">
-                Clients &amp; Premium
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    New clients acquired
-                    <Tooltip text="Number of new clients acquired">
-                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
-                    </Tooltip>
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="Enter count"
-                    value={formData.new_clients_acquired}
-                    onChange={(e) =>
-                      setFormData({ ...formData, new_clients_acquired: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    Gross booked premium
-                    <Tooltip text="Total gross premium booked today">
-                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
-                    </Tooltip>
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="e.g. 5000"
-                    value={formData.gross_booked_premium}
-                    onChange={(e) =>
-                      setFormData({ ...formData, gross_booked_premium: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-              </div>
+            {/* Gross booked premium — headline metric, full width, no section heading */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1">
+                Gross booked premium
+                <Tooltip text="Total gross premium booked today">
+                  <Info className="h-3 w-3 text-[#71717A] cursor-help" />
+                </Tooltip>
+              </Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 5000"
+                value={formData.gross_booked_premium}
+                onChange={(e) =>
+                  setFormData({ ...formData, gross_booked_premium: e.target.value })
+                }
+                required
+              />
             </div>
 
             {/* Lead to Quote */}
@@ -1230,16 +1194,16 @@ function EntryModal({
               </div>
             </div>
 
-            {/* Client Retention */}
+            {/* Deals Acquired (was Client Retention) */}
             <div>
               <h3 className="text-base font-semibold text-[#343434] mb-3">
-                Client Retention
+                Deals Acquired
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">
-                    Existing clients
-                    <Tooltip text="Number of existing clients under my account">
+                    New clients acquired
+                    <Tooltip text="Number of new clients acquired">
                       <Info className="h-3 w-3 text-[#71717A] cursor-help" />
                     </Tooltip>
                   </Label>
@@ -1247,17 +1211,17 @@ function EntryModal({
                     type="number"
                     min="0"
                     placeholder="Enter count"
-                    value={formData.existing_clients}
+                    value={formData.new_clients_acquired}
                     onChange={(e) =>
-                      setFormData({ ...formData, existing_clients: e.target.value })
+                      setFormData({ ...formData, new_clients_acquired: e.target.value })
                     }
                     required
                   />
                 </div>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">
-                    Existing clients closed
-                    <Tooltip text="How many existing clients did I close">
+                    Existing clients closed today
+                    <Tooltip text="How many existing clients did I close today?">
                       <Info className="h-3 w-3 text-[#71717A] cursor-help" />
                     </Tooltip>
                   </Label>

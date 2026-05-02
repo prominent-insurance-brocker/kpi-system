@@ -61,7 +61,7 @@ Concrete models:
 | MotorClaimEntry | `motor_claim` | customer_name, status (claims_opened/claims_in_progress/claims_resolved/claims_rejected) |
 | MotorClaimStatusTransition | — | entry FK, from_status, to_status, changed_by, changed_at |
 | SalesPremiumDataEntry | `sales_premium_data` | gross_booked_premium, target |
-| SalesKPIEntry | `sales_kpi` | leads_to_ops_team, quotes_from_ops_team, quotes_to_client, total_conversions, existing_clients, existing_clients_closed, new_clients_acquired |
+| SalesKPIEntry | `sales_kpi` | leads_to_ops_team, quotes_from_ops_team, quotes_to_client, total_conversions, existing_clients_closed, new_clients_acquired, gross_booked_premium |
 | MarineNewEntry | `marine_new` | gross_booked_premium, quotes_created, new_clients_acquired, new_policies_issued |
 | MarineRenewalEntry | `marine_renewal` | monthly_renewal_quotes_assigned, gross_booked_premium, quotes_created, renewal_policies_issued |
 | MedicalClaimEntry | `medical_claim` | customer_name, status (claims_opened/claims_in_progress/claims_resolved/claims_rejected) |

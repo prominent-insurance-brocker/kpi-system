@@ -162,25 +162,11 @@ class SalesKPIEntrySerializer(BaseEntrySerializer):
         fields = [
             'id', 'date', 'leads_to_ops_team', 'quotes_from_ops_team',
             'quotes_to_client', 'total_conversions', 'new_clients_acquired',
-            'existing_clients', 'existing_clients_closed',
+            'existing_clients_closed',
             'gross_booked_premium',
             'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name', 'added_at', 'updated_at', 'is_editable'
         ]
         read_only_fields = ['id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
-
-    def validate(self, attrs):
-        attrs = super().validate(attrs)
-        existing = attrs.get('existing_clients')
-        closed = attrs.get('existing_clients_closed')
-        if existing is None and self.instance is not None:
-            existing = self.instance.existing_clients
-        if closed is None and self.instance is not None:
-            closed = self.instance.existing_clients_closed
-        if existing is not None and closed is not None and closed > existing:
-            raise serializers.ValidationError(
-                {'existing_clients_closed': 'Cannot close more clients than the existing client count.'}
-            )
-        return attrs
 
 
 class SalesMonthlyTargetSerializer(serializers.ModelSerializer):

@@ -332,7 +332,6 @@ def sales_kpi_payload(date_iso, added_by_id):
     quotes_to_client = random.randint(0, quotes_from_ops)
     conversions = random.randint(0, quotes_to_client)
     new_clients = random.randint(0, conversions)
-    existing = random.randint(20, 80)
     return {
         'date': date_iso,
         'added_by': added_by_id,
@@ -341,8 +340,7 @@ def sales_kpi_payload(date_iso, added_by_id):
         'quotes_to_client': quotes_to_client,
         'total_conversions': conversions,
         'new_clients_acquired': new_clients,
-        'existing_clients': existing,
-        'existing_clients_closed': random.randint(0, existing),
+        'existing_clients_closed': random.randint(0, 20),
         'gross_booked_premium': str(round(random.uniform(50_000, 500_000), 2)),
     }
 

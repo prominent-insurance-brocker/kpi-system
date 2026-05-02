@@ -488,8 +488,16 @@ export default function SalesKPIPage() {
     setSheetEditingKey(null);
     setSheetInlineValues((prev) => ({ ...prev, [key]: '' }));
     fetchSheetTargets();
-    if (isCurrentMonthCard || (sheetYear === today.getFullYear() && month === today.getMonth() + 1)) {
+    // If the edited month is the current month, the "no current target" gate
+    // depends on `currentTarget` — refresh it.
+    if (sheetYear === today.getFullYear() && month === today.getMonth() + 1) {
       fetchCurrentTarget();
+    }
+    // If the edited month is what the Monthly Target card is showing on the
+    // left, refresh `cardTarget` so the progress bars and 1.5× marker pick up
+    // the new target immediately (otherwise the card stays stale).
+    if (sheetYear === cardYear && month === cardMonth) {
+      fetchCardData();
     }
   };
 

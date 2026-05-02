@@ -632,7 +632,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
       </div>
 
       <div className="overflow-auto scrollbar-hide" style={{ maxHeight: tableMaxHeight }}>
-        <table className="w-full border-collapse">
+        <table className="w-full min-w-max border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#F9F9F9] border-b border-[#E4E4E4]">
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[140px]">

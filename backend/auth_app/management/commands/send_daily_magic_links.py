@@ -3,6 +3,7 @@ import logging
 from django.conf import settings
 from django.core.mail import send_mail
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from auth_app.models import CustomUser, MagicLink
 
@@ -24,8 +25,26 @@ class Command(BaseCommand):
             action='store_true',
             help='Show what would be sent without actually sending emails',
         )
+        parser.add_argument(
+            '--include-weekend',
+            action='store_true',
+            help='Send even on Saturday/Sunday (default: skip weekends)',
+        )
 
     def handle(self, *args, **options):
+        # Skip Saturday (5) and Sunday (6) — agents do not log entries on
+        # weekends, so the daily login email would be noise.
+        today = timezone.localdate()
+        if not options['include_weekend'] and today.weekday() >= 5:
+            day_name = today.strftime('%A')
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Skipping daily magic-link emails ({day_name} is a weekend). "
+                    "Use --include-weekend to override."
+                )
+            )
+            return
+
         expiry_hours = options['expiry_hours'] or getattr(
             settings, 'SCHEDULED_MAGIC_LINK_EXPIRY_HOURS', 12
         )

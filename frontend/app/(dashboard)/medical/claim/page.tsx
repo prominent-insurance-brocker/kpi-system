@@ -226,9 +226,6 @@ export default function MedicalClaimPage() {
 
   const columns = [
     { key: 'date', header: 'Date', render: (item: MedicalClaimEntry) => formatDate(item.date) },
-    { key: 'added_by_name', header: 'Added By', render: (item: MedicalClaimEntry) => <AddedByCell entry={item} /> },
-    { key: 'added_at', header: 'Added At', render: (item: MedicalClaimEntry) => formatDateTime(item.added_at) },
-    { key: 'customer_name', header: 'Customer Name' },
     {
       key: 'status',
       header: 'Status',
@@ -245,6 +242,9 @@ export default function MedicalClaimPage() {
         );
       },
     },
+    { key: 'added_by_name', header: 'Added By', render: (item: MedicalClaimEntry) => <AddedByCell entry={item} /> },
+    { key: 'added_at', header: 'Added At', render: (item: MedicalClaimEntry) => formatDateTime(item.added_at) },
+    { key: 'customer_name', header: 'Customer Name' },
     { key: 'tat_display', header: 'TAT' },
   ];
 

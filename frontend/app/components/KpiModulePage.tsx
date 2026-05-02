@@ -252,7 +252,7 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
         <div className="flex w-full border border-[#E4E4E4] rounded-lg overflow-hidden">
           {Array.from({ length: daysInMonth }, (_, i) => new Date(calYear, calMonth, i + 1)).map((d, i) => {
             const ds = toLocalDateString(d);
-            const isSunday = d.getDay() === 0;
+            const isSunday = d.getDay() === 0 || d.getDay() === 6;
             const isToday = sameDay(d, today);
             const isPast = d < today && !isToday;
             const hasEntry = monthEntries.some((e) => e.date === ds && ownerId(e) === currentUserId);
@@ -421,7 +421,7 @@ export function TrackerView<T extends BaseModuleEntry>({
                 <div className="text-xs text-[#71717A]">{moduleUsers.length} members</div>
               </th>
               {calDays.map((d) => {
-                const isSun = d.getDay() === 0;
+                const isSun = d.getDay() === 0 || d.getDay() === 6;
                 const isToday = sameDay(d, today);
                 return (
                   <th
@@ -475,7 +475,7 @@ export function TrackerView<T extends BaseModuleEntry>({
                   </td>
                   {calDays.map((d) => {
                     const ds = toLocalDateString(d);
-                    const isSun = d.getDay() === 0;
+                    const isSun = d.getDay() === 0 || d.getDay() === 6;
                     const isToday = sameDay(d, today);
                     const isPast = d < today && !isToday;
                     const hasEntry = entryMap.get(ds)?.has(user.id) ?? false;
@@ -638,17 +638,17 @@ export function WeeklyView<T extends BaseModuleEntry>({
               <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[140px]">
                 Day
               </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[180px]">
+                Status
+              </th>
+              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
+                Added by
+              </th>
               {weeklyColumns.map((col) => (
                 <th key={col.key} className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
                   {col.header}
                 </th>
               ))}
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
-                Added by
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[180px]">
-                Status
-              </th>
               <th className="px-3 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[100px] sticky right-0 z-20 bg-[#F9F9F9]">
                 Actions
               </th>
@@ -656,7 +656,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
           </thead>
           <tbody className="divide-y divide-[#F3F3F3]">
             {weekDays.map((d, idx) => {
-              const isSun = d.getDay() === 0;
+              const isSun = d.getDay() === 0 || d.getDay() === 6;
               const isToday = sameDay(d, today);
               const entries = getEntriesForDay(d);
               const future = isFutureDay(d);
@@ -713,12 +713,6 @@ export function WeeklyView<T extends BaseModuleEntry>({
                         </span>
                       </div>
                     </td>
-                    {weeklyColumns.map((col) => (
-                      <td key={col.key} className="px-5 py-3">
-                        {!isSun && <span className="text-[#D1D5DB]">—</span>}
-                      </td>
-                    ))}
-                    <td className="px-5 py-3" />
                     <td className="px-5 py-3">
                       {!isSun && (
                         canAddToday && !todayEntryExists ? (
@@ -735,6 +729,12 @@ export function WeeklyView<T extends BaseModuleEntry>({
                         )
                       )}
                     </td>
+                    <td className="px-5 py-3" />
+                    {weeklyColumns.map((col) => (
+                      <td key={col.key} className="px-5 py-3">
+                        {!isSun && <span className="text-[#D1D5DB]">—</span>}
+                      </td>
+                    ))}
                     <td className={`px-3 py-3 sticky right-0 z-10 ${emptyRowBg}`}>
                       {!isSun && isViewingSelf && (
                         <DropdownMenu>
@@ -799,6 +799,12 @@ export function WeeklyView<T extends BaseModuleEntry>({
                       </td>
                     )}
                     {eIdx > 0 && <td className="px-5 py-3" />}
+                    <td className="px-5 py-3">
+                      <StatusBadge type={statusType} />
+                    </td>
+                    <td className="px-5 py-3">
+                      <AddedByCell entry={entry} />
+                    </td>
                     {weeklyColumns.map((col) => {
                       const raw = entry[col.key as keyof T];
                       return (
@@ -807,12 +813,6 @@ export function WeeklyView<T extends BaseModuleEntry>({
                         </td>
                       );
                     })}
-                    <td className="px-5 py-3">
-                      <AddedByCell entry={entry} />
-                    </td>
-                    <td className="px-5 py-3">
-                      <StatusBadge type={statusType} />
-                    </td>
                     <td className={`px-3 py-3 sticky right-0 z-10 ${entryRowBg}`}>
                       {showActions && (
                         <DropdownMenu>
@@ -1214,9 +1214,9 @@ export function KpiModulePage<T extends BaseModuleEntry>({
       header: 'Record date',
       render: (item: T) => formatDate(item.date),
     },
-    ...dataColumns,
     addedByColumn,
     addedOnColumn,
+    ...dataColumns,
   ];
 
   const dataViewContent = (

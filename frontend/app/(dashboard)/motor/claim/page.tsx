@@ -227,9 +227,6 @@ export default function MotorClaimPage() {
 
   const columns = [
     { key: 'date', header: 'Date', render: (item: MotorClaimEntry) => formatDate(item.date) },
-    { key: 'added_by_name', header: 'Added By', render: (item: MotorClaimEntry) => <AddedByCell entry={item} /> },
-    { key: 'added_at', header: 'Added At', render: (item: MotorClaimEntry) => formatDateTime(item.added_at) },
-    { key: 'customer_name', header: 'Customer Name' },
     {
       key: 'status',
       header: 'Status',
@@ -246,6 +243,9 @@ export default function MotorClaimPage() {
         );
       },
     },
+    { key: 'added_by_name', header: 'Added By', render: (item: MotorClaimEntry) => <AddedByCell entry={item} /> },
+    { key: 'added_at', header: 'Added At', render: (item: MotorClaimEntry) => formatDateTime(item.added_at) },
+    { key: 'customer_name', header: 'Customer Name' },
     { key: 'tat_display', header: 'TAT' },
   ];
 

@@ -107,6 +107,12 @@ const weeklyColumns: WeeklyColumnSpec<SalesKPIEntry>[] = [
 // Lead-to-Quote → Deals Acquired → Quote-to-Conversion.
 const dataColumns = [
   { key: 'date', header: 'Record date', render: (item: SalesKPIEntry) => formatDate(item.date) },
+  { key: 'added_by_name', header: 'Added by', render: (item: SalesKPIEntry) => <AddedByCell entry={item} /> },
+  {
+    key: 'added_at',
+    header: 'Added on',
+    render: (item: SalesKPIEntry) => formatDateTime(item.added_at),
+  },
   {
     key: 'gross_booked_premium',
     header: 'Gross booked premium',
@@ -141,12 +147,6 @@ const dataColumns = [
     key: 'total_conversions',
     header: 'Total conversions',
     tooltip: 'Total number of conversions',
-  },
-  { key: 'added_by_name', header: 'Added by', render: (item: SalesKPIEntry) => <AddedByCell entry={item} /> },
-  {
-    key: 'added_at',
-    header: 'Added on',
-    render: (item: SalesKPIEntry) => formatDateTime(item.added_at),
   },
 ];
 

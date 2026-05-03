@@ -392,7 +392,12 @@ export default function SalesKPIPage() {
   const refreshAll = () => {
     if (activeView === 'data') fetchEntries();
     fetchCardData();
-    fetchMonthEntries(calYear, calMonth);
+    const weekEndDay = addDays(weekStart, 6);
+    fetchEntriesForMonths([
+      [calYear, calMonth],
+      [weekStart.getFullYear(), weekStart.getMonth()],
+      [weekEndDay.getFullYear(), weekEndDay.getMonth()],
+    ]);
   };
 
   const handleSaveEntry = async (formData: Partial<SalesKPIEntry>) => {

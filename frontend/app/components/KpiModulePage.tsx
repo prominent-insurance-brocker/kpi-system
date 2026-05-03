@@ -25,10 +25,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { DataTable } from '@/app/components/DataTable';
+import { DataTable, Tooltip } from '@/app/components/DataTable';
 import { fetchApi, getUsersForModule } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
-import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users, Info } from 'lucide-react';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -64,12 +64,14 @@ export function AddedByCell({ entry }: { entry: { added_by_name: string; on_beha
 export interface WeeklyColumnSpec<T> {
   key: keyof T & string;
   header: string;
+  tooltip?: string;
   render?: (value: unknown, entry: T) => React.ReactNode;
 }
 
 export interface DataColumnSpec<T> {
   key: string;
   header: string;
+  tooltip?: string;
   render?: (item: T) => React.ReactNode;
 }
 
@@ -646,7 +648,14 @@ export function WeeklyView<T extends BaseModuleEntry>({
               </th>
               {weeklyColumns.map((col) => (
                 <th key={col.key} className="px-5 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide">
-                  {col.header}
+                  <div className="flex items-center gap-1">
+                    <span>{col.header}</span>
+                    {col.tooltip && (
+                      <Tooltip text={col.tooltip}>
+                        <Info className="h-3 w-3 text-[#71717A] cursor-help" />
+                      </Tooltip>
+                    )}
+                  </div>
                 </th>
               ))}
               <th className="px-3 py-3 text-left text-xs font-medium text-[#71717A] tracking-wide w-[100px] sticky right-0 z-20 bg-[#F9F9F9]">

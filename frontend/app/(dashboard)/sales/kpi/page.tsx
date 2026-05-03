@@ -1445,7 +1445,7 @@ function TargetModal({
           <DialogFooter>
             {!required && (
               <Button type="button" variant="outline" onClick={onClose}>
-                Skip for now
+                Cancel
               </Button>
             )}
             <Button type="submit" disabled={isSubmitting}>

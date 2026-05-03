@@ -18,15 +18,15 @@ export default function MarineNewPage() {
       deptLabel="Marine New DEPT."
       weeklyColumns={[
         { key: 'gross_booked_premium', header: 'Gross booked premium' },
-        { key: 'quotes_created', header: 'Quotes created' },
-        { key: 'new_clients_acquired', header: 'New clients acquired' },
-        { key: 'new_policies_issued', header: 'New policies issued' },
+        { key: 'quotes_created', header: 'Quotes created', tooltip: 'Number of quotes created' },
+        { key: 'new_clients_acquired', header: 'New clients acquired', tooltip: 'Number of new clients acquired' },
+        { key: 'new_policies_issued', header: 'New policies issued', tooltip: 'Number of new policies issued' },
       ]}
       dataColumns={[
         { key: 'gross_booked_premium', header: 'Gross booked premium' },
-        { key: 'quotes_created', header: 'Quotes created' },
-        { key: 'new_clients_acquired', header: 'New clients acquired' },
-        { key: 'new_policies_issued', header: 'New policies issued' },
+        { key: 'quotes_created', header: 'Quotes created', tooltip: 'Number of quotes created' },
+        { key: 'new_clients_acquired', header: 'New clients acquired', tooltip: 'Number of new clients acquired' },
+        { key: 'new_policies_issued', header: 'New policies issued', tooltip: 'Number of new policies issued' },
       ]}
       modalFields={[
         { key: 'gross_booked_premium', label: 'Gross booked premium', min: 0, step: 0.01 },

@@ -319,7 +319,7 @@ VANNA_CHROMADB_PATH = os.environ.get('VANNA_CHROMADB_PATH', str(BASE_DIR / '.van
 
 
 # Scheduled magic link settings
-SCHEDULED_MAGIC_LINK_EXPIRY_HOURS = int(os.environ.get('SCHEDULED_MAGIC_LINK_EXPIRY_HOURS', '12'))
+SCHEDULED_MAGIC_LINK_EXPIRY_HOURS = int(os.environ.get('SCHEDULED_MAGIC_LINK_EXPIRY_HOURS', '2'))
 
 # Daily magic link schedule — cron expression (default: 10:30 AM IST = 05:00 UTC)
 DAILY_MAGIC_LINK_CRON = os.environ.get('DAILY_MAGIC_LINK_CRON', '0 5 * * *')

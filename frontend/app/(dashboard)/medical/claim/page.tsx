@@ -13,7 +13,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { Plus } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
-import { formatDate, formatDateTime } from '@/app/lib/date';
+import { formatDate } from '@/app/lib/date';
 import { toast } from 'sonner';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { AddedByCell } from '@/app/components/KpiModulePage';
@@ -243,7 +243,7 @@ export default function MedicalClaimPage() {
       },
     },
     { key: 'added_by_name', header: 'Added By', render: (item: MedicalClaimEntry) => <AddedByCell entry={item} /> },
-    { key: 'added_at', header: 'Added At', render: (item: MedicalClaimEntry) => formatDateTime(item.added_at) },
+    { key: 'added_at', header: 'Added on', render: (item: MedicalClaimEntry) => formatDate(item.added_at.split('T')[0]) },
     { key: 'customer_name', header: 'Customer Name' },
     { key: 'tat_display', header: 'TAT' },
   ];

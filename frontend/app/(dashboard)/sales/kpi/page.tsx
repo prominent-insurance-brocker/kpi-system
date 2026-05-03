@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
-import { formatDate, formatDateTime } from '@/app/lib/date';
+import { formatDate } from '@/app/lib/date';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { useConfirm } from '@/app/components/ConfirmDialog';
@@ -93,12 +93,36 @@ const weeklyColumns: WeeklyColumnSpec<SalesKPIEntry>[] = [
     header: 'Gross booked premium',
     render: (v) => formatPremium(v as number | string | null),
   },
-  { key: 'leads_to_ops_team', header: 'Leads to ops team' },
-  { key: 'quotes_from_ops_team', header: 'Quotes from ops team' },
-  { key: 'new_clients_acquired', header: 'New clients acquired' },
-  { key: 'existing_clients_closed', header: 'Existing clients closed today' },
-  { key: 'quotes_to_client', header: 'Quotes to client' },
-  { key: 'total_conversions', header: 'Total conversions' },
+  {
+    key: 'leads_to_ops_team',
+    header: 'Leads to ops team',
+    tooltip: 'Number of leads handed over to the operations team',
+  },
+  {
+    key: 'quotes_from_ops_team',
+    header: 'Quotes from ops team',
+    tooltip: 'Number of quotes received from the operations team',
+  },
+  {
+    key: 'new_clients_acquired',
+    header: 'New clients acquired',
+    tooltip: 'Number of new clients acquired',
+  },
+  {
+    key: 'existing_clients_closed',
+    header: 'Existing clients closed today',
+    tooltip: 'How many existing clients did I close today?',
+  },
+  {
+    key: 'quotes_to_client',
+    header: 'Quotes to client',
+    tooltip: 'Number of quotes submitted to the client',
+  },
+  {
+    key: 'total_conversions',
+    header: 'Total conversions',
+    tooltip: 'Total number of conversions',
+  },
 ];
 
 // ─── Data View columns ───────────────────────────────────────────────────────
@@ -111,7 +135,7 @@ const dataColumns = [
   {
     key: 'added_at',
     header: 'Added on',
-    render: (item: SalesKPIEntry) => formatDateTime(item.added_at),
+    render: (item: SalesKPIEntry) => formatDate(item.added_at.split('T')[0]),
   },
   {
     key: 'gross_booked_premium',

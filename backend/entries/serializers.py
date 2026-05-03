@@ -172,8 +172,12 @@ class SalesKPIEntrySerializer(BaseEntrySerializer):
 class SalesMonthlyTargetSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesMonthlyTarget
-        fields = ['id', 'user', 'year', 'month', 'premium_target', 'clients_assigned', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+        fields = [
+            'id', 'user', 'year', 'month', 'calculated_date',
+            'premium_target', 'clients_assigned',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'user', 'calculated_date', 'created_at', 'updated_at']
 
     def validate_premium_target(self, value):
         if value is not None and value <= 0:

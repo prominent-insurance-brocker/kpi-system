@@ -223,6 +223,11 @@ class SalesMonthlyTarget(models.Model):
     )
     year = models.PositiveIntegerField()
     month = models.PositiveIntegerField()
+    # Stored as a real DATE (first day of the month) so analytics tools
+    # (Metabase, raw SQL) can do date filtering / aggregations without
+    # reconstructing it from the year+month integers each time.
+    # Auto-derived from (year, month) on every save() — never set by hand.
+    calculated_date = models.DateField(db_index=True)
     premium_target = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
     clients_assigned = models.PositiveIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -230,6 +235,11 @@ class SalesMonthlyTarget(models.Model):
 
     class Meta:
         unique_together = ('user', 'year', 'month')
+
+    def save(self, *args, **kwargs):
+        from datetime import date
+        self.calculated_date = date(self.year, self.month, 1)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Sales Target {self.year}/{self.month} - {self.user}"

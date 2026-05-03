@@ -438,7 +438,7 @@ export default function SalesKPIPage() {
     (sum, e) => sum + Number(e.gross_booked_premium),
     0
   );
-  const cardClientsActual = cardEntries.reduce((sum, e) => sum + e.new_clients_acquired, 0);
+  const cardClientsActual = cardEntries.reduce((sum, e) => sum + e.existing_clients_closed, 0);
   const premiumTarget = cardTarget?.premium_target != null ? Number(cardTarget.premium_target) : null;
   const clientsTarget = cardTarget?.clients_assigned ?? null;
 

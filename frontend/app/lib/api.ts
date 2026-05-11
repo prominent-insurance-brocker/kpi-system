@@ -287,6 +287,91 @@ export async function getUsersForModule(
   return { error: result.error };
 }
 
+// ─── Motor enquiry (motor_new / motor_renewal share the same shape) ──────────
+
+export interface MotorEnquiryEntry {
+  id: number;
+  date: string;                      // YYYY-MM-DD
+  client_name: string;
+  agent: number;                     // FK id
+  agent_name: string;
+  chassis_no: string;
+  remarks: string;
+  status: 'new' | 'converted' | 'lost';
+  revisions: number;
+  status_changed_at: string | null;
+  tat_display: string;               // "Xd Yh Zm" or "—"
+  accuracy_pct: number | null;       // 100 × 0.9^revisions when terminal; null otherwise
+  allowed_transitions: string[];     // possible next statuses
+  is_terminal: boolean;
+  added_by: number;
+  added_by_name: string;
+  on_behalf_of: number | null;
+  on_behalf_of_name: string | null;
+  added_at: string;
+  updated_at: string;
+  is_editable: boolean;
+  // Index signature required for compatibility with shared BaseModuleEntry-based
+  // components (PersonalDailyTracker, TrackerView).
+  [key: string]: unknown;
+}
+
+export interface MotorEnquiryStats {
+  total: number;
+  revised: number;
+  converted: number;
+  lost: number;
+  avg_tat_minutes: number | null;
+  avg_accuracy: number | null;
+}
+
+export type MotorEnquiryModule = 'motor-new' | 'motor-renewal';
+
+interface StatsParams {
+  date_from?: string;
+  date_to?: string;
+  user_id?: string;
+  agent_id?: string;
+  status?: string;
+}
+
+function buildQS(params: Record<string, string | undefined>) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v) qs.set(k, v);
+  }
+  return qs.toString();
+}
+
+export async function getMotorEnquiryStats(
+  module: MotorEnquiryModule,
+  params: StatsParams = {}
+): Promise<ApiResponse<MotorEnquiryStats>> {
+  return fetchApi<MotorEnquiryStats>(`/api/entries/${module}/stats/?${buildQS(params as Record<string, string | undefined>)}`);
+}
+
+export async function updateMotorEnquiryStatus(
+  module: MotorEnquiryModule,
+  id: number,
+  payload: { status: 'converted' | 'lost'; revisions?: number }
+): Promise<ApiResponse<MotorEnquiryEntry>> {
+  return fetchApi<MotorEnquiryEntry>(`/api/entries/${module}/${id}/update-status/`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateMotorEnquiryRevisions(
+  module: MotorEnquiryModule,
+  id: number,
+  revisions: number
+): Promise<ApiResponse<MotorEnquiryEntry>> {
+  return fetchApi<MotorEnquiryEntry>(`/api/entries/${module}/${id}/update-revisions/`, {
+    method: 'PATCH',
+    body: JSON.stringify({ revisions }),
+  });
+}
+
 // AI Chat
 export interface AiChatResponse {
   success: boolean;

@@ -386,48 +386,80 @@ class Command(BaseCommand):
                     count += 1
         return count
 
-    def _seed_motor_new_entries(self, users, dates):
-        """Seed MotorNewEntry records."""
+    def _seed_motor_enquiry_entries(self, model, users, dates):
+        """Seed per-enquiry rows for MotorNewEntry or MotorRenewalEntry.
+
+        Both models share the same shape: client_name, agent FK, chassis_no,
+        remarks, status (new/converted/lost), revisions, status_changed_at.
+        """
+        from django.utils import timezone
+        from datetime import datetime, time
+
+        client_names = [
+            'Haris', 'Mubashid', 'Jimshad', 'Hisham', 'Vishnu', 'Rashid',
+            'Omar Al-Farsi', 'Layla Karim', 'Tariq Nasser', 'Noura Said',
+            'Fatima Noor', 'Ahmed Al-Rashid', 'Sara Mahmoud', 'Khalid Hassan',
+        ]
+        statuses = [
+            (MotorNewEntry.STATUS_NEW, 0.4),
+            (MotorNewEntry.STATUS_CONVERTED, 0.4),
+            (MotorNewEntry.STATUS_LOST, 0.2),
+        ]
+        status_pool = []
+        for value, weight in statuses:
+            status_pool.extend([value] * int(weight * 100))
+
         count = 0
         for user in users:
             if not user:
                 continue
             for entry_date in dates:
-                _, created = MotorNewEntry.objects.get_or_create(
-                    date=entry_date,
-                    added_by=user,
-                    defaults={
-                        'quotations': random.randint(8, 20),
-                        'quotes_revised': random.randint(2, 8),
-                        'quotes_converted': random.randint(1, 6),
-                        'tat': random.randint(1, 3),
-                        'accuracy': Decimal(str(round(random.uniform(90.0, 99.9), 2))),
-                    }
-                )
-                if created:
+                # 1–3 enquiries per agent per day.
+                for _ in range(random.randint(1, 3)):
+                    chassis_suffix = f"{random.randint(100, 999)}-{random.randint(1000, 9999)}"
+                    status_value = random.choice(status_pool)
+                    revisions = random.randint(0, 4)
+                    status_changed_at = None
+                    if status_value in {MotorNewEntry.STATUS_CONVERTED, MotorNewEntry.STATUS_LOST}:
+                        # Fake a status-change a few hours after creation.
+                        anchor = datetime.combine(entry_date, time(10, 0))
+                        status_changed_at = timezone.make_aware(anchor) + timedelta(hours=random.randint(1, 24))
+                    entry = model.objects.create(
+                        date=entry_date,
+                        added_by=user,
+                        client_name=random.choice(client_names),
+                        agent=random.choice(users),
+                        chassis_no=f"CH-{chassis_suffix}",
+                        remarks=random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
+                        status=status_value,
+                        revisions=revisions,
+                        status_changed_at=status_changed_at,
+                    )
                     count += 1
+                    # Seed an initial transition history record.
+                    transition_model = entry.status_transitions.model
+                    transition_model.objects.create(
+                        entry=entry,
+                        from_status='',
+                        to_status=MotorNewEntry.STATUS_NEW,
+                        changed_by=user,
+                    )
+                    if status_value != MotorNewEntry.STATUS_NEW:
+                        transition_model.objects.create(
+                            entry=entry,
+                            from_status=MotorNewEntry.STATUS_NEW,
+                            to_status=status_value,
+                            changed_by=user,
+                        )
         return count
 
+    def _seed_motor_new_entries(self, users, dates):
+        """Seed MotorNewEntry records (per-enquiry rows)."""
+        return self._seed_motor_enquiry_entries(MotorNewEntry, users, dates)
+
     def _seed_motor_renewal_entries(self, users, dates):
-        """Seed MotorRenewalEntry records."""
-        count = 0
-        for user in users:
-            if not user:
-                continue
-            for entry_date in dates:
-                _, created = MotorRenewalEntry.objects.get_or_create(
-                    date=entry_date,
-                    added_by=user,
-                    defaults={
-                        'quotations': random.randint(15, 35),
-                        'retention': random.randint(10, 30),
-                        'tat': random.randint(1, 3),
-                        'accuracy': Decimal(str(round(random.uniform(88.0, 99.9), 2))),
-                    }
-                )
-                if created:
-                    count += 1
-        return count
+        """Seed MotorRenewalEntry records (per-enquiry rows)."""
+        return self._seed_motor_enquiry_entries(MotorRenewalEntry, users, dates)
 
     def _seed_motor_claim_entries(self, users, dates):
         """Seed MotorClaimEntry records."""

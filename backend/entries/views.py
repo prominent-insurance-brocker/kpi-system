@@ -1,5 +1,8 @@
+from decimal import Decimal
+
 from rest_framework import viewsets, status, filters
-from django.db.models import Count, Q
+from django.db.models import Avg, Count, Q
+from django.utils import timezone
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -10,7 +13,9 @@ from .models import (
     GeneralNewEntry,
     GeneralRenewalEntry,
     MotorNewEntry,
+    MotorNewStatusTransition,
     MotorRenewalEntry,
+    MotorRenewalStatusTransition,
     MotorClaimEntry,
     MotorClaimStatusTransition,
     SalesKPIEntry,
@@ -24,7 +29,11 @@ from .serializers import (
     GeneralNewEntrySerializer,
     GeneralRenewalEntrySerializer,
     MotorNewEntrySerializer,
+    MotorNewStatusUpdateSerializer,
+    MotorNewRevisionsUpdateSerializer,
     MotorRenewalEntrySerializer,
+    MotorRenewalStatusUpdateSerializer,
+    MotorRenewalRevisionsUpdateSerializer,
     MotorClaimEntrySerializer,
     MotorClaimStatusUpdateSerializer,
     SalesKPIEntrySerializer,
@@ -34,7 +43,7 @@ from .serializers import (
     MedicalClaimEntrySerializer,
     MedicalClaimStatusUpdateSerializer,
 )
-from .filters import EntryFilter, ClaimEntryFilter
+from .filters import EntryFilter, ClaimEntryFilter, MotorEnquiryFilter
 
 
 class BaseEntryViewSet(viewsets.ModelViewSet):
@@ -121,16 +130,245 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
     module_key = 'general_renewal'
 
 
+def _build_enquiry_stats(queryset):
+    """Compute the 6 dashboard metrics from a queryset of per-enquiry rows.
+
+    Used by both MotorNewEntryViewSet and MotorRenewalEntryViewSet — both
+    have identical schemas (status / revisions / status_changed_at / added_at).
+    """
+    total = queryset.count()
+    revised = queryset.filter(revisions__gt=0).count()
+    converted = queryset.filter(status='converted').count()
+    lost = queryset.filter(status='lost').count()
+
+    terminal = queryset.filter(status__in=['converted', 'lost']).exclude(status_changed_at=None)
+
+    avg_tat_seconds = None
+    if terminal.exists():
+        deltas = [
+            (e.status_changed_at - e.added_at).total_seconds()
+            for e in terminal.only('added_at', 'status_changed_at')
+        ]
+        if deltas:
+            avg_tat_seconds = sum(deltas) / len(deltas)
+
+    avg_accuracy = None
+    if terminal.exists():
+        decay = Decimal('0.9')
+        accuracies = [
+            float(Decimal('100') * (decay ** e.revisions))
+            for e in terminal.only('revisions')
+        ]
+        if accuracies:
+            avg_accuracy = sum(accuracies) / len(accuracies)
+
+    return {
+        'total': total,
+        'revised': revised,
+        'converted': converted,
+        'lost': lost,
+        'avg_tat_minutes': round(avg_tat_seconds / 60, 2) if avg_tat_seconds is not None else None,
+        'avg_accuracy': round(avg_accuracy, 2) if avg_accuracy is not None else None,
+    }
+
+
 class MotorNewEntryViewSet(BaseEntryViewSet):
     queryset = MotorNewEntry.objects.all()
     serializer_class = MotorNewEntrySerializer
     module_key = 'motor_new'
+    filterset_class = MotorEnquiryFilter
+
+    def get_queryset(self):
+        return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
+
+    def perform_create(self, serializer):
+        instance = serializer.save(
+            added_by=self.request.user,
+            status=MotorNewEntry.STATUS_NEW,
+            revisions=0,
+        )
+        MotorNewStatusTransition.objects.create(
+            entry=instance,
+            from_status='',
+            to_status=instance.status,
+            changed_by=self.request.user,
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        """Update status with transition validation. Bypasses 30-min window + ownership."""
+        entry = self.get_object()
+
+        if entry.is_terminal:
+            return Response(
+                {'error': 'Cannot change status of a converted or lost enquiry.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = MotorNewStatusUpdateSerializer(
+            data=request.data,
+            context={'entry': entry},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        old_status = entry.status
+        new_status = serializer.validated_data['status']
+        new_revisions = serializer.validated_data.get('revisions')
+
+        entry.status = new_status
+        update_fields = ['status', 'updated_at']
+
+        if new_revisions is not None:
+            entry.revisions = new_revisions
+            update_fields.append('revisions')
+
+        if new_status in MotorNewEntry.TERMINAL_STATUSES:
+            entry.status_changed_at = timezone.now()
+            update_fields.append('status_changed_at')
+
+        entry.save(update_fields=update_fields)
+
+        MotorNewStatusTransition.objects.create(
+            entry=entry,
+            from_status=old_status,
+            to_status=new_status,
+            changed_by=request.user,
+        )
+
+        return Response(
+            MotorNewEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-revisions')
+    def update_revisions(self, request, pk=None):
+        """Update the revisions counter. Only allowed while status='new'."""
+        entry = self.get_object()
+
+        if entry.status != MotorNewEntry.STATUS_NEW:
+            return Response(
+                {'error': 'Revisions can only be edited while the enquiry status is New.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = MotorNewRevisionsUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        entry.revisions = serializer.validated_data['revisions']
+        entry.save(update_fields=['revisions', 'updated_at'])
+
+        return Response(
+            MotorNewEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Return the 6 dashboard metrics respecting RBAC + filters."""
+        queryset = self.get_queryset()
+        params = {
+            k: v for k, v in request.query_params.items()
+            if k in ('date_from', 'date_to', 'agent_id', 'status')
+        }
+        filterset = self.filterset_class(params, queryset=queryset)
+        queryset = filterset.qs
+        return Response(_build_enquiry_stats(queryset))
 
 
 class MotorRenewalEntryViewSet(BaseEntryViewSet):
     queryset = MotorRenewalEntry.objects.all()
     serializer_class = MotorRenewalEntrySerializer
     module_key = 'motor_renewal'
+    filterset_class = MotorEnquiryFilter
+
+    def get_queryset(self):
+        return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
+
+    def perform_create(self, serializer):
+        instance = serializer.save(
+            added_by=self.request.user,
+            status=MotorRenewalEntry.STATUS_NEW,
+            revisions=0,
+        )
+        MotorRenewalStatusTransition.objects.create(
+            entry=instance,
+            from_status='',
+            to_status=instance.status,
+            changed_by=self.request.user,
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        entry = self.get_object()
+
+        if entry.is_terminal:
+            return Response(
+                {'error': 'Cannot change status of a converted or lost enquiry.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = MotorRenewalStatusUpdateSerializer(
+            data=request.data,
+            context={'entry': entry},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        old_status = entry.status
+        new_status = serializer.validated_data['status']
+        new_revisions = serializer.validated_data.get('revisions')
+
+        entry.status = new_status
+        update_fields = ['status', 'updated_at']
+
+        if new_revisions is not None:
+            entry.revisions = new_revisions
+            update_fields.append('revisions')
+
+        if new_status in MotorRenewalEntry.TERMINAL_STATUSES:
+            entry.status_changed_at = timezone.now()
+            update_fields.append('status_changed_at')
+
+        entry.save(update_fields=update_fields)
+
+        MotorRenewalStatusTransition.objects.create(
+            entry=entry,
+            from_status=old_status,
+            to_status=new_status,
+            changed_by=request.user,
+        )
+
+        return Response(
+            MotorRenewalEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-revisions')
+    def update_revisions(self, request, pk=None):
+        entry = self.get_object()
+
+        if entry.status != MotorRenewalEntry.STATUS_NEW:
+            return Response(
+                {'error': 'Revisions can only be edited while the enquiry status is New.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = MotorRenewalRevisionsUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        entry.revisions = serializer.validated_data['revisions']
+        entry.save(update_fields=['revisions', 'updated_at'])
+
+        return Response(
+            MotorRenewalEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        queryset = self.get_queryset()
+        params = {
+            k: v for k, v in request.query_params.items()
+            if k in ('date_from', 'date_to', 'agent_id', 'status')
+        }
+        filterset = self.filterset_class(params, queryset=queryset)
+        queryset = filterset.qs
+        return Response(_build_enquiry_stats(queryset))
 
 
 class MotorClaimEntryViewSet(BaseEntryViewSet):

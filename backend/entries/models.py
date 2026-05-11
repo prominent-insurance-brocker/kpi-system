@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
@@ -74,34 +76,220 @@ class GeneralRenewalEntry(BaseEntry):
 
 
 class MotorNewEntry(BaseEntry):
-    """Motor New module entry."""
-    quotations = models.PositiveIntegerField()
-    quotes_revised = models.PositiveIntegerField()
-    quotes_converted = models.PositiveIntegerField()
-    tat = models.PositiveIntegerField(null=True, blank=True, verbose_name='TAT')
-    accuracy = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    """Motor New enquiry — one row per customer enquiry with status state machine."""
+    STATUS_NEW = 'new'
+    STATUS_CONVERTED = 'converted'
+    STATUS_LOST = 'lost'
+
+    STATUS_CHOICES = [
+        (STATUS_NEW, 'New Enquiry'),
+        (STATUS_CONVERTED, 'Converted'),
+        (STATUS_LOST, 'Lost'),
+    ]
+
+    TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_LOST}
+
+    TRANSITIONS = {
+        STATUS_NEW: [STATUS_CONVERTED, STATUS_LOST],
+        STATUS_CONVERTED: [],
+        STATUS_LOST: [],
+    }
+
+    ACCURACY_DECAY = Decimal('0.9')
+
+    client_name = models.CharField(max_length=200)
+    agent = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='motor_new_enquiries_as_agent',
+    )
+    chassis_no = models.CharField(max_length=100)
+    remarks = models.TextField(blank=True, default='')
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW
+    )
+    revisions = models.PositiveIntegerField(default=0)
+    status_changed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Motor New Entry'
         verbose_name_plural = 'Motor New Entries'
 
     def __str__(self):
-        return f"Motor New - {self.date} by {self.added_by}"
+        return f"Motor New Enquiry - {self.client_name} ({self.status})"
+
+    @classmethod
+    def get_allowed_transitions(cls, current_status):
+        return cls.TRANSITIONS.get(current_status, [])
+
+    @property
+    def is_terminal(self):
+        return self.status in self.TERMINAL_STATUSES
+
+    def get_tat(self):
+        """TAT = status_changed_at - added_at, only when status is terminal."""
+        if not self.is_terminal or self.status_changed_at is None:
+            return None
+        return self.status_changed_at - self.added_at
+
+    def get_tat_display(self):
+        """Return TAT as 'Xd Yh Zm' / 'Xh Ym' / 'Xm Ys' or '—' when not terminal."""
+        delta = self.get_tat()
+        if delta is None:
+            return '—'
+        total_seconds = int(delta.total_seconds())
+        days = total_seconds // 86400
+        hours = (total_seconds % 86400) // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        if days > 0:
+            return f"{days}d {hours}h {minutes}m"
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        if minutes > 0:
+            return f"{minutes}m {seconds}s"
+        return f"{seconds}s"
+
+    @property
+    def accuracy_pct(self):
+        """100 × (0.9 ^ revisions) when terminal; None otherwise."""
+        if not self.is_terminal:
+            return None
+        return float(Decimal('100') * (self.ACCURACY_DECAY ** self.revisions))
+
+
+class MotorNewStatusTransition(models.Model):
+    """Records each status change for a motor new enquiry."""
+    entry = models.ForeignKey(
+        MotorNewEntry,
+        on_delete=models.CASCADE,
+        related_name='status_transitions',
+    )
+    from_status = models.CharField(
+        max_length=20, choices=MotorNewEntry.STATUS_CHOICES, blank=True
+    )
+    to_status = models.CharField(
+        max_length=20, choices=MotorNewEntry.STATUS_CHOICES
+    )
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='motor_new_status_changes',
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['changed_at']
+
+    def __str__(self):
+        return f"{self.entry_id}: {self.from_status} -> {self.to_status}"
 
 
 class MotorRenewalEntry(BaseEntry):
-    """Motor Renewal module entry."""
-    quotations = models.PositiveIntegerField()
-    retention = models.PositiveIntegerField()
-    tat = models.PositiveIntegerField(null=True, blank=True, verbose_name='TAT')
-    accuracy = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    """Motor Renewal enquiry — one row per renewal opportunity with status state machine."""
+    STATUS_NEW = 'new'
+    STATUS_CONVERTED = 'converted'
+    STATUS_LOST = 'lost'
+
+    STATUS_CHOICES = [
+        (STATUS_NEW, 'New Enquiry'),
+        (STATUS_CONVERTED, 'Converted'),
+        (STATUS_LOST, 'Lost'),
+    ]
+
+    TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_LOST}
+
+    TRANSITIONS = {
+        STATUS_NEW: [STATUS_CONVERTED, STATUS_LOST],
+        STATUS_CONVERTED: [],
+        STATUS_LOST: [],
+    }
+
+    ACCURACY_DECAY = Decimal('0.9')
+
+    client_name = models.CharField(max_length=200)
+    agent = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='motor_renewal_enquiries_as_agent',
+    )
+    chassis_no = models.CharField(max_length=100)
+    remarks = models.TextField(blank=True, default='')
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW
+    )
+    revisions = models.PositiveIntegerField(default=0)
+    status_changed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Motor Renewal Entry'
         verbose_name_plural = 'Motor Renewal Entries'
 
     def __str__(self):
-        return f"Motor Renewal - {self.date} by {self.added_by}"
+        return f"Motor Renewal Enquiry - {self.client_name} ({self.status})"
+
+    @classmethod
+    def get_allowed_transitions(cls, current_status):
+        return cls.TRANSITIONS.get(current_status, [])
+
+    @property
+    def is_terminal(self):
+        return self.status in self.TERMINAL_STATUSES
+
+    def get_tat(self):
+        if not self.is_terminal or self.status_changed_at is None:
+            return None
+        return self.status_changed_at - self.added_at
+
+    def get_tat_display(self):
+        delta = self.get_tat()
+        if delta is None:
+            return '—'
+        total_seconds = int(delta.total_seconds())
+        days = total_seconds // 86400
+        hours = (total_seconds % 86400) // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        if days > 0:
+            return f"{days}d {hours}h {minutes}m"
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        if minutes > 0:
+            return f"{minutes}m {seconds}s"
+        return f"{seconds}s"
+
+    @property
+    def accuracy_pct(self):
+        if not self.is_terminal:
+            return None
+        return float(Decimal('100') * (self.ACCURACY_DECAY ** self.revisions))
+
+
+class MotorRenewalStatusTransition(models.Model):
+    """Records each status change for a motor renewal enquiry."""
+    entry = models.ForeignKey(
+        MotorRenewalEntry,
+        on_delete=models.CASCADE,
+        related_name='status_transitions',
+    )
+    from_status = models.CharField(
+        max_length=20, choices=MotorRenewalEntry.STATUS_CHOICES, blank=True
+    )
+    to_status = models.CharField(
+        max_length=20, choices=MotorRenewalEntry.STATUS_CHOICES
+    )
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='motor_renewal_status_changes',
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['changed_at']
+
+    def __str__(self):
+        return f"{self.entry_id}: {self.from_status} -> {self.to_status}"
 
 
 class MotorClaimEntry(BaseEntry):

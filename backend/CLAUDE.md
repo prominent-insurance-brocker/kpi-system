@@ -56,8 +56,10 @@ Concrete models:
 |-------|-----------|-------------|
 | GeneralNewEntry | `general_new` | quotations, quotes_revised, quotes_converted, tat, accuracy |
 | GeneralRenewalEntry | `general_renewal` | quotations, quotes_revised, quotes_converted, tat, accuracy |
-| MotorNewEntry | `motor_new` | quotations, quotes_revised, tat, accuracy |
-| MotorRenewalEntry | `motor_renewal` | quotations, retention, tat, accuracy |
+| MotorNewEntry | `motor_new` | client_name, agent (FK), chassis_no, remarks, status (new/converted/lost), revisions, status_changed_at — one row per enquiry. TAT = status_changed_at - added_at when terminal; Accuracy = 100 × 0.9^revisions when terminal. |
+| MotorNewStatusTransition | — | entry FK, from_status, to_status, changed_by, changed_at |
+| MotorRenewalEntry | `motor_renewal` | Same shape as MotorNewEntry (per-enquiry rows with state machine) |
+| MotorRenewalStatusTransition | — | entry FK, from_status, to_status, changed_by, changed_at |
 | MotorClaimEntry | `motor_claim` | customer_name, status (claims_opened/claims_in_progress/claims_resolved/claims_rejected) |
 | MotorClaimStatusTransition | — | entry FK, from_status, to_status, changed_by, changed_at |
 | SalesPremiumDataEntry | `sales_premium_data` | gross_booked_premium, target |

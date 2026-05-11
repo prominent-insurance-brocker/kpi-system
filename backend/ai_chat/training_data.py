@@ -47,10 +47,13 @@ def get_ddl_statements():
             CREATE TABLE entries_motornewentry (
                 id SERIAL PRIMARY KEY,
                 date DATE NOT NULL,
-                quotations INTEGER NOT NULL,
-                quotes_revised INTEGER NOT NULL,
-                tat INTEGER NOT NULL,
-                accuracy NUMERIC(5, 2) NOT NULL,
+                client_name VARCHAR(200) NOT NULL,
+                agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                chassis_no VARCHAR(100) NOT NULL,
+                remarks TEXT NOT NULL,
+                status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
+                revisions INTEGER NOT NULL DEFAULT 0,
+                status_changed_at TIMESTAMPTZ NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at TIMESTAMPTZ NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL
@@ -60,10 +63,13 @@ def get_ddl_statements():
             CREATE TABLE entries_motorrenewalentry (
                 id SERIAL PRIMARY KEY,
                 date DATE NOT NULL,
-                quotations INTEGER NOT NULL,
-                retention INTEGER NOT NULL,
-                tat INTEGER NOT NULL,
-                accuracy NUMERIC(5, 2) NOT NULL,
+                client_name VARCHAR(200) NOT NULL,
+                agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                chassis_no VARCHAR(100) NOT NULL,
+                remarks TEXT NOT NULL,
+                status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
+                revisions INTEGER NOT NULL DEFAULT 0,
+                status_changed_at TIMESTAMPTZ NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at TIMESTAMPTZ NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL
@@ -154,10 +160,13 @@ def get_ddl_statements():
             CREATE TABLE entries_motornewentry (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date DATE NOT NULL,
-                quotations INTEGER UNSIGNED NOT NULL,
-                quotes_revised INTEGER UNSIGNED NOT NULL,
-                tat INTEGER UNSIGNED NOT NULL,
-                accuracy DECIMAL(5, 2) NOT NULL,
+                client_name VARCHAR(200) NOT NULL,
+                agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                chassis_no VARCHAR(100) NOT NULL,
+                remarks TEXT NOT NULL,
+                status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
+                revisions INTEGER UNSIGNED NOT NULL DEFAULT 0,
+                status_changed_at DATETIME NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at DATETIME NOT NULL,
                 updated_at DATETIME NOT NULL
@@ -167,10 +176,13 @@ def get_ddl_statements():
             CREATE TABLE entries_motorrenewalentry (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date DATE NOT NULL,
-                quotations INTEGER UNSIGNED NOT NULL,
-                retention INTEGER UNSIGNED NOT NULL,
-                tat INTEGER UNSIGNED NOT NULL,
-                accuracy DECIMAL(5, 2) NOT NULL,
+                client_name VARCHAR(200) NOT NULL,
+                agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                chassis_no VARCHAR(100) NOT NULL,
+                remarks TEXT NOT NULL,
+                status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
+                revisions INTEGER UNSIGNED NOT NULL DEFAULT 0,
+                status_changed_at DATETIME NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at DATETIME NOT NULL,
                 updated_at DATETIME NOT NULL
@@ -243,11 +255,14 @@ def get_documentation():
         "quotations issued, quotes revised, quotes converted, TAT, and accuracy. "
         "It has the same structure as General New.",
 
-        "The 'Motor New' module (entries_motornewentry) tracks new motor insurance business: "
-        "quotations issued, quotes revised, TAT, and accuracy.",
+        "The 'Motor New' module (entries_motornewentry) tracks new motor insurance ENQUIRIES — one row per customer enquiry. "
+        "Each row has client_name, an agent_id (the salesperson source), chassis_no, remarks, "
+        "a status (one of 'new', 'converted', 'lost'), a revisions counter, and a status_changed_at timestamp set when the status becomes terminal. "
+        "TAT for an enquiry = status_changed_at - added_at (only meaningful when status != 'new'). "
+        "Accuracy = 100 * (0.9 ^ revisions), only meaningful when status != 'new'.",
 
-        "The 'Motor Renewal' module (entries_motorrenewalentry) tracks motor insurance renewals: "
-        "quotations issued, retention count (policies retained), TAT, and accuracy.",
+        "The 'Motor Renewal' module (entries_motorrenewalentry) has the same per-enquiry shape as Motor New "
+        "(client_name, agent_id, chassis_no, remarks, status, revisions, status_changed_at) but tracks renewal enquiries.",
 
         "The 'Motor Claim' module (entries_motorclaimentry) tracks motor insurance claims processing: "
         "registered_claims (new claims filed), claims_closed (resolved claims), "
@@ -303,10 +318,23 @@ def get_example_queries():
                 """,
             },
             {
-                "question": "What is the average accuracy for Motor New entries?",
+                "question": "How many motor new enquiries are still open?",
                 "sql": """
-                    SELECT ROUND(AVG(accuracy), 2) AS avg_accuracy
-                    FROM entries_motornewentry;
+                    SELECT COUNT(*) AS open_enquiries
+                    FROM entries_motornewentry
+                    WHERE status = 'new';
+                """,
+            },
+            {
+                "question": "What is the conversion rate for motor new enquiries this month?",
+                "sql": """
+                    SELECT
+                        COUNT(*) FILTER (WHERE status = 'converted') AS converted,
+                        COUNT(*) FILTER (WHERE status IN ('converted','lost')) AS closed,
+                        COUNT(*) AS total
+                    FROM entries_motornewentry
+                    WHERE date >= date_trunc('month', CURRENT_DATE)
+                      AND date <= CURRENT_DATE;
                 """,
             },
             {
@@ -415,10 +443,23 @@ def get_example_queries():
                 """,
             },
             {
-                "question": "What is the average accuracy for Motor New entries?",
+                "question": "How many motor new enquiries are still open?",
                 "sql": """
-                    SELECT ROUND(AVG(accuracy), 2) AS avg_accuracy
-                    FROM entries_motornewentry;
+                    SELECT COUNT(*) AS open_enquiries
+                    FROM entries_motornewentry
+                    WHERE status = 'new';
+                """,
+            },
+            {
+                "question": "What is the conversion rate for motor new enquiries this month?",
+                "sql": """
+                    SELECT
+                        SUM(CASE WHEN status = 'converted' THEN 1 ELSE 0 END) AS converted,
+                        SUM(CASE WHEN status IN ('converted','lost') THEN 1 ELSE 0 END) AS closed,
+                        COUNT(*) AS total
+                    FROM entries_motornewentry
+                    WHERE date >= date('now', 'start of month')
+                      AND date <= date('now');
                 """,
             },
             {

@@ -18,3 +18,21 @@ class ClaimEntryFilter(EntryFilter):
 
     class Meta:
         fields = ['date_from', 'date_to', 'user_id', 'status', 'customer_name']
+
+
+class MotorEnquiryFilter(EntryFilter):
+    """Filter for motor new / motor renewal enquiries — status, agent, and client-name search.
+
+    Used by both MotorNewEntry and MotorRenewalEntry viewsets since their
+    schemas are identical.
+    """
+    status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
+    agent_id = django_filters.NumberFilter(field_name='agent_id')
+    client_name = django_filters.CharFilter(field_name='client_name', lookup_expr='icontains')
+
+    class Meta:
+        fields = ['date_from', 'date_to', 'user_id', 'status', 'agent_id', 'client_name']
+
+
+# Backwards-compatible alias (kept short to make grepping easy if old code lingers).
+MotorNewEntryFilter = MotorEnquiryFilter

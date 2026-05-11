@@ -21,11 +21,11 @@ class GeneralRenewalEntryAdmin(BaseEntryAdmin):
 
 @admin.register(MotorNewEntry)
 class MotorNewEntryAdmin(BaseEntryAdmin):
-    list_display = BaseEntryAdmin.list_display + ('quotations', 'quotes_revised', 'accuracy')
+    list_display = BaseEntryAdmin.list_display + ('client_name', 'agent', 'status', 'revisions')
 
 @admin.register(MotorRenewalEntry)
 class MotorRenewalEntryAdmin(BaseEntryAdmin):
-    list_display = BaseEntryAdmin.list_display + ('quotations', 'retention', 'accuracy')
+    list_display = BaseEntryAdmin.list_display + ('client_name', 'agent', 'status', 'revisions')
 
 @admin.register(MotorClaimEntry)
 class MotorClaimEntryAdmin(BaseEntryAdmin):

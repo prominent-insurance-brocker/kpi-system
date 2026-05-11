@@ -24,7 +24,9 @@ from entries.models import (
     GeneralNewEntry,
     GeneralRenewalEntry,
     MotorNewEntry,
+    MotorNewStatusTransition,
     MotorRenewalEntry,
+    MotorRenewalStatusTransition,
     MotorClaimEntry,
     MotorClaimStatusTransition,
     SalesKPIEntry,
@@ -238,10 +240,16 @@ class Command(BaseCommand):
                                      qmin=10, qmax=30, acc_min=88.0, acc_max=99.5)
 
     def _seed_motor_new(self, users, dates):
-        return self._seed_funnel_kpi(users, dates, MotorNewEntry,
-                                     qmin=8, qmax=20, acc_min=90.0, acc_max=99.5)
+        return self._seed_motor_enquiry(users, dates, MotorNewEntry, MotorNewStatusTransition)
+
+    def _seed_motor_renewal(self, users, dates):
+        return self._seed_motor_enquiry(users, dates, MotorRenewalEntry, MotorRenewalStatusTransition)
 
     def _seed_funnel_kpi(self, users, dates, Model, qmin, qmax, acc_min, acc_max):
+        """Generic funnel-KPI seeder — still used by general_new / general_renewal
+        modules. The motor modules now go through `_seed_motor_enquiry` since
+        their schema was replaced with per-enquiry rows.
+        """
         count = 0
         for user in users:
             for d in dates:
@@ -265,25 +273,57 @@ class Command(BaseCommand):
                     count += 1
         return count
 
-    def _seed_motor_renewal(self, users, dates):
+    def _seed_motor_enquiry(self, users, dates, Model, TransitionModel):
+        """Seed per-enquiry rows for motor_new / motor_renewal.
+
+        Each row represents one customer enquiry with a status state-machine.
+        Generates 1–3 enquiries per agent per day and seeds a transition
+        history record for each status change.
+        """
+        client_pool = [
+            'Haris', 'Mubashid', 'Jimshad', 'Hisham', 'Vishnu', 'Rashid',
+            'Omar Al-Farsi', 'Layla Karim', 'Tariq Nasser', 'Noura Said',
+        ]
+        status_pool = (
+            [Model.STATUS_NEW] * 4
+            + [Model.STATUS_CONVERTED] * 4
+            + [Model.STATUS_LOST] * 2
+        )
         count = 0
         for user in users:
             for d in dates:
-                quotations = random.randint(15, 35)
-                retention = random.randint(0, quotations)
-                tat = random.randint(1, 7)
-                accuracy = Decimal(str(round(random.uniform(85.0, 99.5), 2)))
-                entry, created = MotorRenewalEntry.objects.get_or_create(
-                    date=d, added_by=user,
-                    defaults=dict(
-                        quotations=quotations,
-                        retention=retention,
-                        tat=tat,
-                        accuracy=accuracy,
-                    ),
-                )
-                if created:
-                    self._backdate(MotorRenewalEntry, entry.pk, _aware_dt(d))
+                for _ in range(random.randint(1, 3)):
+                    status_value = random.choice(status_pool)
+                    revisions = random.randint(0, 4)
+                    status_changed_at = None
+                    if status_value in Model.TERMINAL_STATUSES:
+                        anchor = datetime.combine(d, time(10, 0))
+                        status_changed_at = timezone.make_aware(anchor) + timedelta(hours=random.randint(1, 24))
+                    entry = Model.objects.create(
+                        date=d,
+                        added_by=user,
+                        client_name=random.choice(client_pool),
+                        agent=random.choice(users),
+                        chassis_no=f"CH-{random.randint(100, 999)}-{random.randint(1000, 9999)}",
+                        remarks=random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
+                        status=status_value,
+                        revisions=revisions,
+                        status_changed_at=status_changed_at,
+                    )
+                    self._backdate(Model, entry.pk, _aware_dt(d))
+                    TransitionModel.objects.create(
+                        entry=entry,
+                        from_status='',
+                        to_status=Model.STATUS_NEW,
+                        changed_by=user,
+                    )
+                    if status_value != Model.STATUS_NEW:
+                        TransitionModel.objects.create(
+                            entry=entry,
+                            from_status=Model.STATUS_NEW,
+                            to_status=status_value,
+                            changed_by=user,
+                        )
                     count += 1
         return count
 

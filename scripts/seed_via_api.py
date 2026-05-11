@@ -313,16 +313,27 @@ def kpi_funnel_payload(date_iso, added_by_id, qmin, qmax, acc_min, acc_max):
     }
 
 
-def motor_renewal_payload(date_iso, added_by_id):
-    quotations = random.randint(15, 35)
-    retention = random.randint(0, quotations)
+_MOTOR_CLIENT_POOL = [
+    'Haris', 'Mubashid', 'Jimshad', 'Hisham', 'Vishnu', 'Rashid',
+    'Omar Al-Farsi', 'Layla Karim', 'Tariq Nasser', 'Noura Said',
+]
+
+
+def motor_enquiry_payload(date_iso, added_by_id):
+    """Per-enquiry payload shared by motor_new and motor_renewal.
+
+    The viewset locks status='new' on create — the seed script only POSTs
+    new enquiries; converting/losing them would require an additional
+    PATCH /update-status/ round-trip per row, which isn't worth the
+    complexity here.
+    """
     return {
         'date': date_iso,
         'added_by': added_by_id,
-        'quotations': quotations,
-        'retention': retention,
-        'tat': random.randint(1, 7),
-        'accuracy': str(round(random.uniform(85.0, 99.5), 2)),
+        'client_name': random.choice(_MOTOR_CLIENT_POOL),
+        'agent': added_by_id,
+        'chassis_no': f"CH-{random.randint(100, 999)}-{random.randint(1000, 9999)}",
+        'remarks': random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
     }
 
 
@@ -490,8 +501,8 @@ def main():
     payload_fns = {
         'general_new': lambda d, u: kpi_funnel_payload(d, u, 5, 25, 85.0, 99.5),
         'general_renewal': lambda d, u: kpi_funnel_payload(d, u, 10, 30, 88.0, 99.5),
-        'motor_new': lambda d, u: kpi_funnel_payload(d, u, 8, 20, 90.0, 99.5),
-        'motor_renewal': motor_renewal_payload,
+        'motor_new': motor_enquiry_payload,
+        'motor_renewal': motor_enquiry_payload,
         'sales_kpi': sales_kpi_payload,
         'marine_new': marine_new_payload,
         'marine_renewal': marine_renewal_payload,

@@ -33,6 +33,13 @@ export interface FilterBarProps {
     options: FilterBarOption[];
     placeholder?: string;
   };
+  agent?: {
+    value: string;
+    onChange: (value: string) => void;
+    options: FilterBarOption[];
+    placeholder?: string;
+    label?: string;
+  };
   status?: {
     value: string;
     onChange: (value: string) => void;
@@ -43,7 +50,7 @@ export interface FilterBarProps {
   hasActiveFilters?: boolean;
 }
 
-export function FilterBar({ search, dateRange, user, status, onClear, hasActiveFilters }: FilterBarProps) {
+export function FilterBar({ search, dateRange, user, agent, status, onClear, hasActiveFilters }: FilterBarProps) {
   return (
     <div className="flex gap-4 items-end flex-wrap">
       {search && (
@@ -84,6 +91,27 @@ export function FilterBar({ search, dateRange, user, status, onClear, hasActiveF
             <SelectContent>
               <SelectItem value="all">All Users</SelectItem>
               {user.options.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {agent && (
+        <div className="flex flex-col gap-2">
+          <Label>{agent.label ?? "Agent"}</Label>
+          <Select
+            value={agent.value || "all"}
+            onValueChange={(v) => agent.onChange(v === "all" ? "" : v)}
+          >
+            <SelectTrigger className="w-[200px] shadow-none">
+              <SelectValue placeholder={agent.placeholder ?? "All Agents"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Agents</SelectItem>
+              {agent.options.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
                 </SelectItem>

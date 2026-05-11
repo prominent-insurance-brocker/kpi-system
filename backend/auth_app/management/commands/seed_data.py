@@ -391,9 +391,10 @@ class Command(BaseCommand):
 
         Both models share the same shape: client_name, agent FK, chassis_no,
         remarks, status (new/converted/lost), revisions, status_changed_at.
+        added_at is auto-now-add (= seed time), so status_changed_at must be
+        anchored on that to keep TAT positive.
         """
         from django.utils import timezone
-        from datetime import datetime, time
 
         client_names = [
             'Haris', 'Mubashid', 'Jimshad', 'Hisham', 'Vishnu', 'Rashid',
@@ -421,9 +422,11 @@ class Command(BaseCommand):
                     revisions = random.randint(0, 4)
                     status_changed_at = None
                     if status_value in {MotorNewEntry.STATUS_CONVERTED, MotorNewEntry.STATUS_LOST}:
-                        # Fake a status-change a few hours after creation.
-                        anchor = datetime.combine(entry_date, time(10, 0))
-                        status_changed_at = timezone.make_aware(anchor) + timedelta(hours=random.randint(1, 24))
+                        # Fake a status-change a few hours after the entry was
+                        # actually created (auto_now_add fires on .create()).
+                        status_changed_at = timezone.now() + timedelta(
+                            hours=random.randint(1, 24)
+                        )
                     entry = model.objects.create(
                         date=entry_date,
                         added_by=user,

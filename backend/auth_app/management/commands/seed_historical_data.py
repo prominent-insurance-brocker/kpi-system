@@ -295,10 +295,15 @@ class Command(BaseCommand):
                 for _ in range(random.randint(1, 3)):
                     status_value = random.choice(status_pool)
                     revisions = random.randint(0, 4)
+                    # added_at gets backdated to _aware_dt(d) below; compute
+                    # status_changed_at relative to that so TAT comes out positive.
+                    added_at_dt = _aware_dt(d)
                     status_changed_at = None
                     if status_value in Model.TERMINAL_STATUSES:
-                        anchor = datetime.combine(d, time(10, 0))
-                        status_changed_at = timezone.make_aware(anchor) + timedelta(hours=random.randint(1, 24))
+                        status_changed_at = added_at_dt + timedelta(
+                            hours=random.randint(1, 48),
+                            minutes=random.randint(0, 59),
+                        )
                     entry = Model.objects.create(
                         date=d,
                         added_by=user,
@@ -310,7 +315,7 @@ class Command(BaseCommand):
                         revisions=revisions,
                         status_changed_at=status_changed_at,
                     )
-                    self._backdate(Model, entry.pk, _aware_dt(d))
+                    self._backdate(Model, entry.pk, added_at_dt)
                     TransitionModel.objects.create(
                         entry=entry,
                         from_status='',

@@ -135,32 +135,35 @@ def _build_enquiry_stats(queryset):
 
     Used by both MotorNewEntryViewSet and MotorRenewalEntryViewSet — both
     have identical schemas (status / revisions / status_changed_at / added_at).
+
+    Reads via .values_list to avoid the FieldError caused by combining the
+    viewset's select_related('agent') with .only(...) on a partial field set.
     """
     total = queryset.count()
     revised = queryset.filter(revisions__gt=0).count()
     converted = queryset.filter(status='converted').count()
     lost = queryset.filter(status='lost').count()
 
-    terminal = queryset.filter(status__in=['converted', 'lost']).exclude(status_changed_at=None)
+    terminal = queryset.filter(
+        status__in=['converted', 'lost']
+    ).exclude(status_changed_at=None)
 
     avg_tat_seconds = None
-    if terminal.exists():
-        deltas = [
-            (e.status_changed_at - e.added_at).total_seconds()
-            for e in terminal.only('added_at', 'status_changed_at')
-        ]
-        if deltas:
-            avg_tat_seconds = sum(deltas) / len(deltas)
-
     avg_accuracy = None
-    if terminal.exists():
+
+    rows = list(terminal.values_list('added_at', 'status_changed_at', 'revisions'))
+    if rows:
         decay = Decimal('0.9')
-        accuracies = [
-            float(Decimal('100') * (decay ** e.revisions))
-            for e in terminal.only('revisions')
+        deltas = [
+            (status_changed_at - added_at).total_seconds()
+            for added_at, status_changed_at, _ in rows
         ]
-        if accuracies:
-            avg_accuracy = sum(accuracies) / len(accuracies)
+        accuracies = [
+            float(Decimal('100') * (decay ** revisions))
+            for _, _, revisions in rows
+        ]
+        avg_tat_seconds = sum(deltas) / len(deltas)
+        avg_accuracy = sum(accuracies) / len(accuracies)
 
     return {
         'total': total,

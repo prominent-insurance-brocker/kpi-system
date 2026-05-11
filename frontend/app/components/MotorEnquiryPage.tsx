@@ -149,7 +149,16 @@ export function MotorEnquiryPage({
   const [entries, setEntries] = useState<MotorEnquiryEntry[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState<MotorEnquiryStats | null>(null);
+  // Start with zeros so the dashboard renders cards immediately on first paint;
+  // they'll update once /stats/ resolves.
+  const [stats, setStats] = useState<MotorEnquiryStats>({
+    total: 0,
+    revised: 0,
+    converted: 0,
+    lost: 0,
+    avg_tat_minutes: null,
+    avg_accuracy: null,
+  });
 
   // Tracker — month state + entries
   const [personalCalYear, setPersonalCalYear] = useState(today.getFullYear());
@@ -207,7 +216,12 @@ export function MotorEnquiryPage({
       date_to: dashTo || undefined,
       user_id: dashUserId || undefined,
     });
-    if (result.data) setStats(result.data);
+    if (result.data) {
+      setStats(result.data);
+    } else {
+      console.error('Failed to load motor enquiry stats:', result.error);
+      toast.error(result.error || 'Failed to load dashboard stats');
+    }
   }, [apiSlug, dashFrom, dashTo, dashUserId]);
 
   const fetchMonthEntries = useCallback(async () => {
@@ -542,24 +556,22 @@ export function MotorEnquiryPage({
               setDashUserId('');
             }}
           />
-          {stats && (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-              <StatCard label="Total Enquiries" value={stats.total} accent="text-[#09090B]" />
-              <StatCard label="Enquiries Revised" value={stats.revised} accent="text-[#A855F7]" />
-              <StatCard label="Converted" value={stats.converted} accent="text-green-700" />
-              <StatCard label="Lost" value={stats.lost} accent="text-red-700" />
-              <StatCard
-                label="Avg. TAT"
-                value={formatTatFromMinutes(stats.avg_tat_minutes)}
-                accent="text-[#0EA5E9]"
-              />
-              <StatCard
-                label="Avg. Accuracy"
-                value={formatAccuracy(stats.avg_accuracy)}
-                accent="text-[#F97316]"
-              />
-            </div>
-          )}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+            <StatCard label="Total Enquiries" value={stats.total} accent="text-[#09090B]" />
+            <StatCard label="Enquiries Revised" value={stats.revised} accent="text-[#A855F7]" />
+            <StatCard label="Converted" value={stats.converted} accent="text-green-700" />
+            <StatCard label="Lost" value={stats.lost} accent="text-red-700" />
+            <StatCard
+              label="Avg. TAT"
+              value={formatTatFromMinutes(stats.avg_tat_minutes)}
+              accent="text-[#0EA5E9]"
+            />
+            <StatCard
+              label="Avg. Accuracy"
+              value={formatAccuracy(stats.avg_accuracy)}
+              accent="text-[#F97316]"
+            />
+          </div>
         </TabsContent>
 
         {/* ─── Tracker View ─────────────────────────────────────────────── */}

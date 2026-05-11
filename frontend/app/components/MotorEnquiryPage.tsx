@@ -34,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Minus, FileText, X, AlertTriangle, Search } from 'lucide-react';
+import { Plus, Minus, FileText, X, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTable } from '@/app/components/DataTable';
@@ -411,14 +411,11 @@ export function MotorEnquiryPage({
       key: 'revisions',
       header: 'Revisions',
       render: (item: MotorEnquiryEntry) => {
+        // Read-only once the enquiry has been closed (converted/lost).
         if (item.status !== 'new') {
           return <span className="text-sm text-[#374151]">{item.revisions}</span>;
         }
-        const canEditRow =
-          item.added_by === currentUserId || item.on_behalf_of === currentUserId;
-        if (!canEditRow) {
-          return <span className="text-sm text-[#374151]">{item.revisions}</span>;
-        }
+        // While status=new, anyone with table access can bump the counter inline.
         return (
           <div className="inline-flex items-center gap-1.5">
             <button
@@ -858,7 +855,6 @@ function EnquiryForm({
   const [agentId, setAgentId] = useState<number | null>(entry?.agent ?? null);
   const [chassisNo, setChassisNo] = useState(entry?.chassis_no ?? '');
   const [remarks, setRemarks] = useState(entry?.remarks ?? '');
-  const [agentSearch, setAgentSearch] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -867,15 +863,6 @@ function EnquiryForm({
     setChassisNo(entry?.chassis_no ?? '');
     setRemarks(entry?.remarks ?? '');
   }, [entry]);
-
-  const filteredAgents = useMemo(() => {
-    const q = agentSearch.trim().toLowerCase();
-    if (!q) return salesUsers;
-    return salesUsers.filter(
-      (u) =>
-        u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
-    );
-  }, [salesUsers, agentSearch]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -889,8 +876,6 @@ function EnquiryForm({
     });
     setIsSubmitting(false);
   };
-
-  const selectedAgent = salesUsers.find((u) => u.id === agentId);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 p-4">
@@ -913,43 +898,25 @@ function EnquiryForm({
 
       <div className="space-y-2">
         <Label>Source / Agent *</Label>
-        <div className="space-y-1">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF] pointer-events-none" />
-            <Input
-              type="search"
-              placeholder="Select agent"
-              value={selectedAgent && !agentSearch ? selectedAgent.full_name : agentSearch}
-              onChange={(e) => {
-                setAgentSearch(e.target.value);
-                if (e.target.value === '') setAgentId(null);
-              }}
-              className="pl-8 shadow-none"
-            />
-          </div>
-          {agentSearch && (
-            <div className="border border-[#E4E4E4] rounded-md max-h-48 overflow-y-auto bg-white">
-              {filteredAgents.length === 0 ? (
-                <div className="px-3 py-2 text-sm text-[#71717A]">No agents found</div>
-              ) : (
-                filteredAgents.map((u) => (
-                  <button
-                    type="button"
-                    key={u.id}
-                    onClick={() => {
-                      setAgentId(u.id);
-                      setAgentSearch('');
-                    }}
-                    className="block w-full text-left px-3 py-2 text-sm hover:bg-[#F3F3F3]"
-                  >
-                    <div className="font-medium">{u.full_name}</div>
-                    <div className="text-xs text-[#71717A]">{u.email}</div>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-        </div>
+        <Select
+          value={agentId ? String(agentId) : undefined}
+          onValueChange={(v) => setAgentId(Number(v))}
+        >
+          <SelectTrigger className="shadow-none">
+            <SelectValue placeholder="Select agent" />
+          </SelectTrigger>
+          <SelectContent>
+            {salesUsers.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-[#71717A]">No agents available</div>
+            ) : (
+              salesUsers.map((u) => (
+                <SelectItem key={u.id} value={String(u.id)}>
+                  {u.full_name || u.email}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="space-y-2">

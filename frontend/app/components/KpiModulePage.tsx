@@ -1370,7 +1370,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
 
         <Tabs value={agentView} onValueChange={(v) => setActiveView(v as typeof activeView)} className="gap-0">
           <div className="sticky top-16 z-20 bg-white py-2">
-            <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0">
+            <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0 w-fit">
               <TabsTrigger
                 value="weekly"
                 className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"
@@ -1417,7 +1417,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
 
       <Tabs value={activeView} onValueChange={(v) => setActiveView(v as typeof activeView)} className="gap-0">
         <div className="sticky top-16 z-20 bg-white py-2">
-          <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0">
+          <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0 w-fit">
             <TabsTrigger
               value="tracker"
               className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"

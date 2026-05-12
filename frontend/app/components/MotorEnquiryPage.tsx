@@ -457,12 +457,19 @@ export function MotorEnquiryPage({
     fetchTargetCard();
   }, [fetchTargetCard]);
 
+  // True once the /current/ call resolves and finds no target for this month.
+  // Blocks all data-entry mutations on the page until cleared.
+  const noCurrentTarget = isRenewal && currentTargetLoaded && !currentTarget;
+  const isCurrentMonthCard =
+    targetCardYear === today.getFullYear() &&
+    targetCardMonth === today.getMonth() + 1;
+
   // Auto-open the edit modal for new users on first visit (no current target).
   useEffect(() => {
-    if (isRenewal && currentTargetLoaded && !currentTarget) {
+    if (noCurrentTarget) {
       setIsTargetModalOpen(true);
     }
-  }, [isRenewal, currentTargetLoaded, currentTarget]);
+  }, [noCurrentTarget]);
 
   // Load the 12-month targets each time the right-side panel opens or its year changes.
   useEffect(() => {
@@ -705,7 +712,13 @@ export function MotorEnquiryPage({
           )}
           {activeView === 'enquiries' && (
             <Button
+              disabled={noCurrentTarget}
+              title={noCurrentTarget ? 'Set this month\'s retention target first' : undefined}
               onClick={() => {
+                if (noCurrentTarget) {
+                  setIsTargetModalOpen(true);
+                  return;
+                }
                 setEditingEntry(null);
                 setModalError('');
                 setIsModalOpen(true);
@@ -751,7 +764,7 @@ export function MotorEnquiryPage({
       )}
 
       <Tabs value={activeView} onValueChange={(v) => setActiveView(v as typeof activeView)}>
-        <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0">
+        <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0 w-fit">
           <TabsTrigger value="dashboard" className="rounded-md px-4 py-1.5 data-[state=active]:bg-white">
             Dashboard
           </TabsTrigger>
@@ -1030,17 +1043,19 @@ export function MotorEnquiryPage({
       {isRenewal && (
         <MotorRenewalTargetModal
           isOpen={isTargetModalOpen}
-          year={targetCardYear}
-          month={targetCardMonth}
+          // While the user has no current-month target, force the modal onto
+          // the current month regardless of which card month is displayed —
+          // they must satisfy the gate before doing anything else.
+          year={noCurrentTarget ? today.getFullYear() : targetCardYear}
+          month={noCurrentTarget ? today.getMonth() + 1 : targetCardMonth}
           existing={
-            // If the open card month happens to be the current calendar month,
-            // prefer the freshly-loaded `currentTarget` over the card's row so
-            // first-time auto-open also pre-fills.
-            targetCardYear === today.getFullYear() &&
-            targetCardMonth === today.getMonth() + 1
+            noCurrentTarget
+              ? currentTarget
+              : isCurrentMonthCard
               ? currentTarget ?? targetCard
               : targetCard
           }
+          required={noCurrentTarget}
           onClose={() => setIsTargetModalOpen(false)}
           onSaved={() => {
             setIsTargetModalOpen(false);
@@ -1637,6 +1652,7 @@ function MotorRenewalTargetModal({
   year,
   month,
   existing,
+  required,
   onClose,
   onSaved,
 }: {
@@ -1644,12 +1660,16 @@ function MotorRenewalTargetModal({
   year: number;
   month: number;
   existing: MotorRenewalMonthlyTarget | null;
+  required?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [clientsAssigned, setClientsAssigned] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`;
+  const isNew = !existing?.id;
 
   useEffect(() => {
     setClientsAssigned(
@@ -1678,17 +1698,40 @@ function MotorRenewalTargetModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="p-0">
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        // In required mode, block close attempts entirely.
+        if (required) return;
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        className={`p-0 sm:max-w-sm${required ? ' [&>button]:hidden' : ''}`}
+        onInteractOutside={required ? (e) => e.preventDefault() : undefined}
+        onEscapeKeyDown={required ? (e) => e.preventDefault() : undefined}
+      >
         <DialogHeader className="border-b border-[#E4E4E4] p-4">
           <DialogTitle>
-            Set Monthly Target — {MONTH_NAMES[month - 1]} {year}
+            {isNew ? `Set ${monthLabel} Target` : `Edit ${monthLabel} Target`}
           </DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Enter your retention target for {monthLabel}.
+          </p>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
               {error}
+            </div>
+          )}
+          {required && (
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+              <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+              <p className="text-sm text-amber-800">
+                <span className="font-semibold">Action required for {monthLabel}</span> — Set
+                your retention target to continue using the module.
+              </p>
             </div>
           )}
           <div className="space-y-2">
@@ -1708,11 +1751,13 @@ function MotorRenewalTargetModal({
             </p>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
+            {!required && (
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+            )}
             <Button type="submit" disabled={isSubmitting || !clientsAssigned}>
-              {isSubmitting ? 'Saving…' : 'Save'}
+              {isSubmitting ? 'Saving…' : `Save ${MONTH_NAMES[month - 1]} Target`}
             </Button>
           </DialogFooter>
         </form>

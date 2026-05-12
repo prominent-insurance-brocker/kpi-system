@@ -716,7 +716,7 @@ export default function SalesKPIPage() {
           className="gap-0"
         >
           <div className="sticky top-16 z-20 bg-white py-2">
-            <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0">
+            <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0 w-fit">
               {isAdmin && (
                 <TabsTrigger
                   value="tracker"

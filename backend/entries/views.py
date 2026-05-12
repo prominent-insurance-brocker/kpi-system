@@ -16,6 +16,7 @@ from .models import (
     MotorNewStatusTransition,
     MotorRenewalEntry,
     MotorRenewalStatusTransition,
+    MotorRenewalMonthlyTarget,
     MotorClaimEntry,
     MotorClaimStatusTransition,
     SalesKPIEntry,
@@ -34,6 +35,7 @@ from .serializers import (
     MotorRenewalEntrySerializer,
     MotorRenewalStatusUpdateSerializer,
     MotorRenewalRevisionsUpdateSerializer,
+    MotorRenewalMonthlyTargetSerializer,
     MotorClaimEntrySerializer,
     MotorClaimStatusUpdateSerializer,
     SalesKPIEntrySerializer,
@@ -130,22 +132,27 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
     module_key = 'general_renewal'
 
 
-def _build_enquiry_stats(queryset):
-    """Compute the 6 dashboard metrics from a queryset of per-enquiry rows.
+def _build_enquiry_stats(queryset, success_status='converted'):
+    """Compute the dashboard metrics from a queryset of per-enquiry rows.
 
-    Used by both MotorNewEntryViewSet and MotorRenewalEntryViewSet — both
-    have identical schemas (status / revisions / status_changed_at / added_at).
+    Both modules share an identical schema (status / revisions / added_at /
+    status_changed_at) but use different terminology for the positive outcome:
+      - Motor New uses `converted`.
+      - Motor Renewal uses `retained`.
+
+    The response includes BOTH `converted` and `retained` keys so the frontend
+    can read whichever applies; only one is non-zero for a given module.
 
     Reads via .values_list to avoid the FieldError caused by combining the
     viewset's select_related('agent') with .only(...) on a partial field set.
     """
     total = queryset.count()
     revised = queryset.filter(revisions__gt=0).count()
-    converted = queryset.filter(status='converted').count()
+    success_count = queryset.filter(status=success_status).count()
     lost = queryset.filter(status='lost').count()
 
     terminal = queryset.filter(
-        status__in=['converted', 'lost']
+        status__in=[success_status, 'lost']
     ).exclude(status_changed_at=None)
 
     avg_tat_seconds = None
@@ -168,7 +175,8 @@ def _build_enquiry_stats(queryset):
     return {
         'total': total,
         'revised': revised,
-        'converted': converted,
+        'converted': success_count if success_status == 'converted' else 0,
+        'retained': success_count if success_status == 'retained' else 0,
         'lost': lost,
         'avg_tat_minutes': round(avg_tat_seconds / 60, 2) if avg_tat_seconds is not None else None,
         'avg_accuracy': round(avg_accuracy, 2) if avg_accuracy is not None else None,
@@ -304,7 +312,7 @@ class MotorRenewalEntryViewSet(BaseEntryViewSet):
 
         if entry.is_terminal:
             return Response(
-                {'error': 'Cannot change status of a converted or lost enquiry.'},
+                {'error': 'Cannot change status of a retained or lost enquiry.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -371,7 +379,7 @@ class MotorRenewalEntryViewSet(BaseEntryViewSet):
         }
         filterset = self.filterset_class(params, queryset=queryset)
         queryset = filterset.qs
-        return Response(_build_enquiry_stats(queryset))
+        return Response(_build_enquiry_stats(queryset, success_status='retained'))
 
 
 class MotorClaimEntryViewSet(BaseEntryViewSet):
@@ -488,6 +496,43 @@ class SalesMonthlyTargetViewSet(viewsets.ModelViewSet):
             )
             return Response(SalesMonthlyTargetSerializer(target).data)
         except SalesMonthlyTarget.DoesNotExist:
+            return Response(None)
+
+
+class MotorRenewalMonthlyTargetViewSet(viewsets.ModelViewSet):
+    """Per-user retention target for the motor renewal module.
+
+    Mirrors SalesMonthlyTargetViewSet — each user only sees/edits their own
+    targets; admins included. The data_visibility='all' rule applies to entry
+    data, not to personal targets.
+    """
+    serializer_class = MotorRenewalMonthlyTargetSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = MotorRenewalMonthlyTarget.objects.filter(user=self.request.user)
+        year = self.request.query_params.get('year')
+        month = self.request.query_params.get('month')
+        if year:
+            queryset = queryset.filter(year=year)
+        if month:
+            queryset = queryset.filter(month=month)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='current')
+    def current(self, request):
+        today = timezone.now().date()
+        try:
+            target = MotorRenewalMonthlyTarget.objects.get(
+                user=request.user,
+                year=today.year,
+                month=today.month,
+            )
+            return Response(MotorRenewalMonthlyTargetSerializer(target).data)
+        except MotorRenewalMonthlyTarget.DoesNotExist:
             return Response(None)
 
 

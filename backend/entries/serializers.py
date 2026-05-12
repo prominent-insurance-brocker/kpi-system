@@ -6,6 +6,7 @@ from .models import (
     MotorNewStatusTransition,
     MotorRenewalEntry,
     MotorRenewalStatusTransition,
+    MotorRenewalMonthlyTarget,
     MotorClaimEntry,
     MotorClaimStatusTransition,
     SalesKPIEntry,
@@ -105,7 +106,7 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
         fields = [
             'id', 'date',
             'client_name', 'agent', 'agent_name', 'chassis_no', 'remarks',
-            'status', 'revisions', 'status_changed_at',
+            'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'added_by', 'added_by_name',
@@ -172,7 +173,7 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
         fields = [
             'id', 'date',
             'client_name', 'agent', 'agent_name', 'chassis_no', 'remarks',
-            'status', 'revisions', 'status_changed_at',
+            'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'added_by', 'added_by_name',
@@ -297,6 +298,22 @@ class SalesMonthlyTargetSerializer(serializers.ModelSerializer):
         if value is not None and value <= 0:
             raise serializers.ValidationError("Premium target must be greater than 0.")
         return value
+
+    def validate_clients_assigned(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Assigned clients must be greater than 0.")
+        return value
+
+
+class MotorRenewalMonthlyTargetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MotorRenewalMonthlyTarget
+        fields = [
+            'id', 'user', 'year', 'month', 'calculated_date',
+            'clients_assigned',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'user', 'calculated_date', 'created_at', 'updated_at']
 
     def validate_clients_assigned(self, value):
         if value is not None and value <= 0:

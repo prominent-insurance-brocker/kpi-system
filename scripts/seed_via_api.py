@@ -332,6 +332,7 @@ def motor_enquiry_payload(date_iso, added_by_id):
         'added_by': added_by_id,
         'client_name': random.choice(_MOTOR_CLIENT_POOL),
         'agent': added_by_id,
+        'quotes_compared': random.randint(0, 5),
         'chassis_no': f"CH-{random.randint(100, 999)}-{random.randint(1000, 9999)}",
         'remarks': random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
     }

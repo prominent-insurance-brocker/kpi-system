@@ -5,6 +5,7 @@ from .views import (
     GeneralRenewalEntryViewSet,
     MotorNewEntryViewSet,
     MotorRenewalEntryViewSet,
+    MotorRenewalMonthlyTargetViewSet,
     MotorClaimEntryViewSet,
     SalesKPIEntryViewSet,
     SalesMonthlyTargetViewSet,
@@ -17,6 +18,8 @@ router = DefaultRouter()
 router.register(r'general-new', GeneralNewEntryViewSet, basename='general-new')
 router.register(r'general-renewal', GeneralRenewalEntryViewSet, basename='general-renewal')
 router.register(r'motor-new', MotorNewEntryViewSet, basename='motor-new')
+# Sub-path must be registered BEFORE the parent so DRF resolves it first.
+router.register(r'motor-renewal/monthly-targets', MotorRenewalMonthlyTargetViewSet, basename='motor-renewal-monthly-targets')
 router.register(r'motor-renewal', MotorRenewalEntryViewSet, basename='motor-renewal')
 router.register(r'motor-claim', MotorClaimEntryViewSet, basename='motor-claim')
 router.register(r'sales-kpi/monthly-targets', SalesMonthlyTargetViewSet, basename='sales-monthly-targets')

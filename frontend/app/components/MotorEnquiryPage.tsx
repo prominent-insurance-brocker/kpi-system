@@ -34,9 +34,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Minus, FileText, X, AlertTriangle } from 'lucide-react';
+import {
+  Plus,
+  Minus,
+  FileText,
+  X,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
+  Pencil,
+  Check,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
+import { Progress } from '@/components/ui/progress';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import {
@@ -44,6 +56,7 @@ import {
   PersonalDailyTracker,
   TrackerView,
   toLocalDateString,
+  MONTH_NAMES,
   type ModuleUser,
 } from '@/app/components/KpiModulePage';
 import { useAuth } from '@/app/context/AuthContext';
@@ -55,35 +68,75 @@ import {
   getMotorEnquiryStats,
   updateMotorEnquiryStatus,
   updateMotorEnquiryRevisions,
+  getCurrentMotorRenewalMonthlyTarget,
+  getMotorRenewalMonthlyTargets,
+  createMotorRenewalMonthlyTarget,
+  updateMotorRenewalMonthlyTarget,
+  type MotorRenewalMonthlyTarget,
   type MotorEnquiryEntry,
   type MotorEnquiryStats,
   type MotorEnquiryModule,
 } from '@/app/lib/api';
 
-const STATUS_OPTIONS: Array<{ value: MotorEnquiryEntry['status']; label: string }> = [
-  { value: 'new', label: 'New Enquiry' },
-  { value: 'converted', label: 'Converted' },
-  { value: 'lost', label: 'Lost' },
-];
+// ─── Per-module configuration ────────────────────────────────────────────────
+// Motor New uses 'converted' as the positive outcome; Motor Renewal uses
+// 'retained'. Everything that depends on the success-status (label, badge
+// color, allowed transitions, status filter options, dashboard card label) is
+// driven by this config so the rest of the component stays generic.
+type SuccessStatus = 'converted' | 'retained';
 
-const STATUS_LABEL: Record<MotorEnquiryEntry['status'], string> = {
-  new: 'New Enquiry',
-  converted: 'Converted',
-  lost: 'Lost',
+interface ModuleStatusConfig {
+  options: Array<{ value: MotorEnquiryEntry['status']; label: string }>;
+  successValue: SuccessStatus;
+  successLabel: string;
+  totalLabel: string;
+  showRatioCard: boolean;
+}
+
+const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
+  'motor-new': {
+    options: [
+      { value: 'new', label: 'New Enquiry' },
+      { value: 'converted', label: 'Converted' },
+      { value: 'lost', label: 'Lost' },
+    ],
+    successValue: 'converted',
+    successLabel: 'Converted',
+    totalLabel: 'Total Enquiries',
+    showRatioCard: false,
+  },
+  'motor-renewal': {
+    options: [
+      { value: 'new', label: 'New Enquiry' },
+      { value: 'retained', label: 'Retained' },
+      { value: 'lost', label: 'Lost' },
+    ],
+    successValue: 'retained',
+    successLabel: 'Retained',
+    totalLabel: 'Total Enquiries Assigned',
+    showRatioCard: true,
+  },
 };
 
 const STATUS_COLORS: Record<MotorEnquiryEntry['status'], string> = {
   new: 'bg-blue-100 text-blue-800',
   converted: 'bg-green-100 text-green-800',
+  retained: 'bg-green-100 text-green-800',
   lost: 'bg-red-100 text-red-800',
 };
 
-function StatusBadge({ status }: { status: MotorEnquiryEntry['status'] }) {
+function StatusBadge({
+  status,
+  label,
+}: {
+  status: MotorEnquiryEntry['status'];
+  label: string;
+}) {
   return (
     <span
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[status] || ''}`}
     >
-      {STATUS_LABEL[status]}
+      {label}
     </span>
   );
 }
@@ -115,6 +168,15 @@ export function MotorEnquiryPage({
   title,
   deptLabel,
 }: MotorEnquiryPageProps) {
+  const config = STATUS_CONFIG[apiSlug];
+  const statusLabelFor = useCallback(
+    (value: MotorEnquiryEntry['status']) => {
+      const opt = config.options.find((o) => o.value === value);
+      return opt?.label ?? value;
+    },
+    [config]
+  );
+
   const { canSeeAllData, user } = useAuth();
   const confirm = useConfirm();
   const isAdmin = canSeeAllData();
@@ -155,6 +217,7 @@ export function MotorEnquiryPage({
     total: 0,
     revised: 0,
     converted: 0,
+    retained: 0,
     lost: 0,
     avg_tat_minutes: null,
     avg_accuracy: null,
@@ -180,11 +243,31 @@ export function MotorEnquiryPage({
   // Status-change verification modal
   const [pendingStatus, setPendingStatus] = useState<{
     entry: MotorEnquiryEntry;
-    newStatus: 'converted' | 'lost';
+    newStatus: SuccessStatus | 'lost';
   } | null>(null);
 
   // Remarks side panel
   const [panelEntry, setPanelEntry] = useState<MotorEnquiryEntry | null>(null);
+
+  // ── Motor Renewal monthly target ────────────────────────────────────────
+  // Only used when apiSlug === 'motor-renewal'. The card displays the target
+  // for `targetCardYear/Month` (1-indexed); `targetCard` is the row currently
+  // displayed, `targetActuals` is the count of `status='retained'` enquiries
+  // in that month for the logged-in user.
+  const [targetCardYear, setTargetCardYear] = useState(today.getFullYear());
+  const [targetCardMonth, setTargetCardMonth] = useState(today.getMonth() + 1);
+  const [targetCard, setTargetCard] = useState<MotorRenewalMonthlyTarget | null>(null);
+  const [targetActuals, setTargetActuals] = useState(0);
+  const [isTargetModalOpen, setIsTargetModalOpen] = useState(false);
+  const [currentTargetLoaded, setCurrentTargetLoaded] = useState(false);
+  const [currentTarget, setCurrentTarget] = useState<MotorRenewalMonthlyTarget | null>(null);
+
+  // Right-side "Monthly Targets" panel — same UX as Sales KPI's panel.
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [sheetYear, setSheetYear] = useState(today.getFullYear());
+  const [sheetTargets, setSheetTargets] = useState<MotorRenewalMonthlyTarget[]>([]);
+  const [sheetEditingMonth, setSheetEditingMonth] = useState<number | null>(null);
+  const [sheetInlineValues, setSheetInlineValues] = useState<Record<number, string>>({});
 
   // ── Fetchers ────────────────────────────────────────────────────────────────
   const fetchEntries = useCallback(async () => {
@@ -261,6 +344,88 @@ export function MotorEnquiryPage({
     }
   }, [apiSlug, personalCalYear, personalCalMonth, teamCalYear, teamCalMonth]);
 
+  // ── Motor Renewal target fetchers ─────────────────────────────────────────
+  const isRenewal = apiSlug === 'motor-renewal';
+
+  const fetchCurrentTarget = useCallback(async () => {
+    if (!isRenewal) return;
+    const result = await getCurrentMotorRenewalMonthlyTarget();
+    setCurrentTarget(result.data ?? null);
+    setCurrentTargetLoaded(true);
+  }, [isRenewal]);
+
+  const fetchSheetTargets = useCallback(async () => {
+    if (!isRenewal) return;
+    const result = await getMotorRenewalMonthlyTargets({ year: sheetYear });
+    setSheetTargets(result.data ?? []);
+  }, [isRenewal, sheetYear]);
+
+  const handleSheetInlineSave = async (month: number) => {
+    const raw = sheetInlineValues[month];
+    if (raw === '' || raw === undefined) {
+      setSheetEditingMonth(null);
+      return;
+    }
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) {
+      toast.error('Assigned clients must be greater than 0.');
+      return;
+    }
+    const existing = sheetTargets.find((t) => t.month === month);
+    const result = existing?.id
+      ? await updateMotorRenewalMonthlyTarget(existing.id, { clients_assigned: value })
+      : await createMotorRenewalMonthlyTarget({
+          year: sheetYear,
+          month,
+          clients_assigned: value,
+        });
+    if (result.data) {
+      setSheetEditingMonth(null);
+      setSheetInlineValues((prev) => {
+        const next = { ...prev };
+        delete next[month];
+        return next;
+      });
+      fetchSheetTargets();
+      // Sync the floating card if the edited month is what it's showing.
+      if (sheetYear === targetCardYear && month === targetCardMonth) {
+        fetchTargetCard();
+      }
+      // And refresh the "current month" gate so the auto-open dialog logic
+      // resolves correctly afterwards.
+      if (sheetYear === today.getFullYear() && month === today.getMonth() + 1) {
+        fetchCurrentTarget();
+      }
+    } else {
+      toast.error(result.error || 'Failed to save target.');
+    }
+  };
+
+  const fetchTargetCard = useCallback(async () => {
+    if (!isRenewal) return;
+    // Fetch the target row for the displayed month + count of retained
+    // enquiries in that same month for the logged-in user.
+    const [targetResult, statsResult] = await Promise.all([
+      getMotorRenewalMonthlyTargets({
+        year: targetCardYear,
+        month: targetCardMonth,
+      }),
+      (async () => {
+        const firstDay = `${targetCardYear}-${String(targetCardMonth).padStart(2, '0')}-01`;
+        const lastDay = toLocalDateString(new Date(targetCardYear, targetCardMonth, 0));
+        const qs = new URLSearchParams({
+          date_from: firstDay,
+          date_to: lastDay,
+          status: 'retained',
+        });
+        if (currentUserId != null) qs.set('user_id', String(currentUserId));
+        return fetchApi<{ count: number }>(`/api/entries/motor-renewal/?${qs}`);
+      })(),
+    ]);
+    setTargetCard(targetResult.data?.[0] ?? null);
+    setTargetActuals(statsResult.data?.count ?? 0);
+  }, [isRenewal, targetCardYear, targetCardMonth, currentUserId]);
+
   // ── Initial loads ────────────────────────────────────────────────────────
   useEffect(() => {
     getUsersForModule(moduleKey).then((r) => {
@@ -283,11 +448,33 @@ export function MotorEnquiryPage({
     if (activeView === 'tracker') fetchMonthEntries();
   }, [activeView, fetchMonthEntries]);
 
+  // Motor Renewal target: load once, then keep card in sync with card month.
+  useEffect(() => {
+    fetchCurrentTarget();
+  }, [fetchCurrentTarget]);
+
+  useEffect(() => {
+    fetchTargetCard();
+  }, [fetchTargetCard]);
+
+  // Auto-open the edit modal for new users on first visit (no current target).
+  useEffect(() => {
+    if (isRenewal && currentTargetLoaded && !currentTarget) {
+      setIsTargetModalOpen(true);
+    }
+  }, [isRenewal, currentTargetLoaded, currentTarget]);
+
+  // Load the 12-month targets each time the right-side panel opens or its year changes.
+  useEffect(() => {
+    if (isPanelOpen) fetchSheetTargets();
+  }, [isPanelOpen, sheetYear, fetchSheetTargets]);
+
   // ── Mutations ────────────────────────────────────────────────────────────
   const refreshAfterMutation = () => {
     fetchEntries();
     fetchStats();
     fetchMonthEntries();
+    if (isRenewal) fetchTargetCard();
   };
 
   const handleSaveNew = async (payload: {
@@ -295,6 +482,7 @@ export function MotorEnquiryPage({
     agent: number;
     chassis_no: string;
     remarks: string;
+    quotes_compared: number;
   }) => {
     setModalError('');
     const isEdit = !!editingEntry;
@@ -356,7 +544,7 @@ export function MotorEnquiryPage({
 
   const applyStatusChange = async (
     entry: MotorEnquiryEntry,
-    newStatus: 'converted' | 'lost',
+    newStatus: SuccessStatus | 'lost',
     revisions?: number
   ) => {
     const result = await updateMotorEnquiryStatus(apiSlug, entry.id, {
@@ -364,7 +552,7 @@ export function MotorEnquiryPage({
       ...(revisions != null ? { revisions } : {}),
     });
     if (result.data) {
-      toast.success(`Marked as ${STATUS_LABEL[newStatus]}`);
+      toast.success(`Marked as ${statusLabelFor(newStatus)}`);
       setPendingStatus(null);
       refreshAfterMutation();
     } else {
@@ -395,13 +583,16 @@ export function MotorEnquiryPage({
       header: 'Status',
       render: (item: MotorEnquiryEntry) =>
         item.is_terminal || item.allowed_transitions.length === 0 ? (
-          <StatusBadge status={item.status} />
+          <StatusBadge status={item.status} label={statusLabelFor(item.status)} />
         ) : (
           <Select
             value={item.status}
             onValueChange={(v) => {
-              if (v === 'converted' || v === 'lost') {
-                setPendingStatus({ entry: item, newStatus: v });
+              if (v === config.successValue || v === 'lost') {
+                setPendingStatus({
+                  entry: item,
+                  newStatus: v as SuccessStatus | 'lost',
+                });
               }
             }}
           >
@@ -410,11 +601,11 @@ export function MotorEnquiryPage({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={item.status} disabled>
-                {STATUS_LABEL[item.status]}
+                {statusLabelFor(item.status)}
               </SelectItem>
               {item.allowed_transitions.map((s) => (
                 <SelectItem key={s} value={s}>
-                  {STATUS_LABEL[s as MotorEnquiryEntry['status']]}
+                  {statusLabelFor(s as MotorEnquiryEntry['status'])}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -467,6 +658,11 @@ export function MotorEnquiryPage({
       render: (item: MotorEnquiryEntry) => formatAccuracy(item.accuracy_pct),
     },
     {
+      key: 'quotes_compared',
+      header: 'No. of Quotes Compared',
+      render: (item: MotorEnquiryEntry) => item.quotes_compared,
+    },
+    {
       key: 'added_at',
       header: 'Added on',
       render: (item: MotorEnquiryEntry) => formatDate(item.added_at.split('T')[0]),
@@ -492,26 +688,67 @@ export function MotorEnquiryPage({
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-6">
+    <div className={isRenewal ? 'p-6 flex gap-6 items-start' : 'p-6 space-y-6'}>
+      <div className={isRenewal ? 'flex-1 min-w-0 space-y-6' : 'contents'}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{title}</h1>
           <p className="text-muted-foreground">{deptLabel}</p>
         </div>
-        {activeView === 'enquiries' && (
-          <Button
-            onClick={() => {
-              setEditingEntry(null);
-              setModalError('');
-              setIsModalOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Enquiry
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isRenewal && (
+            <Button variant="outline" onClick={() => setIsPanelOpen((o) => !o)}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Monthly Targets
+            </Button>
+          )}
+          {activeView === 'enquiries' && (
+            <Button
+              onClick={() => {
+                setEditingEntry(null);
+                setModalError('');
+                setIsModalOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Enquiry
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Motor Renewal Client Retention target card — sits between the page
+          header and the tabs, matching Sales KPI's Monthly Target placement. */}
+      {isRenewal && (
+        <ClientRetentionTargetCard
+          year={targetCardYear}
+          month={targetCardMonth}
+          target={targetCard}
+          actuals={targetActuals}
+          onPrev={() => {
+            if (targetCardMonth === 1) {
+              setTargetCardMonth(12);
+              setTargetCardYear((y) => y - 1);
+            } else {
+              setTargetCardMonth((m) => m - 1);
+            }
+          }}
+          onNext={() => {
+            if (targetCardMonth === 12) {
+              setTargetCardMonth(1);
+              setTargetCardYear((y) => y + 1);
+            } else {
+              setTargetCardMonth((m) => m + 1);
+            }
+          }}
+          onToday={() => {
+            setTargetCardYear(today.getFullYear());
+            setTargetCardMonth(today.getMonth() + 1);
+          }}
+          onEdit={() => setIsTargetModalOpen(true)}
+        />
+      )}
 
       <Tabs value={activeView} onValueChange={(v) => setActiveView(v as typeof activeView)}>
         <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0">
@@ -556,10 +793,14 @@ export function MotorEnquiryPage({
               setDashUserId('');
             }}
           />
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            <StatCard label="Total Enquiries" value={stats.total} accent="text-[#09090B]" />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 xl:grid-cols-7">
+            <StatCard label={config.totalLabel} value={stats.total} accent="text-[#09090B]" />
             <StatCard label="Enquiries Revised" value={stats.revised} accent="text-[#A855F7]" />
-            <StatCard label="Converted" value={stats.converted} accent="text-green-700" />
+            <StatCard
+              label={config.successLabel}
+              value={stats[config.successValue]}
+              accent="text-green-700"
+            />
             <StatCard label="Lost" value={stats.lost} accent="text-red-700" />
             <StatCard
               label="Avg. TAT"
@@ -571,6 +812,13 @@ export function MotorEnquiryPage({
               value={formatAccuracy(stats.avg_accuracy)}
               accent="text-[#F97316]"
             />
+            {config.showRatioCard && (
+              <RatioCard
+                label={`Total Assigned / ${config.successLabel}`}
+                total={stats.total}
+                success={stats[config.successValue]}
+              />
+            )}
           </div>
         </TabsContent>
 
@@ -690,7 +938,7 @@ export function MotorEnquiryPage({
                 setStatusFilter(v);
                 setPage(1);
               },
-              options: STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+              options: config.options.map((o) => ({ value: o.value, label: o.label })),
             }}
             hasActiveFilters={hasActiveFilters}
             onClear={() => {
@@ -705,7 +953,7 @@ export function MotorEnquiryPage({
           />
 
           <div className="flex gap-4">
-            <div className={panelEntry ? 'flex-1 min-w-0' : 'flex-1'}>
+            <div className="flex-1 min-w-0">
               <DataTable
                 columns={columns}
                 data={entries}
@@ -770,17 +1018,216 @@ export function MotorEnquiryPage({
         <StatusTransitionModal
           entry={pendingStatus.entry}
           newStatus={pendingStatus.newStatus}
+          newStatusLabel={statusLabelFor(pendingStatus.newStatus)}
           onCancel={() => setPendingStatus(null)}
           onConfirm={(revisions) =>
             applyStatusChange(pendingStatus.entry, pendingStatus.newStatus, revisions)
           }
         />
       )}
+
+      {/* ── Client Retention edit-target modal (motor-renewal only) ────────── */}
+      {isRenewal && (
+        <MotorRenewalTargetModal
+          isOpen={isTargetModalOpen}
+          year={targetCardYear}
+          month={targetCardMonth}
+          existing={
+            // If the open card month happens to be the current calendar month,
+            // prefer the freshly-loaded `currentTarget` over the card's row so
+            // first-time auto-open also pre-fills.
+            targetCardYear === today.getFullYear() &&
+            targetCardMonth === today.getMonth() + 1
+              ? currentTarget ?? targetCard
+              : targetCard
+          }
+          onClose={() => setIsTargetModalOpen(false)}
+          onSaved={() => {
+            setIsTargetModalOpen(false);
+            fetchCurrentTarget();
+            fetchTargetCard();
+            fetchSheetTargets();
+          }}
+        />
+      )}
+      </div>
+
+      {/* ── Right-side Monthly Targets panel (motor-renewal only) ──────────── */}
+      {isRenewal && isPanelOpen && (
+        <div className="w-[340px] shrink-0 border rounded-lg overflow-hidden bg-white">
+          <div className="flex items-start justify-between px-4 py-3 border-b">
+            <div>
+              <h3 className="font-semibold text-base text-[#09090B]">Monthly Targets</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Calendar year client retention targets
+              </p>
+            </div>
+            <button
+              onClick={() => setIsPanelOpen(false)}
+              className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-[#09090B]"
+              aria-label="Close monthly targets panel"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-[#FAFAFA]">
+            <span className="font-semibold text-base text-[#09090B]">{sheetYear}</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setSheetYear((y) => y - 1)}
+                className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-[#E4E4E4] bg-white hover:bg-accent"
+                aria-label="Previous year"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setSheetYear((y) => y + 1)}
+                className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-[#E4E4E4] bg-white hover:bg-accent"
+                aria-label="Next year"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div>
+            {MONTH_NAMES.map((name, idx) => {
+              const m = idx + 1;
+              const t = sheetTargets.find((row) => row.month === m);
+              const val = t?.clients_assigned;
+              const isSet = val !== null && val !== undefined;
+              const isEditing = sheetEditingMonth === m;
+
+              const enterEdit = () => {
+                setSheetEditingMonth(m);
+                setSheetInlineValues((prev) => ({
+                  ...prev,
+                  [m]: isSet ? String(val) : '',
+                }));
+              };
+              const cancelEdit = () => {
+                setSheetEditingMonth(null);
+                setSheetInlineValues((prev) => {
+                  const next = { ...prev };
+                  delete next[m];
+                  return next;
+                });
+              };
+
+              if (isEditing) {
+                return (
+                  <div
+                    key={m}
+                    className="px-4 py-3 border-t border-b border-[#F1F1F1] bg-white"
+                  >
+                    <h4 className="text-sm font-semibold text-[#09090B] mb-3">
+                      {name} {sheetYear}
+                    </h4>
+                    <Label htmlFor={`mr-target-${m}`} className="text-sm">
+                      Client Retention
+                    </Label>
+                    <Input
+                      id={`mr-target-${m}`}
+                      type="number"
+                      min={1}
+                      step={1}
+                      autoFocus
+                      placeholder="Enter client retention target…"
+                      value={sheetInlineValues[m] ?? ''}
+                      onChange={(e) =>
+                        setSheetInlineValues((prev) => ({
+                          ...prev,
+                          [m]: e.target.value,
+                        }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSheetInlineSave(m);
+                        }
+                        if (e.key === 'Escape') {
+                          e.preventDefault();
+                          cancelEdit();
+                        }
+                      }}
+                      className="mt-2"
+                    />
+                    <div className="flex justify-end gap-2 mt-3">
+                      <Button type="button" variant="outline" size="sm" onClick={cancelEdit}>
+                        Cancel
+                      </Button>
+                      <Button type="button" size="sm" onClick={() => handleSheetInlineSave(m)}>
+                        <Check className="h-4 w-4 mr-1" /> Save
+                      </Button>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={m}
+                  className="flex items-center justify-between px-4 py-3 border-t border-[#F1F1F1]"
+                >
+                  <span className="text-sm text-[#09090B]">{name}</span>
+                  {isSet ? (
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-semibold text-[#09090B]">{val}</span>
+                      <button
+                        onClick={enterEdit}
+                        className="text-muted-foreground hover:text-[#09090B]"
+                        aria-label={`Edit ${name} target`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm italic text-muted-foreground">Not set</span>
+                      <button
+                        onClick={enterEdit}
+                        className="text-muted-foreground hover:text-[#09090B]"
+                        aria-label={`Set ${name} target`}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
+
+function RatioCard({
+  label,
+  total,
+  success,
+}: {
+  label: string;
+  total: number;
+  success: number;
+}) {
+  const pct = total > 0 ? (success / total) * 100 : 0;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold text-[#09090B]">
+          {total} / {success}
+        </div>
+        <div className="text-xs text-muted-foreground mt-0.5">({pct.toFixed(1)}%)</div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function StatCard({
   label,
@@ -859,6 +1306,7 @@ function EnquiryForm({
     agent: number;
     chassis_no: string;
     remarks: string;
+    quotes_compared: number;
   }) => void;
   onClose: () => void;
   error: string;
@@ -867,6 +1315,9 @@ function EnquiryForm({
   const [agentId, setAgentId] = useState<number | null>(entry?.agent ?? null);
   const [chassisNo, setChassisNo] = useState(entry?.chassis_no ?? '');
   const [remarks, setRemarks] = useState(entry?.remarks ?? '');
+  const [quotesCompared, setQuotesCompared] = useState<string>(
+    entry?.quotes_compared != null ? String(entry.quotes_compared) : '0'
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -874,6 +1325,7 @@ function EnquiryForm({
     setAgentId(entry?.agent ?? null);
     setChassisNo(entry?.chassis_no ?? '');
     setRemarks(entry?.remarks ?? '');
+    setQuotesCompared(entry?.quotes_compared != null ? String(entry.quotes_compared) : '0');
   }, [entry]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -885,6 +1337,7 @@ function EnquiryForm({
       agent: agentId,
       chassis_no: chassisNo,
       remarks,
+      quotes_compared: Math.max(0, Number(quotesCompared || 0)),
     });
     setIsSubmitting(false);
   };
@@ -943,6 +1396,18 @@ function EnquiryForm({
       </div>
 
       <div className="space-y-2">
+        <Label>No. of Quotes Compared</Label>
+        <Input
+          type="number"
+          min={0}
+          step={1}
+          placeholder="0"
+          value={quotesCompared}
+          onChange={(e) => setQuotesCompared(e.target.value)}
+        />
+      </div>
+
+      <div className="space-y-2">
         <Label>Remarks</Label>
         <Textarea
           placeholder="Add notes or remarks…"
@@ -969,11 +1434,13 @@ function EnquiryForm({
 function StatusTransitionModal({
   entry,
   newStatus,
+  newStatusLabel,
   onCancel,
   onConfirm,
 }: {
   entry: MotorEnquiryEntry;
-  newStatus: 'converted' | 'lost';
+  newStatus: SuccessStatus | 'lost';
+  newStatusLabel: string;
   onCancel: () => void;
   onConfirm: (revisions?: number) => void;
 }) {
@@ -981,10 +1448,11 @@ function StatusTransitionModal({
   //   stage='ask'  → revisions=0 branch question
   //   stage='enter'→ collecting revision count
   //   stage='verify' → revisions>0 confirmation
+  void newStatus; // currently only used for typing the caller's discriminated union
   const initialStage: 'ask' | 'verify' = entry.revisions > 0 ? 'verify' : 'ask';
   const [stage, setStage] = useState<'ask' | 'enter' | 'verify'>(initialStage);
   const [enteredCount, setEnteredCount] = useState(0);
-  const statusLabel = STATUS_LABEL[newStatus];
+  const statusLabel = newStatusLabel;
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onCancel(); }}>
@@ -1058,6 +1526,196 @@ function StatusTransitionModal({
             </DialogFooter>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Client Retention monthly target card (motor-renewal only) ───────────────
+
+const TARGET_MULTIPLIER = 1.5;
+
+function ClientRetentionTargetCard({
+  year,
+  month,
+  target,
+  actuals,
+  onPrev,
+  onNext,
+  onToday,
+  onEdit,
+}: {
+  year: number;
+  month: number;             // 1-indexed
+  target: MotorRenewalMonthlyTarget | null;
+  actuals: number;
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
+  onEdit: () => void;
+}) {
+  const clientsTarget = target?.clients_assigned ?? null;
+  const clientsMax = clientsTarget ? clientsTarget * TARGET_MULTIPLIER : 0;
+  const clientsPct = clientsMax ? Math.min(100, (actuals / clientsMax) * 100) : 0;
+  const clientsMarkerPct = clientsMax ? (clientsTarget! / clientsMax) * 100 : 0;
+
+  return (
+    <div className="border rounded-lg p-4 space-y-2 bg-white w-[362px] shrink-0 flex flex-col">
+      <h2 className="text-base font-semibold">Monthly Target</h2>
+      <div className="space-y-1">
+        <div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-xl font-bold">{actuals.toLocaleString()}</span>
+            <span className="text-sm text-muted-foreground">Client Retention</span>
+          </div>
+          <div className="relative">
+            <div
+              className={
+                clientsTarget !== null && actuals >= clientsTarget
+                  ? '[&_[data-slot=progress-indicator]]:bg-green-500'
+                  : '[&_[data-slot=progress-indicator]]:bg-red-400'
+              }
+            >
+              <Progress value={clientsPct} className="h-2 bg-gray-100" />
+            </div>
+            {clientsTarget !== null && (
+              <div
+                className="absolute top-0 h-2 w-0.5 bg-gray-400 rounded-full"
+                style={{ left: `${clientsMarkerPct}%` }}
+              />
+            )}
+          </div>
+          <div className="relative">
+            <span className="text-xs text-muted-foreground">0</span>
+            {clientsTarget !== null && (
+              <div
+                className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
+                style={{ left: `${clientsMarkerPct}%` }}
+              >
+                <span className="text-blue-500 leading-none">▲</span>
+                <span className="text-muted-foreground">
+                  {Math.round(clientsTarget).toLocaleString()}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <h3 className="text-xl font-semibold">{MONTH_NAMES[month - 1]} {year}</h3>
+      <div className="flex items-center gap-2 mt-auto">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onPrev}
+            className="p-1 border border-[#E4E4E4] rounded hover:bg-accent"
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onNext}
+            className="p-1 border border-[#E4E4E4] rounded hover:bg-accent"
+            aria-label="Next month"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+        <Button variant="outline" size="sm" onClick={onToday}>
+          <Calendar className="h-3 w-3 mr-1" />
+          Today
+        </Button>
+        <Button variant="outline" size="sm" className="ml-auto" onClick={onEdit}>
+          <Pencil className="h-3 w-3 mr-1" />
+          Edit
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function MotorRenewalTargetModal({
+  isOpen,
+  year,
+  month,
+  existing,
+  onClose,
+  onSaved,
+}: {
+  isOpen: boolean;
+  year: number;
+  month: number;
+  existing: MotorRenewalMonthlyTarget | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [clientsAssigned, setClientsAssigned] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setClientsAssigned(
+      existing?.clients_assigned != null ? String(existing.clients_assigned) : ''
+    );
+    setError('');
+  }, [existing, isOpen]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const value = Number(clientsAssigned);
+    if (!Number.isFinite(value) || value <= 0) {
+      setError('Assigned clients must be greater than 0.');
+      return;
+    }
+    setIsSubmitting(true);
+    const result = existing?.id
+      ? await updateMotorRenewalMonthlyTarget(existing.id, { clients_assigned: value })
+      : await createMotorRenewalMonthlyTarget({ year, month, clients_assigned: value });
+    setIsSubmitting(false);
+    if (result.data) {
+      onSaved();
+    } else {
+      setError(result.error || 'Failed to save target.');
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="p-0">
+        <DialogHeader className="border-b border-[#E4E4E4] p-4">
+          <DialogTitle>
+            Set Monthly Target — {MONTH_NAMES[month - 1]} {year}
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
+              {error}
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label>Client Retention Target</Label>
+            <Input
+              type="number"
+              min={1}
+              step={1}
+              placeholder="e.g. 50"
+              value={clientsAssigned}
+              onChange={(e) => setClientsAssigned(e.target.value)}
+              required
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              How many renewal enquiries you aim to retain this month.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting || !clientsAssigned}>
+              {isSubmitting ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

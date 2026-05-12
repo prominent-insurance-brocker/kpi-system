@@ -389,8 +389,12 @@ class Command(BaseCommand):
     def _seed_motor_enquiry_entries(self, model, users, dates):
         """Seed per-enquiry rows for MotorNewEntry or MotorRenewalEntry.
 
-        Both models share the same shape: client_name, agent FK, chassis_no,
-        remarks, status (new/converted/lost), revisions, status_changed_at.
+        Both models share the same shape (client_name, agent FK, chassis_no,
+        remarks, status, revisions, quotes_compared, status_changed_at) but
+        use different positive-outcome terminology — motor_new says
+        'converted', motor_renewal says 'retained'. The status constants are
+        read from the passed-in model so this stays generic.
+
         added_at is auto-now-add (= seed time), so status_changed_at must be
         anchored on that to keep TAT positive.
         """
@@ -401,14 +405,15 @@ class Command(BaseCommand):
             'Omar Al-Farsi', 'Layla Karim', 'Tariq Nasser', 'Noura Said',
             'Fatima Noor', 'Ahmed Al-Rashid', 'Sara Mahmoud', 'Khalid Hassan',
         ]
-        statuses = [
-            (MotorNewEntry.STATUS_NEW, 0.4),
-            (MotorNewEntry.STATUS_CONVERTED, 0.4),
-            (MotorNewEntry.STATUS_LOST, 0.2),
-        ]
-        status_pool = []
-        for value, weight in statuses:
-            status_pool.extend([value] * int(weight * 100))
+        # Read status constants off the supplied model so the seeder works for
+        # both motor_new (STATUS_CONVERTED) and motor_renewal (STATUS_RETAINED).
+        success_status = getattr(model, 'STATUS_CONVERTED', None) or model.STATUS_RETAINED
+        terminal_statuses = {success_status, model.STATUS_LOST}
+        status_pool = (
+            [model.STATUS_NEW] * 40
+            + [success_status] * 40
+            + [model.STATUS_LOST] * 20
+        )
 
         count = 0
         for user in users:
@@ -421,7 +426,7 @@ class Command(BaseCommand):
                     status_value = random.choice(status_pool)
                     revisions = random.randint(0, 4)
                     status_changed_at = None
-                    if status_value in {MotorNewEntry.STATUS_CONVERTED, MotorNewEntry.STATUS_LOST}:
+                    if status_value in terminal_statuses:
                         # Fake a status-change a few hours after the entry was
                         # actually created (auto_now_add fires on .create()).
                         status_changed_at = timezone.now() + timedelta(
@@ -436,21 +441,21 @@ class Command(BaseCommand):
                         remarks=random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
                         status=status_value,
                         revisions=revisions,
+                        quotes_compared=random.randint(0, 5),
                         status_changed_at=status_changed_at,
                     )
                     count += 1
-                    # Seed an initial transition history record.
                     transition_model = entry.status_transitions.model
                     transition_model.objects.create(
                         entry=entry,
                         from_status='',
-                        to_status=MotorNewEntry.STATUS_NEW,
+                        to_status=model.STATUS_NEW,
                         changed_by=user,
                     )
-                    if status_value != MotorNewEntry.STATUS_NEW:
+                    if status_value != model.STATUS_NEW:
                         transition_model.objects.create(
                             entry=entry,
-                            from_status=MotorNewEntry.STATUS_NEW,
+                            from_status=model.STATUS_NEW,
                             to_status=status_value,
                             changed_by=user,
                         )

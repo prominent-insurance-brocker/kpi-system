@@ -53,6 +53,7 @@ def get_ddl_statements():
                 remarks TEXT NOT NULL,
                 status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
                 revisions INTEGER NOT NULL DEFAULT 0,
+                quotes_compared INTEGER NOT NULL DEFAULT 0,
                 status_changed_at TIMESTAMPTZ NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at TIMESTAMPTZ NOT NULL,
@@ -67,12 +68,26 @@ def get_ddl_statements():
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 chassis_no VARCHAR(100) NOT NULL,
                 remarks TEXT NOT NULL,
-                status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
+                status VARCHAR(20) NOT NULL,         -- 'new' | 'retained' | 'lost'
                 revisions INTEGER NOT NULL DEFAULT 0,
+                quotes_compared INTEGER NOT NULL DEFAULT 0,
                 status_changed_at TIMESTAMPTZ NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at TIMESTAMPTZ NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL
+            );
+            """,
+            """
+            CREATE TABLE entries_motorrenewalmonthlytarget (
+                id BIGSERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                calculated_date DATE NOT NULL,  -- first of (year, month), indexed
+                clients_assigned INTEGER NULL,  -- retention target for the month
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL,
+                UNIQUE (user_id, year, month)
             );
             """,
             """
@@ -166,6 +181,7 @@ def get_ddl_statements():
                 remarks TEXT NOT NULL,
                 status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
                 revisions INTEGER UNSIGNED NOT NULL DEFAULT 0,
+                quotes_compared INTEGER UNSIGNED NOT NULL DEFAULT 0,
                 status_changed_at DATETIME NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at DATETIME NOT NULL,
@@ -180,12 +196,26 @@ def get_ddl_statements():
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 chassis_no VARCHAR(100) NOT NULL,
                 remarks TEXT NOT NULL,
-                status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
+                status VARCHAR(20) NOT NULL,         -- 'new' | 'retained' | 'lost'
                 revisions INTEGER UNSIGNED NOT NULL DEFAULT 0,
+                quotes_compared INTEGER UNSIGNED NOT NULL DEFAULT 0,
                 status_changed_at DATETIME NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at DATETIME NOT NULL,
                 updated_at DATETIME NOT NULL
+            );
+            """,
+            """
+            CREATE TABLE entries_motorrenewalmonthlytarget (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                calculated_date DATE NOT NULL,
+                clients_assigned INTEGER NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                UNIQUE (user_id, year, month)
             );
             """,
             """
@@ -261,8 +291,10 @@ def get_documentation():
         "TAT for an enquiry = status_changed_at - added_at (only meaningful when status != 'new'). "
         "Accuracy = 100 * (0.9 ^ revisions), only meaningful when status != 'new'.",
 
-        "The 'Motor Renewal' module (entries_motorrenewalentry) has the same per-enquiry shape as Motor New "
-        "(client_name, agent_id, chassis_no, remarks, status, revisions, status_changed_at) but tracks renewal enquiries.",
+        "The 'Motor Renewal' module (entries_motorrenewalentry) tracks renewal ENQUIRIES with the same per-enquiry shape "
+        "as Motor New (client_name, agent_id, chassis_no, remarks, status, revisions, quotes_compared, status_changed_at). "
+        "Critical difference: status is one of 'new', 'retained' (positive outcome), 'lost' — NOT 'converted'. "
+        "A separate table entries_motorrenewalmonthlytarget tracks each user's monthly retention target (clients_assigned).",
 
         "The 'Motor Claim' module (entries_motorclaimentry) tracks motor insurance claims processing: "
         "registered_claims (new claims filed), claims_closed (resolved claims), "

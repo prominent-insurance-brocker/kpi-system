@@ -109,6 +109,7 @@ class MotorNewEntry(BaseEntry):
         max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW
     )
     revisions = models.PositiveIntegerField(default=0)
+    quotes_compared = models.PositiveIntegerField(default=0)
     status_changed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta(BaseEntry.Meta):
@@ -188,20 +189,20 @@ class MotorNewStatusTransition(models.Model):
 class MotorRenewalEntry(BaseEntry):
     """Motor Renewal enquiry — one row per renewal opportunity with status state machine."""
     STATUS_NEW = 'new'
-    STATUS_CONVERTED = 'converted'
+    STATUS_RETAINED = 'retained'
     STATUS_LOST = 'lost'
 
     STATUS_CHOICES = [
         (STATUS_NEW, 'New Enquiry'),
-        (STATUS_CONVERTED, 'Converted'),
+        (STATUS_RETAINED, 'Retained'),
         (STATUS_LOST, 'Lost'),
     ]
 
-    TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_LOST}
+    TERMINAL_STATUSES = {STATUS_RETAINED, STATUS_LOST}
 
     TRANSITIONS = {
-        STATUS_NEW: [STATUS_CONVERTED, STATUS_LOST],
-        STATUS_CONVERTED: [],
+        STATUS_NEW: [STATUS_RETAINED, STATUS_LOST],
+        STATUS_RETAINED: [],
         STATUS_LOST: [],
     }
 
@@ -219,6 +220,7 @@ class MotorRenewalEntry(BaseEntry):
         max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW
     )
     revisions = models.PositiveIntegerField(default=0)
+    quotes_compared = models.PositiveIntegerField(default=0)
     status_changed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta(BaseEntry.Meta):
@@ -290,6 +292,39 @@ class MotorRenewalStatusTransition(models.Model):
 
     def __str__(self):
         return f"{self.entry_id}: {self.from_status} -> {self.to_status}"
+
+
+class MotorRenewalMonthlyTarget(models.Model):
+    """Per-user retention target for the motor renewal module.
+
+    Mirrors SalesMonthlyTarget but tracks only `clients_assigned` (number of
+    renewal opportunities the user is expected to retain in the month). The
+    `premium_target` concept doesn't apply to renewal enquiries.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='motor_renewal_monthly_targets',
+    )
+    year = models.PositiveIntegerField()
+    month = models.PositiveIntegerField()
+    # Auto-derived from (year, month) on every save() — same pattern as
+    # SalesMonthlyTarget.calculated_date.
+    calculated_date = models.DateField(db_index=True)
+    clients_assigned = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'year', 'month')
+
+    def save(self, *args, **kwargs):
+        from datetime import date
+        self.calculated_date = date(self.year, self.month, 1)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Motor Renewal Target {self.year}/{self.month} - {self.user}"
 
 
 class MotorClaimEntry(BaseEntry):

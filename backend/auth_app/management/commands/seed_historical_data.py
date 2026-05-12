@@ -284,9 +284,12 @@ class Command(BaseCommand):
             'Haris', 'Mubashid', 'Jimshad', 'Hisham', 'Vishnu', 'Rashid',
             'Omar Al-Farsi', 'Layla Karim', 'Tariq Nasser', 'Noura Said',
         ]
+        # Resolve the positive-outcome status off the model so motor_new uses
+        # STATUS_CONVERTED while motor_renewal uses STATUS_RETAINED.
+        success_status = getattr(Model, 'STATUS_CONVERTED', None) or Model.STATUS_RETAINED
         status_pool = (
             [Model.STATUS_NEW] * 4
-            + [Model.STATUS_CONVERTED] * 4
+            + [success_status] * 4
             + [Model.STATUS_LOST] * 2
         )
         count = 0
@@ -313,6 +316,7 @@ class Command(BaseCommand):
                         remarks=random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
                         status=status_value,
                         revisions=revisions,
+                        quotes_compared=random.randint(0, 5),
                         status_changed_at=status_changed_at,
                     )
                     self._backdate(Model, entry.pk, added_at_dt)

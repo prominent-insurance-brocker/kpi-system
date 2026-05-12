@@ -297,8 +297,11 @@ export interface MotorEnquiryEntry {
   agent_name: string;
   chassis_no: string;
   remarks: string;
-  status: 'new' | 'converted' | 'lost';
+  // Motor New uses 'converted'; Motor Renewal uses 'retained'. Both modules
+  // share the same row type; the page's per-module STATUS_CONFIG narrows it.
+  status: 'new' | 'converted' | 'retained' | 'lost';
   revisions: number;
+  quotes_compared: number;
   status_changed_at: string | null;
   tat_display: string;               // "Xd Yh Zm" or "—"
   accuracy_pct: number | null;       // 100 × 0.9^revisions when terminal; null otherwise
@@ -319,10 +322,25 @@ export interface MotorEnquiryEntry {
 export interface MotorEnquiryStats {
   total: number;
   revised: number;
+  // Only one of these is non-zero for any given module — `converted` for
+  // motor_new, `retained` for motor_renewal. Both are always present in the
+  // payload so the frontend reads whichever applies.
   converted: number;
+  retained: number;
   lost: number;
   avg_tat_minutes: number | null;
   avg_accuracy: number | null;
+}
+
+export interface MotorRenewalMonthlyTarget {
+  id: number;
+  user: number;
+  year: number;
+  month: number;
+  calculated_date: string;             // YYYY-MM-DD (first of the month)
+  clients_assigned: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export type MotorEnquiryModule = 'motor-new' | 'motor-renewal';
@@ -353,7 +371,7 @@ export async function getMotorEnquiryStats(
 export async function updateMotorEnquiryStatus(
   module: MotorEnquiryModule,
   id: number,
-  payload: { status: 'converted' | 'lost'; revisions?: number }
+  payload: { status: 'converted' | 'retained' | 'lost'; revisions?: number }
 ): Promise<ApiResponse<MotorEnquiryEntry>> {
   return fetchApi<MotorEnquiryEntry>(`/api/entries/${module}/${id}/update-status/`, {
     method: 'PATCH',
@@ -370,6 +388,55 @@ export async function updateMotorEnquiryRevisions(
     method: 'PATCH',
     body: JSON.stringify({ revisions }),
   });
+}
+
+// ─── Motor Renewal monthly target (Client Retention) ─────────────────────────
+
+export async function getCurrentMotorRenewalMonthlyTarget(): Promise<
+  ApiResponse<MotorRenewalMonthlyTarget | null>
+> {
+  return fetchApi<MotorRenewalMonthlyTarget | null>(
+    '/api/entries/motor-renewal/monthly-targets/current/'
+  );
+}
+
+export async function getMotorRenewalMonthlyTargets(params: {
+  year: number;
+  month?: number;
+}): Promise<ApiResponse<MotorRenewalMonthlyTarget[]>> {
+  const qs = new URLSearchParams();
+  qs.set('year', String(params.year));
+  if (params.month != null) qs.set('month', String(params.month));
+  const result = await fetchApi<{ results: MotorRenewalMonthlyTarget[] } | MotorRenewalMonthlyTarget[]>(
+    `/api/entries/motor-renewal/monthly-targets/?${qs}`
+  );
+  if (result.data) {
+    // DRF returns paginated {results} for list endpoints; unwrap to a flat array.
+    const rows = Array.isArray(result.data) ? result.data : result.data.results;
+    return { data: rows };
+  }
+  return { error: result.error };
+}
+
+export async function createMotorRenewalMonthlyTarget(payload: {
+  year: number;
+  month: number;
+  clients_assigned: number;
+}): Promise<ApiResponse<MotorRenewalMonthlyTarget>> {
+  return fetchApi<MotorRenewalMonthlyTarget>(
+    '/api/entries/motor-renewal/monthly-targets/',
+    { method: 'POST', body: JSON.stringify(payload) }
+  );
+}
+
+export async function updateMotorRenewalMonthlyTarget(
+  id: number,
+  payload: { clients_assigned: number }
+): Promise<ApiResponse<MotorRenewalMonthlyTarget>> {
+  return fetchApi<MotorRenewalMonthlyTarget>(
+    `/api/entries/motor-renewal/monthly-targets/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(payload) }
+  );
 }
 
 // AI Chat

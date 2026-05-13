@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp, Anchor, HeartPulse } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp, Anchor, HeartPulse, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/app/context/AuthContext';
 
@@ -68,6 +68,7 @@ const navigation: NavItem[] = [
       { name: 'Roles', href: '/admin/roles' },
     ],
   },
+  { name: 'Settings', href: '/admin/settings', icon: Settings, adminOnly: true },
 ];
 
 export function Sidebar() {

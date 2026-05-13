@@ -1,6 +1,6 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-interface ApiResponse<T> {
+export interface ApiResponse<T> {
   data?: T;
   error?: string;
 }
@@ -437,6 +437,142 @@ export async function updateMotorRenewalMonthlyTarget(
     `/api/entries/motor-renewal/monthly-targets/${id}/`,
     { method: 'PATCH', body: JSON.stringify(payload) }
   );
+}
+
+// ─── Motor Claim (revamped: client_name + lookup FKs + 8 new fields) ─────────
+
+export interface MotorClaimEntry {
+  id: number;
+  date: string;
+  client_name: string;
+  vehicle_number: string;
+  claim_number: string;
+  source: number;
+  source_name: string;
+  type_of_accident: number;
+  type_of_accident_name: string;
+  insurance_company: number;
+  insurance_company_name: string;
+  next_call_date: string | null;
+  garage_name: string;
+  garage_number: string;
+  status: 'claims_opened' | 'claims_in_progress' | 'claims_resolved' | 'claims_rejected';
+  added_by: number;
+  added_by_name: string;
+  on_behalf_of: number | null;
+  on_behalf_of_name: string | null;
+  added_at: string;
+  updated_at: string;
+  is_editable: boolean;
+  tat_display: string;
+  allowed_transitions: string[];
+  is_terminal: boolean;
+  // Index signature for compatibility with shared BaseModuleEntry-based
+  // components (PersonalDailyTracker, TrackerView).
+  [key: string]: unknown;
+}
+
+export interface MotorClaimStats {
+  claims_opened: number;
+  claims_in_progress: number;
+  claims_resolved: number;
+  claims_rejected: number;
+}
+
+// ─── Settings: lookup tables (Type of Accident + Insurance Company) ──────────
+
+export interface SettingsLookup {
+  id: number;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AccidentType = SettingsLookup;
+export type InsuranceCompany = SettingsLookup;
+
+async function _listLookup(
+  resource: 'accident-types' | 'insurance-companies',
+  params: { is_active?: boolean } = {}
+): Promise<ApiResponse<SettingsLookup[]>> {
+  const qs = new URLSearchParams();
+  if (params.is_active != null) qs.set('is_active', String(params.is_active));
+  qs.set('page_size', '200');
+  const result = await fetchApi<
+    { results: SettingsLookup[] } | SettingsLookup[]
+  >(`/api/entries/settings/${resource}/?${qs}`);
+  if (result.data) {
+    const rows = Array.isArray(result.data) ? result.data : result.data.results;
+    return { data: rows };
+  }
+  return { error: result.error };
+}
+
+export const getAccidentTypes = (params?: { is_active?: boolean }) =>
+  _listLookup('accident-types', params);
+
+export const getInsuranceCompanies = (params?: { is_active?: boolean }) =>
+  _listLookup('insurance-companies', params);
+
+export async function createAccidentType(
+  name: string
+): Promise<ApiResponse<AccidentType>> {
+  return fetchApi<AccidentType>('/api/entries/settings/accident-types/', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function updateAccidentType(
+  id: number,
+  data: { name?: string; is_active?: boolean }
+): Promise<ApiResponse<AccidentType>> {
+  return fetchApi<AccidentType>(`/api/entries/settings/accident-types/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function createInsuranceCompany(
+  name: string
+): Promise<ApiResponse<InsuranceCompany>> {
+  return fetchApi<InsuranceCompany>('/api/entries/settings/insurance-companies/', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function updateInsuranceCompany(
+  id: number,
+  data: { name?: string; is_active?: boolean }
+): Promise<ApiResponse<InsuranceCompany>> {
+  return fetchApi<InsuranceCompany>(
+    `/api/entries/settings/insurance-companies/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(data) }
+  );
+}
+
+export async function getMotorClaimStats(params: {
+  date_from?: string;
+  date_to?: string;
+  user_id?: string;
+}): Promise<ApiResponse<MotorClaimStats>> {
+  const qs = new URLSearchParams();
+  if (params.date_from) qs.set('date_from', params.date_from);
+  if (params.date_to) qs.set('date_to', params.date_to);
+  if (params.user_id) qs.set('user_id', params.user_id);
+  return fetchApi<MotorClaimStats>(`/api/entries/motor-claim/stats/?${qs}`);
+}
+
+export async function updateMotorClaimStatus(
+  id: number,
+  status: MotorClaimEntry['status']
+): Promise<ApiResponse<MotorClaimEntry>> {
+  return fetchApi<MotorClaimEntry>(`/api/entries/motor-claim/${id}/update-status/`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
 }
 
 // AI Chat

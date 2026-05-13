@@ -327,8 +327,36 @@ class MotorRenewalMonthlyTarget(models.Model):
         return f"Motor Renewal Target {self.year}/{self.month} - {self.user}"
 
 
+class TypeOfAccident(models.Model):
+    """Admin-managed list of accident types referenced by MotorClaimEntry."""
+    name = models.CharField(max_length=200, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class InsuranceCompany(models.Model):
+    """Admin-managed list of insurance companies referenced by MotorClaimEntry."""
+    name = models.CharField(max_length=200, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class MotorClaimEntry(BaseEntry):
-    """Motor Claim module entry."""
+    """Motor Claim — one row per claim, with status state machine + lookup FKs."""
     STATUS_CHOICES = [
         ('claims_opened', 'Claims Opened'),
         ('claims_in_progress', 'Claims In Progress'),
@@ -345,7 +373,23 @@ class MotorClaimEntry(BaseEntry):
         'claims_rejected': [],
     }
 
-    customer_name = models.CharField(max_length=255)
+    client_name = models.CharField(max_length=200)
+    vehicle_number = models.CharField(max_length=50)
+    claim_number = models.CharField(max_length=100)
+    source = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='motor_claim_enquiries_as_source',
+    )
+    type_of_accident = models.ForeignKey(
+        TypeOfAccident, on_delete=models.PROTECT, related_name='motor_claims',
+    )
+    insurance_company = models.ForeignKey(
+        InsuranceCompany, on_delete=models.PROTECT, related_name='motor_claims',
+    )
+    next_call_date = models.DateField(null=True, blank=True)
+    garage_name = models.CharField(max_length=200, blank=True, default='')
+    garage_number = models.CharField(max_length=50, blank=True, default='')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
 
     class Meta(BaseEntry.Meta):
@@ -353,7 +397,7 @@ class MotorClaimEntry(BaseEntry):
         verbose_name_plural = 'Motor Claim Entries'
 
     def __str__(self):
-        return f"Motor Claim - {self.date} by {self.added_by}"
+        return f"Motor Claim - {self.client_name} ({self.claim_number})"
 
     @classmethod
     def get_allowed_transitions(cls, current_status):

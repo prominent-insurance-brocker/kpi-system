@@ -12,6 +12,8 @@ from .views import (
     MarineNewEntryViewSet,
     MarineRenewalEntryViewSet,
     MedicalClaimEntryViewSet,
+    TypeOfAccidentViewSet,
+    InsuranceCompanyViewSet,
 )
 
 router = DefaultRouter()
@@ -27,6 +29,9 @@ router.register(r'sales-kpi', SalesKPIEntryViewSet, basename='sales-kpi')
 router.register(r'marine-new', MarineNewEntryViewSet, basename='marine-new')
 router.register(r'marine-renewal', MarineRenewalEntryViewSet, basename='marine-renewal')
 router.register(r'medical-claim', MedicalClaimEntryViewSet, basename='medical-claim')
+# Settings lookup tables (managed via the Settings page).
+router.register(r'settings/accident-types', TypeOfAccidentViewSet, basename='accident-types')
+router.register(r'settings/insurance-companies', InsuranceCompanyViewSet, basename='insurance-companies')
 
 urlpatterns = [
     path('', include(router.urls)),

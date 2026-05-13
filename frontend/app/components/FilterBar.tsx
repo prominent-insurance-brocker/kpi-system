@@ -26,6 +26,13 @@ export interface FilterBarProps {
     from: string;
     to: string;
     onChange: (from: string, to: string) => void;
+    label?: string;
+  };
+  secondaryDateRange?: {
+    from: string;
+    to: string;
+    onChange: (from: string, to: string) => void;
+    label: string;
   };
   user?: {
     value: string;
@@ -50,7 +57,7 @@ export interface FilterBarProps {
   hasActiveFilters?: boolean;
 }
 
-export function FilterBar({ search, dateRange, user, agent, status, onClear, hasActiveFilters }: FilterBarProps) {
+export function FilterBar({ search, dateRange, secondaryDateRange, user, agent, status, onClear, hasActiveFilters }: FilterBarProps) {
   return (
     <div className="flex gap-4 items-end flex-wrap">
       {search && (
@@ -70,11 +77,21 @@ export function FilterBar({ search, dateRange, user, agent, status, onClear, has
       )}
       {dateRange && (
         <div className="flex flex-col gap-2">
-          <Label>Date Range</Label>
+          <Label>{dateRange.label ?? "Date Range"}</Label>
           <DateRangeFilter
             dateFrom={dateRange.from}
             dateTo={dateRange.to}
             onChange={dateRange.onChange}
+          />
+        </div>
+      )}
+      {secondaryDateRange && (
+        <div className="flex flex-col gap-2">
+          <Label>{secondaryDateRange.label}</Label>
+          <DateRangeFilter
+            dateFrom={secondaryDateRange.from}
+            dateTo={secondaryDateRange.to}
+            onChange={secondaryDateRange.onChange}
           />
         </div>
       )}

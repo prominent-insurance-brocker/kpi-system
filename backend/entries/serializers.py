@@ -9,6 +9,8 @@ from .models import (
     MotorRenewalMonthlyTarget,
     MotorClaimEntry,
     MotorClaimStatusTransition,
+    TypeOfAccident,
+    InsuranceCompany,
     SalesKPIEntry,
     SalesMonthlyTarget,
     MarineNewEntry,
@@ -228,6 +230,13 @@ class MotorRenewalRevisionsUpdateSerializer(serializers.Serializer):
 
 class MotorClaimEntrySerializer(BaseEntrySerializer):
     enforce_one_per_day = False
+    source_name = serializers.SerializerMethodField()
+    type_of_accident_name = serializers.CharField(
+        source='type_of_accident.name', read_only=True,
+    )
+    insurance_company_name = serializers.CharField(
+        source='insurance_company.name', read_only=True,
+    )
     tat_display = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
@@ -235,11 +244,21 @@ class MotorClaimEntrySerializer(BaseEntrySerializer):
     class Meta:
         model = MotorClaimEntry
         fields = [
-            'id', 'date', 'customer_name', 'status',
-            'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name', 'added_at', 'updated_at', 'is_editable',
-            'tat_display', 'allowed_transitions', 'is_terminal'
+            'id', 'date',
+            'client_name', 'vehicle_number', 'claim_number',
+            'source', 'source_name',
+            'type_of_accident', 'type_of_accident_name',
+            'insurance_company', 'insurance_company_name',
+            'next_call_date', 'garage_name', 'garage_number',
+            'status',
+            'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name',
+            'added_at', 'updated_at', 'is_editable',
+            'tat_display', 'allowed_transitions', 'is_terminal',
         ]
         read_only_fields = ['id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
+
+    def get_source_name(self, obj):
+        return obj.source.get_full_name() if obj.source_id else None
 
     def get_tat_display(self, obj):
         return obj.get_tat_display()
@@ -250,8 +269,31 @@ class MotorClaimEntrySerializer(BaseEntrySerializer):
     def get_is_terminal(self, obj):
         return obj.is_terminal
 
-    def validate_accuracy(self, value):
-        return value
+
+class TypeOfAccidentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TypeOfAccident
+        fields = ['id', 'name', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_name(self, value):
+        cleaned = (value or '').strip()
+        if not cleaned:
+            raise serializers.ValidationError("Name cannot be blank.")
+        return cleaned
+
+
+class InsuranceCompanySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InsuranceCompany
+        fields = ['id', 'name', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_name(self, value):
+        cleaned = (value or '').strip()
+        if not cleaned:
+            raise serializers.ValidationError("Name cannot be blank.")
+        return cleaned
 
 
 class MotorClaimStatusUpdateSerializer(serializers.Serializer):

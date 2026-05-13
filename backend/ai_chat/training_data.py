@@ -94,12 +94,36 @@ def get_ddl_statements():
             CREATE TABLE entries_motorclaimentry (
                 id SERIAL PRIMARY KEY,
                 date DATE NOT NULL,
-                registered_claims INTEGER NOT NULL,
-                claims_closed INTEGER NOT NULL,
-                pending_cases INTEGER NOT NULL,
-                tat INTEGER NOT NULL,
+                client_name VARCHAR(200) NOT NULL,
+                vehicle_number VARCHAR(50) NOT NULL,
+                claim_number VARCHAR(100) NOT NULL,
+                source_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                type_of_accident_id BIGINT NOT NULL REFERENCES entries_typeofaccident(id),
+                insurance_company_id BIGINT NOT NULL REFERENCES entries_insurancecompany(id),
+                next_call_date DATE NULL,
+                garage_name VARCHAR(200) NOT NULL,
+                garage_number VARCHAR(50) NOT NULL,
+                status VARCHAR(20) NOT NULL,  -- claims_opened | claims_in_progress | claims_resolved | claims_rejected
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL
+            );
+            """,
+            """
+            CREATE TABLE entries_typeofaccident (
+                id BIGSERIAL PRIMARY KEY,
+                name VARCHAR(200) UNIQUE NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL
+            );
+            """,
+            """
+            CREATE TABLE entries_insurancecompany (
+                id BIGSERIAL PRIMARY KEY,
+                name VARCHAR(200) UNIQUE NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL
             );
             """,
@@ -222,12 +246,36 @@ def get_ddl_statements():
             CREATE TABLE entries_motorclaimentry (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date DATE NOT NULL,
-                registered_claims INTEGER UNSIGNED NOT NULL,
-                claims_closed INTEGER UNSIGNED NOT NULL,
-                pending_cases INTEGER UNSIGNED NOT NULL,
-                tat INTEGER UNSIGNED NOT NULL,
+                client_name VARCHAR(200) NOT NULL,
+                vehicle_number VARCHAR(50) NOT NULL,
+                claim_number VARCHAR(100) NOT NULL,
+                source_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                type_of_accident_id INTEGER NOT NULL REFERENCES entries_typeofaccident(id),
+                insurance_company_id INTEGER NOT NULL REFERENCES entries_insurancecompany(id),
+                next_call_date DATE NULL,
+                garage_name VARCHAR(200) NOT NULL,
+                garage_number VARCHAR(50) NOT NULL,
+                status VARCHAR(20) NOT NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            """,
+            """
+            CREATE TABLE entries_typeofaccident (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(200) UNIQUE NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            """,
+            """
+            CREATE TABLE entries_insurancecompany (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(200) UNIQUE NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL,
                 updated_at DATETIME NOT NULL
             );
             """,
@@ -296,9 +344,12 @@ def get_documentation():
         "Critical difference: status is one of 'new', 'retained' (positive outcome), 'lost' — NOT 'converted'. "
         "A separate table entries_motorrenewalmonthlytarget tracks each user's monthly retention target (clients_assigned).",
 
-        "The 'Motor Claim' module (entries_motorclaimentry) tracks motor insurance claims processing: "
-        "registered_claims (new claims filed), claims_closed (resolved claims), "
-        "pending_cases (currently open claims), and TAT.",
+        "The 'Motor Claim' module (entries_motorclaimentry) tracks motor insurance claims one row per claim: "
+        "client_name, vehicle_number, claim_number, source_id (sales agent who originated the lead), "
+        "type_of_accident_id (FK to entries_typeofaccident), insurance_company_id (FK to entries_insurancecompany), "
+        "next_call_date (follow-up date), garage_name, garage_number, and status (one of 'claims_opened', "
+        "'claims_in_progress', 'claims_resolved', 'claims_rejected'). The lookup tables entries_typeofaccident "
+        "and entries_insurancecompany are admin-managed via the Settings page; both have name + is_active.",
 
         "The 'Sales KPI' module (entries_saleskpientry) tracks sales team performance: "
         "leads_to_ops_team, quotes_from_ops_team, quotes_to_client, total_conversions, "
@@ -381,10 +432,11 @@ def get_example_queries():
                 """,
             },
             {
-                "question": "How many motor claims are currently pending?",
+                "question": "How many motor claims are currently in progress?",
                 "sql": """
-                    SELECT SUM(pending_cases) AS total_pending_claims
-                    FROM entries_motorclaimentry;
+                    SELECT COUNT(*) AS total_in_progress_claims
+                    FROM entries_motorclaimentry
+                    WHERE status = 'claims_in_progress';
                 """,
             },
             {
@@ -506,10 +558,11 @@ def get_example_queries():
                 """,
             },
             {
-                "question": "How many motor claims are currently pending?",
+                "question": "How many motor claims are currently in progress?",
                 "sql": """
-                    SELECT SUM(pending_cases) AS total_pending_claims
-                    FROM entries_motorclaimentry;
+                    SELECT COUNT(*) AS total_in_progress_claims
+                    FROM entries_motorclaimentry
+                    WHERE status = 'claims_in_progress';
                 """,
             },
             {

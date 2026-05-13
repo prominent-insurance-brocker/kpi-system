@@ -195,3 +195,63 @@ Decay = 0.9
 - **Avg Accuracy** = average accuracy of converted/lost entries only
 
 - **Total Enquiries Assigned / Retained** = Total count of entries / Count where status = retainedc
+
+# 3. Motor Claim
+
+---
+
+### Input Fields
+
+---
+
+- Client Name - String
+- Vehicle Number - String
+- Claim Number - String
+- Source (Sales Person) (Dynamic) - Same as Motor New and Renewal
+- Type of Accident (Dynamic) - From Settings
+- Insurance Company (Dynamic) - From Settings
+- Next call date - Date Picker
+- Garage Name - String
+- Garage Number - String
+
+### KPI Cards
+
+- Claims Opened
+- Claims In Progress
+- Claims Resolved
+- Claims Rejected
+
+### Show these columns on Table
+
+- ID → Just number start with 1
+- Client Name
+- Vehicle Number
+- Claim Number
+- Source (Sales Person) (Dynamic)
+- Type of Accident (Dynamic)
+- Insurance Company (Dynamic)
+- Next call date
+- Garage Name
+- Garage Number
+
+### Views
+
+- Enquiries
+- Track View
+- Dashboard
+
+### **Filters**
+
+- Enquiries
+    - User View: by agent, by status, by entry date, by next call date
+    - Admin view: by agent, by user, by status, by entry date, by next call date
+- Track View
+    - Admin View: by users
+- Dashboard
+    - User View: by date
+    - Admin View: by date, users
+
+### Settings Module
+
+- Insurance Company
+- Type of Accident

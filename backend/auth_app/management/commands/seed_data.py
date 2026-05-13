@@ -13,6 +13,8 @@ from entries.models import (
     MotorNewEntry,
     MotorRenewalEntry,
     MotorClaimEntry,
+    TypeOfAccident,
+    InsuranceCompany,
     SalesKPIEntry,
     MedicalClaimEntry,
 )
@@ -470,27 +472,50 @@ class Command(BaseCommand):
         return self._seed_motor_enquiry_entries(MotorRenewalEntry, users, dates)
 
     def _seed_motor_claim_entries(self, users, dates):
-        """Seed MotorClaimEntry records."""
+        """Seed MotorClaimEntry records (per-claim rows with the revamped schema)."""
         count = 0
-        customer_names = [
+        client_names = [
             'Acme Corp', 'Global Industries', 'Tech Solutions', 'Prime Motors',
             'City Transport', 'Metro Logistics', 'Swift Autos', 'Royal Fleet',
             'Star Vehicles', 'Atlas Movers', 'Delta Cars', 'Nova Transport',
         ]
+        garage_names = [
+            'AutoFix Garage', 'CityCar Service', 'Premier Auto Works',
+            'QuickServe Motors', 'Reliable Repairs',
+        ]
         statuses = ['claims_opened', 'claims_in_progress', 'claims_resolved', 'claims_rejected']
-        for user in users:
-            if not user:
-                continue
+
+        # The lookups are seeded by migration 0023, but build the pool here so
+        # the seeder works against a fresh dev DB after `flush` too.
+        accident_types = list(TypeOfAccident.objects.all())
+        insurance_companies = list(InsuranceCompany.objects.all())
+        if not accident_types:
+            for name in ['Collision', 'Theft', 'Fire', 'Flood', 'Vandalism']:
+                accident_types.append(TypeOfAccident.objects.create(name=name))
+        if not insurance_companies:
+            for name in ['Acme Insurance', 'BlueShield', 'GlobalCover', 'OmniSure', 'PremierGuard']:
+                insurance_companies.append(InsuranceCompany.objects.create(name=name))
+
+        active_users = [u for u in users if u]
+        for user in active_users:
             for entry_date in dates:
-                _, created = MotorClaimEntry.objects.get_or_create(
-                    date=entry_date,
-                    added_by=user,
-                    customer_name=random.choice(customer_names),
-                    defaults={
-                        'status': random.choice(statuses),
-                    }
-                )
-                if created:
+                # 1-2 claims per agent per date.
+                for _ in range(random.randint(1, 2)):
+                    next_call_offset = random.randint(-14, 14)
+                    MotorClaimEntry.objects.create(
+                        date=entry_date,
+                        added_by=user,
+                        client_name=random.choice(client_names),
+                        vehicle_number=f"AB-{random.randint(1000, 9999)}",
+                        claim_number=f"CLM-{random.randint(10000, 99999)}",
+                        source=random.choice(active_users),
+                        type_of_accident=random.choice(accident_types),
+                        insurance_company=random.choice(insurance_companies),
+                        next_call_date=entry_date + timedelta(days=next_call_offset),
+                        garage_name=random.choice(garage_names),
+                        garage_number=f"GAR-{random.randint(100, 999)}",
+                        status=random.choice(statuses),
+                    )
                     count += 1
         return count
 

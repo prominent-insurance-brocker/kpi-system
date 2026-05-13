@@ -19,6 +19,8 @@ from .models import (
     MotorRenewalMonthlyTarget,
     MotorClaimEntry,
     MotorClaimStatusTransition,
+    TypeOfAccident,
+    InsuranceCompany,
     SalesKPIEntry,
     SalesMonthlyTarget,
     MarineNewEntry,
@@ -38,6 +40,8 @@ from .serializers import (
     MotorRenewalMonthlyTargetSerializer,
     MotorClaimEntrySerializer,
     MotorClaimStatusUpdateSerializer,
+    TypeOfAccidentSerializer,
+    InsuranceCompanySerializer,
     SalesKPIEntrySerializer,
     SalesMonthlyTargetSerializer,
     MarineNewEntrySerializer,
@@ -45,7 +49,8 @@ from .serializers import (
     MedicalClaimEntrySerializer,
     MedicalClaimStatusUpdateSerializer,
 )
-from .filters import EntryFilter, ClaimEntryFilter, MotorEnquiryFilter
+from .filters import EntryFilter, ClaimEntryFilter, MotorEnquiryFilter, MotorClaimEntryFilter
+from roles.permissions import IsAdminUser
 
 
 class BaseEntryViewSet(viewsets.ModelViewSet):
@@ -386,10 +391,15 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
     queryset = MotorClaimEntry.objects.all()
     serializer_class = MotorClaimEntrySerializer
     module_key = 'motor_claim'
-    filterset_class = ClaimEntryFilter
+    filterset_class = MotorClaimEntryFilter
 
     def get_queryset(self):
-        return super().get_queryset().prefetch_related('status_transitions')
+        return (
+            super()
+            .get_queryset()
+            .select_related('source', 'type_of_accident', 'insurance_company')
+            .prefetch_related('status_transitions')
+        )
 
     def perform_create(self, serializer):
         instance = serializer.save(added_by=self.request.user)
@@ -623,3 +633,34 @@ class MedicalClaimEntryViewSet(BaseEntryViewSet):
                 counts[row['status']] = row['count']
 
         return Response(counts)
+
+
+# Settings (admin-managed lookup tables for Motor Claim).
+# Read is open to any authenticated user (claim form dropdowns need it).
+# Write/delete is admin only.
+
+
+class _LookupViewSet(viewsets.ModelViewSet):
+    """Shared base for the TypeOfAccident / InsuranceCompany viewsets.
+
+    GET/list/retrieve: any authenticated user (so the Motor Claim form can
+        populate its dropdowns).
+    POST/PATCH/PUT/DELETE: admin only.
+    """
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['is_active']
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), IsAdminUser()]
+
+
+class TypeOfAccidentViewSet(_LookupViewSet):
+    queryset = TypeOfAccident.objects.all()
+    serializer_class = TypeOfAccidentSerializer
+
+
+class InsuranceCompanyViewSet(_LookupViewSet):
+    queryset = InsuranceCompany.objects.all()
+    serializer_class = InsuranceCompanySerializer

@@ -417,6 +417,24 @@ def seed_claims(session, base_url, module_key, users, start, end, rate_limit_ms)
             weeks.append(weekdays)
         cursor = week_end + timedelta(days=1)
 
+    # Motor Claim uses the revamped per-claim schema (client_name + lookup FKs).
+    # Medical Claim still uses customer_name. Fetch the lookup IDs once if we're
+    # seeding motor_claim so the per-row payload can reference them.
+    is_motor_claim = module_key == 'motor_claim'
+    accident_type_ids: list[int] = []
+    insurance_company_ids: list[int] = []
+    if is_motor_claim:
+        accident_resp = session.get(f'{base_url}/api/entries/settings/accident-types/?is_active=true&page_size=100')
+        insurance_resp = session.get(f'{base_url}/api/entries/settings/insurance-companies/?is_active=true&page_size=100')
+        if accident_resp.ok:
+            accident_type_ids = [row['id'] for row in accident_resp.json().get('results', [])]
+        if insurance_resp.ok:
+            insurance_company_ids = [row['id'] for row in insurance_resp.json().get('results', [])]
+        if not accident_type_ids or not insurance_company_ids:
+            print(f'  [{module_key}] ! Missing lookup rows; '
+                  f'run `python manage.py migrate` to seed defaults before seeding claims via API.')
+            return Stats()
+
     total_estimate = len(weeks) * len(users) * 4
     progress_every = max(50, total_estimate // 20) if total_estimate else 1
     i = 0
@@ -425,12 +443,28 @@ def seed_claims(session, base_url, module_key, users, start, end, rate_limit_ms)
             for _ in range(random.randint(3, 5)):
                 d = random.choice(weekdays)
                 customer_name = random.choice(CUSTOMER_NAMES)
-                payload = {
-                    'date': d.isoformat(),
-                    'added_by': user['id'],
-                    'customer_name': customer_name,
-                    'status': 'claims_opened',
-                }
+                if is_motor_claim:
+                    payload = {
+                        'date': d.isoformat(),
+                        'added_by': user['id'],
+                        'client_name': customer_name,
+                        'vehicle_number': f"AB-{random.randint(1000, 9999)}",
+                        'claim_number': f"CLM-{random.randint(10000, 99999)}",
+                        'source': user['id'],
+                        'type_of_accident': random.choice(accident_type_ids),
+                        'insurance_company': random.choice(insurance_company_ids),
+                        'next_call_date': (d + timedelta(days=random.randint(-14, 14))).isoformat(),
+                        'garage_name': random.choice(['AutoFix Garage', 'CityCar Service', 'Premier Auto Works']),
+                        'garage_number': f"GAR-{random.randint(100, 999)}",
+                        'status': 'claims_opened',
+                    }
+                else:
+                    payload = {
+                        'date': d.isoformat(),
+                        'added_by': user['id'],
+                        'customer_name': customer_name,
+                        'status': 'claims_opened',
+                    }
                 created = post_entry(session, url, payload, stats, rate_limit_ms)
                 i += 1
                 if i % progress_every == 0:

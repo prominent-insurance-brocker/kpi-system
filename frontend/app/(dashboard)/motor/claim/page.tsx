@@ -1,232 +1,342 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+/**
+ * Motor Claim — 3-tab standalone page (Dashboard | Tracker View | Enquiries).
+ * Mirrors the layout of MotorEnquiryPage but doesn't share its code because
+ * Motor Claim has its own data model (no revisions, no accuracy, no monthly
+ * target) plus FK lookups for Type of Accident + Insurance Company.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DataTable } from '@/app/components/DataTable';
-import { fetchApi, getUsersForFilter } from '@/app/lib/api';
-import { useAuth } from '@/app/context/AuthContext';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Plus } from 'lucide-react';
-import { DateRangeFilter } from '@/components/ui/date-range-filter';
-import { FormDatePicker } from '@/components/ui/form-date-picker';
-import { formatDate } from '@/app/lib/date';
 import { toast } from 'sonner';
-import { useConfirm } from '@/app/components/ConfirmDialog';
-import { AddedByCell } from '@/app/components/KpiModulePage';
+
+import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import {
+  AddedByCell,
+  PersonalDailyTracker,
+  TrackerView,
+  toLocalDateString,
+  type ModuleUser,
+} from '@/app/components/KpiModulePage';
+import { useAuth } from '@/app/context/AuthContext';
+import { useConfirm } from '@/app/components/ConfirmDialog';
+import { formatDate } from '@/app/lib/date';
+import { FormDatePicker } from '@/components/ui/form-date-picker';
+import {
+  fetchApi,
+  getUsersForModule,
+  getMotorClaimStats,
+  updateMotorClaimStatus,
+  getAccidentTypes,
+  getInsuranceCompanies,
+  type MotorClaimEntry,
+  type MotorClaimStats,
+  type AccidentType,
+  type InsuranceCompany,
+} from '@/app/lib/api';
 
-interface MotorClaimEntry {
-  id: number;
-  date: string;
-  customer_name: string;
-  status: string;
-  added_by: number;
-  added_by_name: string;
-  on_behalf_of: number | null;
-  on_behalf_of_name: string | null;
-  added_at: string;
-  is_editable: boolean;
-  tat_display: string;
-  allowed_transitions: string[];
-  is_terminal: boolean;
-}
-
-interface FilterUser {
-  id: number;
-  email: string;
-  full_name: string;
-}
-
-interface MotorClaimStats {
-  claims_opened: number;
-  claims_in_progress: number;
-  claims_resolved: number;
-  claims_rejected: number;
-}
-
-const STATUS_OPTIONS = [
+const STATUS_OPTIONS: Array<{ value: MotorClaimEntry['status']; label: string }> = [
   { value: 'claims_opened', label: 'Claims Opened' },
   { value: 'claims_in_progress', label: 'Claims In Progress' },
   { value: 'claims_resolved', label: 'Claims Resolved' },
   { value: 'claims_rejected', label: 'Claims Rejected' },
 ];
 
-const getStatusLabel = (value: string) => {
-  const option = STATUS_OPTIONS.find((o) => o.value === value);
-  return option ? option.label : value;
+const STATUS_LABEL: Record<MotorClaimEntry['status'], string> = {
+  claims_opened: 'Claims Opened',
+  claims_in_progress: 'Claims In Progress',
+  claims_resolved: 'Claims Resolved',
+  claims_rejected: 'Claims Rejected',
 };
 
-const STATUS_COLORS: Record<string, string> = {
+const STATUS_COLORS: Record<MotorClaimEntry['status'], string> = {
   claims_opened: 'bg-blue-100 text-blue-800',
   claims_in_progress: 'bg-yellow-100 text-yellow-800',
   claims_resolved: 'bg-green-100 text-green-800',
   claims_rejected: 'bg-red-100 text-red-800',
 };
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status }: { status: MotorClaimEntry['status'] }) {
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[status] || ''}`}>
-      {getStatusLabel(status)}
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[status] || ''}`}
+    >
+      {STATUS_LABEL[status]}
     </span>
   );
 }
 
-function InlineStatusSelect({
-  currentStatus,
-  allowedTransitions,
-  onStatusChange,
-}: {
-  currentStatus: string;
-  allowedTransitions: string[];
-  onStatusChange: (status: string) => void;
-}) {
-  return (
-    <Select value={currentStatus} onValueChange={onStatusChange}>
-      <SelectTrigger className="h-8 w-[170px] text-xs shadow-none">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={currentStatus} disabled>
-          {getStatusLabel(currentStatus)}
-        </SelectItem>
-        {allowedTransitions.map((s) => (
-          <SelectItem key={s} value={s}>
-            {getStatusLabel(s)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
 export default function MotorClaimPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const { canSeeAllData, user } = useAuth();
-  const currentUserId = user?.id;
   const confirm = useConfirm();
+  const isAdmin = canSeeAllData();
+  const currentUserId = user?.id;
+  const userFullName = user?.full_name ?? '';
+
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const [activeView, setActiveView] = useState<'dashboard' | 'tracker' | 'enquiries'>('enquiries');
+
+  // Enquiries filters
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [nextCallFrom, setNextCallFrom] = useState('');
+  const [nextCallTo, setNextCallTo] = useState('');
+  const [userId, setUserId] = useState('');
+  const [agentId, setAgentId] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  // Dashboard filters (independent so Dashboard date range doesn't tug
+  // the Enquiries tab around when switching).
+  const [dashFrom, setDashFrom] = useState('');
+  const [dashTo, setDashTo] = useState('');
+  const [dashUserId, setDashUserId] = useState('');
+
+  // Data
   const [entries, setEntries] = useState<MotorClaimEntry[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<MotorClaimStats>({
+    claims_opened: 0,
+    claims_in_progress: 0,
+    claims_resolved: 0,
+    claims_rejected: 0,
+  });
+
+  // Tracker state
+  const [personalCalYear, setPersonalCalYear] = useState(today.getFullYear());
+  const [personalCalMonth, setPersonalCalMonth] = useState(today.getMonth());
+  const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());
+  const [teamCalMonth, setTeamCalMonth] = useState(today.getMonth());
+  const [trackerUserFilter, setTrackerUserFilter] = useState('all');
+  const [monthEntries, setMonthEntries] = useState<MotorClaimEntry[]>([]);
+
+  // Module + agent (sales_kpi) + lookup pools
+  const [moduleUsers, setModuleUsers] = useState<ModuleUser[]>([]);
+  const [salesUsers, setSalesUsers] = useState<ModuleUser[]>([]);
+  const [accidentTypes, setAccidentTypes] = useState<AccidentType[]>([]);
+  const [insurers, setInsurers] = useState<InsuranceCompany[]>([]);
+
+  // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<MotorClaimEntry | null>(null);
-  const [error, setError] = useState('');
-  const [users, setUsers] = useState<FilterUser[]>([]);
-  const [stats, setStats] = useState<MotorClaimStats | null>(null);
+  const [modalError, setModalError] = useState('');
 
-  const page = Number(searchParams.get('page')) || 1;
-  const pageSize = Number(searchParams.get('pageSize')) || 20;
-  const dateFrom = searchParams.get('dateFrom') || '';
-  const dateTo = searchParams.get('dateTo') || '';
-  const userId = searchParams.get('userId') || '';
-  const statusFilter = searchParams.get('status') || '';
-  const customerName = searchParams.get('customerName') || '';
-
-  const updateFilters = (updates: Record<string, string | number>) => {
-    const params = new URLSearchParams(searchParams.toString());
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value) params.set(key, String(value));
-      else params.delete(key);
-    });
-    router.push(`?${params.toString()}`);
-  };
-
-  const fetchUsers = async () => {
-    if (canSeeAllData()) {
-      const result = await getUsersForFilter();
-      if (result.data) setUsers(result.data);
-    }
-  };
-
-  const fetchEntries = async () => {
+  // ── Fetchers ─────────────────────────────────────────────────────────────
+  const fetchEntries = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.set('page', String(page));
-      params.set('page_size', String(pageSize));
-      if (dateFrom) params.set('date_from', dateFrom);
-      if (dateTo) params.set('date_to', dateTo);
-      if (userId) params.set('user_id', userId);
-      if (statusFilter) params.set('status', statusFilter);
-      if (customerName) params.set('customer_name', customerName);
-      const result = await fetchApi<{ results: MotorClaimEntry[]; count: number }>(`/api/entries/motor-claim/?${params}`);
+      const qs = new URLSearchParams();
+      qs.set('page', String(page));
+      qs.set('page_size', String(pageSize));
+      if (dateFrom) qs.set('date_from', dateFrom);
+      if (dateTo) qs.set('date_to', dateTo);
+      if (nextCallFrom) qs.set('next_call_date_from', nextCallFrom);
+      if (nextCallTo) qs.set('next_call_date_to', nextCallTo);
+      if (userId) qs.set('user_id', userId);
+      if (agentId) qs.set('agent_id', agentId);
+      if (statusFilter) qs.set('status', statusFilter);
+      const result = await fetchApi<{ results: MotorClaimEntry[]; count: number }>(
+        `/api/entries/motor-claim/?${qs}`
+      );
       setEntries(result.data?.results || []);
       setTotalCount(result.data?.count || 0);
-    } catch (err) { console.error('Failed to fetch entries:', err); }
-    setIsLoading(false);
-  };
-
-  const fetchStats = async () => {
-    try {
-      const params = new URLSearchParams();
-      if (dateFrom) params.set('date_from', dateFrom);
-      if (dateTo) params.set('date_to', dateTo);
-      if (userId) params.set('user_id', userId);
-      const result = await fetchApi<typeof stats>(`/api/entries/motor-claim/stats/?${params}`);
-      if (result.data) {
-        setStats(result.data);
-      }
-    } catch (err) { console.error('Failed to fetch stats:', err); }
-  };
-
-  useEffect(() => { fetchUsers(); }, []);
-  useEffect(() => { fetchEntries(); fetchStats(); }, [page, pageSize, dateFrom, dateTo, userId, statusFilter, customerName]);
-
-  const updateStatus = async (entryId: number, newStatus: string) => {
-    try {
-      const result = await fetchApi<MotorClaimEntry>(
-        `/api/entries/motor-claim/${entryId}/update-status/`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ status: newStatus }),
-        }
-      );
-      if (result.data) {
-        fetchEntries();
-        fetchStats();
-        toast.success(`Status updated to ${getStatusLabel(newStatus)}`);
-      } else {
-        toast.error(result.error || 'Failed to update status');
-      }
-    } catch (err) {
-      console.error('Failed to update status:', err);
-      toast.error('Failed to update status');
+    } finally {
+      setIsLoading(false);
     }
+  }, [page, pageSize, dateFrom, dateTo, nextCallFrom, nextCallTo, userId, agentId, statusFilter]);
+
+  const fetchStats = useCallback(async () => {
+    const result = await getMotorClaimStats({
+      date_from: dashFrom || undefined,
+      date_to: dashTo || undefined,
+      user_id: dashUserId || undefined,
+    });
+    if (result.data) setStats(result.data);
+  }, [dashFrom, dashTo, dashUserId]);
+
+  const fetchMonthEntries = useCallback(async () => {
+    const months: Array<[number, number]> = [
+      [personalCalYear, personalCalMonth],
+      [teamCalYear, teamCalMonth],
+    ];
+    const unique = Array.from(new Set(months.map(([y, m]) => `${y}-${m}`))).map((s) => {
+      const [y, m] = s.split('-').map(Number);
+      return [y, m] as [number, number];
+    });
+    try {
+      const responses = await Promise.all(
+        unique.map(([year, month]) => {
+          const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+          const lastDay = toLocalDateString(new Date(year, month + 1, 0));
+          const qs = new URLSearchParams({
+            date_from: firstDay,
+            date_to: lastDay,
+            page_size: '1000',
+          });
+          return fetchApi<{ results: MotorClaimEntry[] }>(
+            `/api/entries/motor-claim/?${qs}`
+          );
+        })
+      );
+      const merged = new Map<number, MotorClaimEntry>();
+      for (const res of responses) {
+        for (const entry of res.data?.results ?? []) {
+          merged.set(entry.id, entry);
+        }
+      }
+      setMonthEntries(Array.from(merged.values()));
+    } catch {
+      setMonthEntries([]);
+    }
+  }, [personalCalYear, personalCalMonth, teamCalYear, teamCalMonth]);
+
+  // ── Initial loads ────────────────────────────────────────────────────────
+  useEffect(() => {
+    getUsersForModule('motor_claim').then((r) => {
+      if (r.data) setModuleUsers(r.data);
+    });
+    getUsersForModule('sales_kpi').then((r) => {
+      if (r.data) setSalesUsers(r.data);
+    });
+    getAccidentTypes({ is_active: true }).then((r) => {
+      if (r.data) setAccidentTypes(r.data);
+    });
+    getInsuranceCompanies({ is_active: true }).then((r) => {
+      if (r.data) setInsurers(r.data);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (activeView === 'enquiries') fetchEntries();
+  }, [activeView, fetchEntries]);
+
+  useEffect(() => {
+    if (activeView === 'dashboard') fetchStats();
+  }, [activeView, fetchStats]);
+
+  useEffect(() => {
+    if (activeView === 'tracker') fetchMonthEntries();
+  }, [activeView, fetchMonthEntries]);
+
+  // ── Mutations ────────────────────────────────────────────────────────────
+  const refreshAfterMutation = () => {
+    fetchEntries();
+    fetchStats();
+    fetchMonthEntries();
   };
 
-  const handleSave = async (formData: Partial<MotorClaimEntry>) => {
-    setError('');
-    const endpoint = editingEntry ? `/api/entries/motor-claim/${editingEntry.id}/` : `/api/entries/motor-claim/`;
-    const result = await fetchApi<MotorClaimEntry>(endpoint, { method: editingEntry ? 'PATCH' : 'POST', body: JSON.stringify(formData) });
-    if (result.data) { setIsModalOpen(false); setEditingEntry(null); fetchEntries(); fetchStats(); }
-    else { setError(result.error || 'Failed to save entry'); }
+  const handleSave = async (payload: Partial<MotorClaimEntry>) => {
+    setModalError('');
+    const isEdit = !!editingEntry;
+    const url = isEdit
+      ? `/api/entries/motor-claim/${editingEntry!.id}/`
+      : '/api/entries/motor-claim/';
+    const body = isEdit
+      ? payload
+      : {
+          date: toLocalDateString(today),
+          status: 'claims_opened',
+          ...payload,
+        };
+    const result = await fetchApi<MotorClaimEntry>(url, {
+      method: isEdit ? 'PATCH' : 'POST',
+      body: JSON.stringify(body),
+    });
+    if (result.data) {
+      setIsModalOpen(false);
+      setEditingEntry(null);
+      toast.success(isEdit ? 'Claim updated' : 'Claim added');
+      refreshAfterMutation();
+    } else {
+      setModalError(result.error || 'Failed to save claim');
+    }
   };
 
   const handleDelete = async (entry: MotorClaimEntry) => {
     const ok = await confirm({
-      title: 'Delete entry?',
+      title: 'Delete claim?',
       description: 'This action cannot be undone.',
       confirmLabel: 'Delete',
       danger: true,
     });
     if (!ok) return;
-    const result = await fetchApi<void>(`/api/entries/motor-claim/${entry.id}/`, { method: 'DELETE' });
+    const result = await fetchApi<void>(`/api/entries/motor-claim/${entry.id}/`, {
+      method: 'DELETE',
+    });
     if (!result.error) {
-      toast.success('Entry deleted');
-      fetchEntries();
-      fetchStats();
+      toast.success('Claim deleted');
+      refreshAfterMutation();
     } else {
-      toast.error(result.error || 'Failed to delete entry');
+      toast.error(result.error || 'Failed to delete claim');
     }
   };
 
+  const changeStatus = async (entry: MotorClaimEntry, newStatus: MotorClaimEntry['status']) => {
+    const result = await updateMotorClaimStatus(entry.id, newStatus);
+    if (result.data) {
+      toast.success(`Status updated to ${STATUS_LABEL[newStatus]}`);
+      refreshAfterMutation();
+    } else {
+      toast.error(result.error || 'Failed to update status');
+    }
+  };
+
+  // ── Columns ──────────────────────────────────────────────────────────────
   const columns = [
-    { key: 'date', header: 'Date', render: (item: MotorClaimEntry) => formatDate(item.date) },
+    {
+      key: 'row',
+      header: '#',
+      render: (item: MotorClaimEntry) => {
+        const idx = entries.findIndex((e) => e.id === item.id);
+        return (page - 1) * pageSize + idx + 1;
+      },
+    },
+    { key: 'client_name', header: 'Client Name' },
+    { key: 'vehicle_number', header: 'Vehicle Number' },
+    { key: 'claim_number', header: 'Claim Number' },
+    {
+      key: 'source_name',
+      header: 'Source',
+      render: (item: MotorClaimEntry) => item.source_name || '—',
+    },
+    { key: 'type_of_accident_name', header: 'Type of Accident' },
+    { key: 'insurance_company_name', header: 'Insurance Company' },
+    {
+      key: 'next_call_date',
+      header: 'Next call date',
+      render: (item: MotorClaimEntry) =>
+        item.next_call_date ? formatDate(item.next_call_date) : '—',
+    },
+    { key: 'garage_name', header: 'Garage Name' },
+    { key: 'garage_number', header: 'Garage Number' },
     {
       key: 'status',
       header: 'Status',
@@ -235,142 +345,571 @@ export default function MotorClaimPage() {
           return <StatusBadge status={item.status} />;
         }
         return (
-          <InlineStatusSelect
-            currentStatus={item.status}
-            allowedTransitions={item.allowed_transitions}
-            onStatusChange={(newStatus) => updateStatus(item.id, newStatus)}
-          />
+          <Select
+            value={item.status}
+            onValueChange={(v) =>
+              changeStatus(item, v as MotorClaimEntry['status'])
+            }
+          >
+            <SelectTrigger className="h-8 w-[170px] text-xs shadow-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={item.status} disabled>
+                {STATUS_LABEL[item.status]}
+              </SelectItem>
+              {item.allowed_transitions.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {STATUS_LABEL[s as MotorClaimEntry['status']]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         );
       },
     },
-    { key: 'added_by_name', header: 'Added By', render: (item: MotorClaimEntry) => <AddedByCell entry={item} /> },
-    { key: 'added_at', header: 'Added on', render: (item: MotorClaimEntry) => formatDate(item.added_at.split('T')[0]) },
-    { key: 'customer_name', header: 'Customer Name' },
-    { key: 'tat_display', header: 'TAT' },
+    {
+      key: 'tat_display',
+      header: 'TAT',
+      render: (item: MotorClaimEntry) => item.tat_display || '—',
+    },
+    {
+      key: 'added_by_name',
+      header: 'Added by',
+      render: (item: MotorClaimEntry) => <AddedByCell entry={item} />,
+    },
+    {
+      key: 'added_at',
+      header: 'Added on',
+      render: (item: MotorClaimEntry) =>
+        formatDate(item.added_at.split('T')[0]),
+    },
   ];
 
-  const hasActiveFilters = dateFrom || dateTo || userId || statusFilter || customerName;
+  const hasActiveFilters =
+    !!(dateFrom || dateTo || nextCallFrom || nextCallTo || userId || agentId || statusFilter);
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold">Motor Claim</h1><p className="text-muted-foreground">Manage motor claims</p></div>
-        {(!userId || userId === String(currentUserId)) && (
-          <Button onClick={() => { setEditingEntry(null); setError(''); setIsModalOpen(true); }}><Plus className="h-4 w-4 mr-2" /> Add Entry</Button>
+        <div>
+          <h1 className="text-2xl font-bold">Motor Claim</h1>
+          <p className="text-muted-foreground">Motor Claim DEPT.</p>
+        </div>
+        {activeView === 'enquiries' && (
+          <Button
+            onClick={() => {
+              setEditingEntry(null);
+              setModalError('');
+              setIsModalOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Claim
+          </Button>
         )}
       </div>
-      <FilterBar
-        search={{
-          value: customerName,
-          onChange: (v) => updateFilters({ customerName: v, page: 1 }),
-          placeholder: 'Search customer name…',
-          label: 'Customer',
+
+      <Tabs
+        value={activeView}
+        onValueChange={(v) => setActiveView(v as typeof activeView)}
+      >
+        <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0 w-fit">
+          <TabsTrigger value="dashboard" className="rounded-md px-4 py-1.5 data-[state=active]:bg-white">
+            Dashboard
+          </TabsTrigger>
+          <TabsTrigger value="tracker" className="rounded-md px-4 py-1.5 data-[state=active]:bg-white">
+            Tracker View
+          </TabsTrigger>
+          <TabsTrigger value="enquiries" className="rounded-md px-4 py-1.5 data-[state=active]:bg-white">
+            Enquiries
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Dashboard */}
+        <TabsContent value="dashboard" className="mt-4 space-y-4">
+          <FilterBar
+            dateRange={{
+              from: dashFrom,
+              to: dashTo,
+              onChange: (from, to) => {
+                setDashFrom(from);
+                setDashTo(to);
+              },
+            }}
+            user={
+              isAdmin
+                ? {
+                    value: dashUserId,
+                    onChange: (v) => setDashUserId(v),
+                    options: moduleUsers.map((u) => ({
+                      value: String(u.id),
+                      label: u.full_name || u.email,
+                    })),
+                  }
+                : undefined
+            }
+            hasActiveFilters={!!(dashFrom || dashTo || dashUserId)}
+            onClear={() => {
+              setDashFrom('');
+              setDashTo('');
+              setDashUserId('');
+            }}
+          />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <StatCard
+              label="Claims Opened"
+              value={stats.claims_opened}
+              accent="text-blue-700"
+            />
+            <StatCard
+              label="Claims In Progress"
+              value={stats.claims_in_progress}
+              accent="text-yellow-600"
+            />
+            <StatCard
+              label="Claims Resolved"
+              value={stats.claims_resolved}
+              accent="text-green-700"
+            />
+            <StatCard
+              label="Claims Rejected"
+              value={stats.claims_rejected}
+              accent="text-red-700"
+            />
+          </div>
+        </TabsContent>
+
+        {/* Tracker View */}
+        <TabsContent value="tracker" className="mt-4 space-y-4">
+          <PersonalDailyTracker<MotorClaimEntry>
+            calYear={personalCalYear}
+            calMonth={personalCalMonth}
+            today={today}
+            monthEntries={monthEntries}
+            currentUserId={currentUserId}
+            userFullName={userFullName}
+            onPrevMonth={() => {
+              if (personalCalMonth === 0) {
+                setPersonalCalMonth(11);
+                setPersonalCalYear(personalCalYear - 1);
+              } else {
+                setPersonalCalMonth(personalCalMonth - 1);
+              }
+            }}
+            onNextMonth={() => {
+              if (personalCalMonth === 11) {
+                setPersonalCalMonth(0);
+                setPersonalCalYear(personalCalYear + 1);
+              } else {
+                setPersonalCalMonth(personalCalMonth + 1);
+              }
+            }}
+            onGoToday={() => {
+              setPersonalCalYear(today.getFullYear());
+              setPersonalCalMonth(today.getMonth());
+            }}
+          />
+          {isAdmin && (
+            <TrackerView<MotorClaimEntry>
+              calYear={teamCalYear}
+              calMonth={teamCalMonth}
+              monthEntries={monthEntries}
+              moduleUsers={moduleUsers}
+              trackerUserFilter={trackerUserFilter}
+              deptLabel="Motor Claim DEPT."
+              onTrackerUserFilterChange={setTrackerUserFilter}
+              onPrevMonth={() => {
+                if (teamCalMonth === 0) {
+                  setTeamCalMonth(11);
+                  setTeamCalYear(teamCalYear - 1);
+                } else {
+                  setTeamCalMonth(teamCalMonth - 1);
+                }
+              }}
+              onNextMonth={() => {
+                if (teamCalMonth === 11) {
+                  setTeamCalMonth(0);
+                  setTeamCalYear(teamCalYear + 1);
+                } else {
+                  setTeamCalMonth(teamCalMonth + 1);
+                }
+              }}
+              onGoToday={() => {
+                setTeamCalYear(today.getFullYear());
+                setTeamCalMonth(today.getMonth());
+              }}
+            />
+          )}
+        </TabsContent>
+
+        {/* Enquiries */}
+        <TabsContent value="enquiries" className="mt-4 space-y-4">
+          <FilterBar
+            dateRange={{
+              from: dateFrom,
+              to: dateTo,
+              onChange: (from, to) => {
+                setDateFrom(from);
+                setDateTo(to);
+                setPage(1);
+              },
+              label: 'Entry date',
+            }}
+            secondaryDateRange={{
+              from: nextCallFrom,
+              to: nextCallTo,
+              onChange: (from, to) => {
+                setNextCallFrom(from);
+                setNextCallTo(to);
+                setPage(1);
+              },
+              label: 'Next call date',
+            }}
+            user={
+              isAdmin
+                ? {
+                    value: userId,
+                    onChange: (v) => {
+                      setUserId(v);
+                      setPage(1);
+                    },
+                    options: moduleUsers.map((u) => ({
+                      value: String(u.id),
+                      label: u.full_name || u.email,
+                    })),
+                  }
+                : undefined
+            }
+            agent={{
+              value: agentId,
+              onChange: (v) => {
+                setAgentId(v);
+                setPage(1);
+              },
+              options: salesUsers.map((u) => ({
+                value: String(u.id),
+                label: u.full_name || u.email,
+              })),
+            }}
+            status={{
+              value: statusFilter,
+              onChange: (v) => {
+                setStatusFilter(v);
+                setPage(1);
+              },
+              options: STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+            }}
+            hasActiveFilters={hasActiveFilters}
+            onClear={() => {
+              setDateFrom('');
+              setDateTo('');
+              setNextCallFrom('');
+              setNextCallTo('');
+              setUserId('');
+              setAgentId('');
+              setStatusFilter('');
+              setPage(1);
+            }}
+          />
+
+          <DataTable
+            columns={columns}
+            data={entries}
+            totalCount={totalCount}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(s) => {
+              setPageSize(s);
+              setPage(1);
+            }}
+            onEdit={(entry) => {
+              setEditingEntry(entry);
+              setModalError('');
+              setIsModalOpen(true);
+            }}
+            onDelete={handleDelete}
+            canEdit={(entry) => entry.is_editable}
+            canDelete={(entry) => entry.added_by === currentUserId}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+      </Tabs>
+
+      <Dialog
+        open={isModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsModalOpen(false);
+            setEditingEntry(null);
+            setModalError('');
+          }
         }}
-        dateRange={{
-          from: dateFrom,
-          to: dateTo,
-          onChange: (from, to) => updateFilters({ dateFrom: from, dateTo: to, page: 1 }),
-        }}
-        user={canSeeAllData() ? {
-          value: userId,
-          onChange: (v) => updateFilters({ userId: v, page: 1 }),
-          options: users.map((u) => ({ value: u.id.toString(), label: u.full_name || u.email })),
-        } : undefined}
-        status={{
-          value: statusFilter,
-          onChange: (v) => updateFilters({ status: v, page: 1 }),
-          options: STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
-        }}
-        hasActiveFilters={!!hasActiveFilters}
-        onClear={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', status: '', customerName: '', page: 1 })}
-      />
-      {stats && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Claims Opened</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-700">{stats.claims_opened}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Claims In Progress</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{stats.claims_in_progress}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Claims Resolved</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-700">{stats.claims_resolved}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Claims Rejected</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-700">{stats.claims_rejected}</div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-      <DataTable columns={columns} data={entries} totalCount={totalCount} page={page} pageSize={pageSize} onPageChange={(p) => updateFilters({ page: p })} onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })} onEdit={(entry) => { setEditingEntry(entry); setError(''); setIsModalOpen(true); }} onDelete={handleDelete} canEdit={(entry) => entry.is_editable} canDelete={(entry) => entry.added_by === currentUserId} isLoading={isLoading} />
-      <Dialog open={isModalOpen} onOpenChange={() => { setIsModalOpen(false); setEditingEntry(null); setError(''); }}>
-        <DialogContent className='p-0'>
-          <DialogHeader className='border-b border-[#E4E4E4] p-4'><DialogTitle>{editingEntry ? 'Edit Entry' : 'Add New Entry'}</DialogTitle></DialogHeader>
-          <EntryForm entry={editingEntry} onSave={handleSave} onClose={() => setIsModalOpen(false)} error={error} />
+      >
+        <DialogContent className="p-0 sm:max-w-lg">
+          <DialogHeader className="border-b border-[#E4E4E4] p-4">
+            <DialogTitle>{editingEntry ? 'Edit Claim' : 'New Claim'}</DialogTitle>
+          </DialogHeader>
+          <ClaimForm
+            entry={editingEntry}
+            salesUsers={salesUsers}
+            accidentTypes={accidentTypes}
+            insurers={insurers}
+            error={modalError}
+            onSave={handleSave}
+            onClose={() => {
+              setIsModalOpen(false);
+              setEditingEntry(null);
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div>
   );
 }
 
-function EntryForm({ entry, onSave, onClose, error }: { entry: MotorClaimEntry | null; onSave: (data: Partial<MotorClaimEntry>) => void; onClose: () => void; error: string }) {
-  const [formData, setFormData] = useState({ date: '', customer_name: '', status: 'claims_opened' });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  useEffect(() => {
-    if (entry) setFormData({ date: entry.date, customer_name: entry.customer_name, status: entry.status });
-    else setFormData({ date: new Date().toISOString().split('T')[0], customer_name: '', status: 'claims_opened' });
-  }, [entry]);
+function StatCard({
+  label,
+  value,
+  accent = 'text-[#09090B]',
+}: {
+  label: string;
+  value: number | string;
+  accent?: string;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className={`text-2xl font-bold ${accent}`}>{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
 
-  const isEditing = !!entry;
+function ClaimForm({
+  entry,
+  salesUsers,
+  accidentTypes,
+  insurers,
+  onSave,
+  onClose,
+  error,
+}: {
+  entry: MotorClaimEntry | null;
+  salesUsers: ModuleUser[];
+  accidentTypes: AccidentType[];
+  insurers: InsuranceCompany[];
+  onSave: (payload: Partial<MotorClaimEntry>) => void;
+  onClose: () => void;
+  error: string;
+}) {
+  const [clientName, setClientName] = useState(entry?.client_name ?? '');
+  const [vehicleNumber, setVehicleNumber] = useState(entry?.vehicle_number ?? '');
+  const [claimNumber, setClaimNumber] = useState(entry?.claim_number ?? '');
+  const [sourceId, setSourceId] = useState<number | null>(entry?.source ?? null);
+  const [accidentTypeId, setAccidentTypeId] = useState<number | null>(
+    entry?.type_of_accident ?? null
+  );
+  const [insurerId, setInsurerId] = useState<number | null>(
+    entry?.insurance_company ?? null
+  );
+  const [nextCallDate, setNextCallDate] = useState(entry?.next_call_date ?? '');
+  const [garageName, setGarageName] = useState(entry?.garage_name ?? '');
+  const [garageNumber, setGarageNumber] = useState(entry?.garage_number ?? '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setClientName(entry?.client_name ?? '');
+    setVehicleNumber(entry?.vehicle_number ?? '');
+    setClaimNumber(entry?.claim_number ?? '');
+    setSourceId(entry?.source ?? null);
+    setAccidentTypeId(entry?.type_of_accident ?? null);
+    setInsurerId(entry?.insurance_company ?? null);
+    setNextCallDate(entry?.next_call_date ?? '');
+    setGarageName(entry?.garage_name ?? '');
+    setGarageNumber(entry?.garage_number ?? '');
+  }, [entry]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!sourceId || !accidentTypeId || !insurerId) return;
     setIsSubmitting(true);
-    if (isEditing) {
-      onSave({ date: formData.date, customer_name: formData.customer_name });
-    } else {
-      onSave({ date: formData.date, customer_name: formData.customer_name, status: formData.status });
-    }
+    onSave({
+      client_name: clientName,
+      vehicle_number: vehicleNumber,
+      claim_number: claimNumber,
+      source: sourceId,
+      type_of_accident: accidentTypeId,
+      insurance_company: insurerId,
+      next_call_date: nextCallDate || null,
+      garage_name: garageName,
+      garage_number: garageNumber,
+    });
     setIsSubmitting(false);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 p-4">
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">{error}</div>}
-      <FormDatePicker label="Date" value={formData.date} onChange={(date) => setFormData({ ...formData, date })} required />
-      <div className="grid grid-cols-1 gap-4">
-        <div className="space-y-2"><Label>Customer Name</Label><Input type="text" placeholder="Enter customer name" value={formData.customer_name} onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })} required /></div>
-        {!isEditing && (
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Select value="claims_opened" disabled>
-              <SelectTrigger className="shadow-none"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="claims_opened">Claims Opened</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+    <form onSubmit={handleSubmit} className="space-y-4 p-4 max-h-[70vh] overflow-y-auto">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label>Client Name *</Label>
+          <Input
+            type="text"
+            value={clientName}
+            onChange={(e) => setClientName(e.target.value)}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Vehicle Number *</Label>
+          <Input
+            type="text"
+            value={vehicleNumber}
+            onChange={(e) => setVehicleNumber(e.target.value)}
+            required
+          />
+        </div>
       </div>
-      <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : entry ? 'Update' : 'Create'}</Button></DialogFooter>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label>Claim Number *</Label>
+          <Input
+            type="text"
+            value={claimNumber}
+            onChange={(e) => setClaimNumber(e.target.value)}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Source / Sales Person *</Label>
+          <Select
+            value={sourceId ? String(sourceId) : undefined}
+            onValueChange={(v) => setSourceId(Number(v))}
+          >
+            <SelectTrigger className="shadow-none">
+              <SelectValue placeholder="Select agent" />
+            </SelectTrigger>
+            <SelectContent>
+              {salesUsers.length === 0 ? (
+                <div className="px-3 py-2 text-sm text-[#71717A]">No agents available</div>
+              ) : (
+                salesUsers.map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>
+                    {u.full_name || u.email}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label>Type of Accident *</Label>
+          <Select
+            value={accidentTypeId ? String(accidentTypeId) : undefined}
+            onValueChange={(v) => setAccidentTypeId(Number(v))}
+          >
+            <SelectTrigger className="shadow-none">
+              <SelectValue placeholder="Select type" />
+            </SelectTrigger>
+            <SelectContent>
+              {accidentTypes.length === 0 ? (
+                <div className="px-3 py-2 text-sm text-[#71717A]">
+                  None configured — ask an admin to add some in Settings.
+                </div>
+              ) : (
+                accidentTypes.map((t) => (
+                  <SelectItem key={t.id} value={String(t.id)}>
+                    {t.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Insurance Company *</Label>
+          <Select
+            value={insurerId ? String(insurerId) : undefined}
+            onValueChange={(v) => setInsurerId(Number(v))}
+          >
+            <SelectTrigger className="shadow-none">
+              <SelectValue placeholder="Select insurer" />
+            </SelectTrigger>
+            <SelectContent>
+              {insurers.length === 0 ? (
+                <div className="px-3 py-2 text-sm text-[#71717A]">
+                  None configured — ask an admin to add some in Settings.
+                </div>
+              ) : (
+                insurers.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <FormDatePicker
+        label="Next call date"
+        value={nextCallDate}
+        onChange={(d) => setNextCallDate(d)}
+      />
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label>Garage Name</Label>
+          <Input
+            type="text"
+            value={garageName}
+            onChange={(e) => setGarageName(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Garage Number</Label>
+          <Input
+            type="text"
+            value={garageNumber}
+            onChange={(e) => setGarageNumber(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={
+            isSubmitting ||
+            !clientName ||
+            !vehicleNumber ||
+            !claimNumber ||
+            !sourceId ||
+            !accidentTypeId ||
+            !insurerId
+          }
+        >
+          {isSubmitting ? 'Saving…' : entry ? 'Update' : 'Add Claim'}
+        </Button>
+      </DialogFooter>
     </form>
   );
 }

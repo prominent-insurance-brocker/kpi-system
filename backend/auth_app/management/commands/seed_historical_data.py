@@ -440,20 +440,45 @@ class Command(BaseCommand):
                 cursor = week_end + timedelta(days=1)
                 continue
 
+            # Motor Claim uses the revamped per-claim schema (client_name +
+            # lookup FKs); Medical Claim still uses customer_name. Branch on
+            # the model so we hit the right column set.
+            from entries.models import MotorClaimEntry, TypeOfAccident, InsuranceCompany
+            is_motor_claim = EntryModel is MotorClaimEntry
+            accident_types = list(TypeOfAccident.objects.all()) if is_motor_claim else []
+            insurance_companies = list(InsuranceCompany.objects.all()) if is_motor_claim else []
+
             for user in users:
                 claims_this_week = random.randint(3, 5)
                 for _ in range(claims_this_week):
                     d = random.choice(week_weekdays)
                     customer_name = random.choice(CUSTOMER_NAMES)
 
-                    entry, created = EntryModel.objects.get_or_create(
-                        date=d,
-                        added_by=user,
-                        customer_name=customer_name,
-                        defaults={'status': 'claims_opened'},
-                    )
-                    if not created:
-                        continue
+                    if is_motor_claim:
+                        entry = EntryModel.objects.create(
+                            date=d,
+                            added_by=user,
+                            client_name=customer_name,
+                            vehicle_number=f"AB-{random.randint(1000, 9999)}",
+                            claim_number=f"CLM-{random.randint(10000, 99999)}",
+                            source=user,
+                            type_of_accident=random.choice(accident_types) if accident_types else None,
+                            insurance_company=random.choice(insurance_companies) if insurance_companies else None,
+                            next_call_date=d + timedelta(days=random.randint(-14, 14)),
+                            garage_name=random.choice(['AutoFix Garage', 'CityCar Service', 'Premier Auto Works']),
+                            garage_number=f"GAR-{random.randint(100, 999)}",
+                            status='claims_opened',
+                        )
+                        created = True
+                    else:
+                        entry, created = EntryModel.objects.get_or_create(
+                            date=d,
+                            added_by=user,
+                            customer_name=customer_name,
+                            defaults={'status': 'claims_opened'},
+                        )
+                        if not created:
+                            continue
 
                     added_at = _aware_dt(d)
                     self._backdate(EntryModel, entry.pk, added_at)

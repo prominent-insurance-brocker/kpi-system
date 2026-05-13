@@ -12,12 +12,29 @@ class EntryFilter(django_filters.FilterSet):
 
 
 class ClaimEntryFilter(EntryFilter):
-    """Filter for claim entries — adds a status filter and customer-name search."""
+    """Filter for medical-claim entries — adds a status filter and customer-name search."""
     status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
     customer_name = django_filters.CharFilter(field_name='customer_name', lookup_expr='icontains')
 
     class Meta:
         fields = ['date_from', 'date_to', 'user_id', 'status', 'customer_name']
+
+
+class MotorClaimEntryFilter(EntryFilter):
+    """Filter for motor-claim entries — status, source agent, client-name search,
+    plus a secondary date range on next_call_date.
+    """
+    status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
+    client_name = django_filters.CharFilter(field_name='client_name', lookup_expr='icontains')
+    agent_id = django_filters.NumberFilter(field_name='source_id')
+    next_call_date_from = django_filters.DateFilter(field_name='next_call_date', lookup_expr='gte')
+    next_call_date_to = django_filters.DateFilter(field_name='next_call_date', lookup_expr='lte')
+
+    class Meta:
+        fields = [
+            'date_from', 'date_to', 'user_id', 'status', 'client_name',
+            'agent_id', 'next_call_date_from', 'next_call_date_to',
+        ]
 
 
 class MotorEnquiryFilter(EntryFilter):

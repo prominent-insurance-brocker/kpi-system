@@ -1,13 +1,30 @@
 from decimal import Decimal
 
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
 
 
+class PIBSequence(models.Model):
+    """Single-row counter that hands out globally unique PIB ids across every
+    BaseEntry table. Atomic via select_for_update — safe under concurrency."""
+    last_number = models.PositiveBigIntegerField(default=0)
+
+    @classmethod
+    def next_value(cls):
+        with transaction.atomic():
+            seq, _ = cls.objects.select_for_update().get_or_create(pk=1)
+            seq.last_number += 1
+            seq.save(update_fields=['last_number'])
+            return seq.last_number
+
+
 class BaseEntry(models.Model):
     """Abstract base class for all KPI entries."""
+    # Human-readable id (PIB-1, PIB-2, ...) assigned on first save from
+    # PIBSequence. Globally unique across every entry table.
+    pib_id = models.CharField(max_length=20, db_index=True, blank=True, default='')
     date = models.DateField()
     added_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -27,6 +44,11 @@ class BaseEntry(models.Model):
     class Meta:
         abstract = True
         ordering = ['-date', '-added_at']
+
+    def save(self, *args, **kwargs):
+        if not self.pib_id:
+            self.pib_id = f"PIB-{PIBSequence.next_value()}"
+        super().save(*args, **kwargs)
 
     @property
     def owner(self):

@@ -291,6 +291,7 @@ export async function getUsersForModule(
 
 export interface MotorEnquiryEntry {
   id: number;
+  pib_id: string;                    // "PIB-N", globally unique across all entry tables
   date: string;                      // YYYY-MM-DD
   client_name: string;
   agent: number;                     // FK id
@@ -443,6 +444,7 @@ export async function updateMotorRenewalMonthlyTarget(
 
 export interface MotorClaimEntry {
   id: number;
+  pib_id: string;                    // "PIB-N", globally unique across all entry tables
   date: string;
   client_name: string;
   vehicle_number: string;

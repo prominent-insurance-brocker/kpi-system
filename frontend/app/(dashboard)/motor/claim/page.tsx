@@ -312,12 +312,9 @@ export default function MotorClaimPage() {
   // ── Columns ──────────────────────────────────────────────────────────────
   const columns = [
     {
-      key: 'row',
-      header: '#',
-      render: (item: MotorClaimEntry) => {
-        const idx = entries.findIndex((e) => e.id === item.id);
-        return (page - 1) * pageSize + idx + 1;
-      },
+      key: 'pib_id',
+      header: 'ID',
+      render: (item: MotorClaimEntry) => item.pib_id,
     },
     { key: 'client_name', header: 'Client Name' },
     { key: 'vehicle_number', header: 'Vehicle Number' },

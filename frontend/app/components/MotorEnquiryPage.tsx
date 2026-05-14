@@ -570,12 +570,9 @@ export function MotorEnquiryPage({
   // ── Columns ──────────────────────────────────────────────────────────────
   const columns = [
     {
-      key: 'row',
-      header: '#',
-      render: (item: MotorEnquiryEntry) => {
-        const idx = entries.findIndex((e) => e.id === item.id);
-        return (page - 1) * pageSize + idx + 1;
-      },
+      key: 'pib_id',
+      header: 'ID',
+      render: (item: MotorEnquiryEntry) => item.pib_id,
     },
     { key: 'client_name', header: 'Client Name' },
     { key: 'agent_name', header: 'Agent Name' },

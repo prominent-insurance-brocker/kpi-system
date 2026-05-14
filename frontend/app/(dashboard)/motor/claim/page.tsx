@@ -914,6 +914,7 @@ function ClaimForm({
           <Label>Client Name *</Label>
           <Input
             type="text"
+            placeholder="Enter client name"
             value={clientName}
             onChange={(e) => setClientName(e.target.value)}
             required
@@ -923,6 +924,7 @@ function ClaimForm({
           <Label>Vehicle Number *</Label>
           <Input
             type="text"
+            placeholder="e.g. KA-01-AB-1234"
             value={vehicleNumber}
             onChange={(e) => setVehicleNumber(e.target.value)}
             required
@@ -935,6 +937,7 @@ function ClaimForm({
           <Label>Claim Number *</Label>
           <Input
             type="text"
+            placeholder="Enter claim number"
             value={claimNumber}
             onChange={(e) => setClaimNumber(e.target.value)}
             required
@@ -996,6 +999,7 @@ function ClaimForm({
           <Label>Garage Name</Label>
           <Input
             type="text"
+            placeholder="Enter garage name"
             value={garageName}
             onChange={(e) => setGarageName(e.target.value)}
           />
@@ -1004,6 +1008,7 @@ function ClaimForm({
           <Label>Garage Number</Label>
           <Input
             type="text"
+            placeholder="Enter garage number"
             value={garageNumber}
             onChange={(e) => setGarageNumber(e.target.value)}
           />

@@ -257,18 +257,20 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
             const isSunday = d.getDay() === 0 || d.getDay() === 6;
             const isToday = sameDay(d, today);
             const isPast = d < today && !isToday;
-            // Color by Created Date (added_at), not the entry's for-date (e.date),
-            // so the tracker reflects actual submission activity.
-            const hasEntry = monthEntries.some(
-              (e) =>
+            const isFuture = d > today;
+            // Count entries added on this calendar day by the current user.
+            // Driven by `added_at` (creation date) rather than the entry's
+            // `date` field, so the tracker reflects actual submission activity.
+            const entryCount = monthEntries.reduce(
+              (sum, e) =>
                 toLocalDateString(new Date(e.added_at)) === ds &&
                 ownerId(e) === currentUserId
+                  ? sum + 1
+                  : sum,
+              0,
             );
+            const hasEntry = entryCount > 0;
 
-            // Weekends are first-class entry days now (no gating). They get
-            // a neutral solid background when empty so they remain visually
-            // distinct from weekdays, but a submission/today indicator can
-            // still light them up green/blue.
             let indicatorBg = '';
             let indicatorStyle: React.CSSProperties | undefined;
             if (hasEntry) {
@@ -280,6 +282,17 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
             } else if (isSunday) {
               indicatorStyle = { backgroundColor: '#F3F4F6' };
             }
+
+            // Show count text inside the indicator. Past weekdays with no
+            // entries surface "0" in red; days with entries show the green
+            // count. Future days stay blank so the bar doesn't preempt them.
+            const showZero = !hasEntry && isPast && !isSunday;
+            const countText = hasEntry ? entryCount : showZero ? 0 : null;
+            const countColorClass = hasEntry
+              ? 'text-green-700'
+              : showZero
+              ? 'text-red-700'
+              : '';
 
             return (
               <div
@@ -301,9 +314,15 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
                   </span>
                 </div>
                 <div
-                  className={`w-full h-16 border-t border-[#E4E4E4] ${indicatorBg}`}
+                  className={`w-full h-16 border-t border-[#E4E4E4] flex items-center justify-center ${indicatorBg}`}
                   style={indicatorStyle}
-                />
+                >
+                  {countText != null && !isFuture && (
+                    <span className={`text-base font-semibold ${countColorClass}`}>
+                      {countText}
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -345,12 +364,14 @@ export function TrackerView<T extends BaseModuleEntry>({
     (_, i) => new Date(calYear, calMonth, i + 1)
   );
 
-  // Key by Created Date (added_at) — see PersonalDailyTracker comment above.
-  const entryMap = new Map<string, Set<number>>();
+  // Per (date, user) count of entries created on that calendar day. Keyed
+  // by Created Date (added_at) — see PersonalDailyTracker comment above.
+  const entryCountMap = new Map<string, Map<number, number>>();
   for (const e of monthEntries) {
     const createdDs = toLocalDateString(new Date(e.added_at));
-    if (!entryMap.has(createdDs)) entryMap.set(createdDs, new Set());
-    entryMap.get(createdDs)!.add(e.added_by);
+    if (!entryCountMap.has(createdDs)) entryCountMap.set(createdDs, new Map());
+    const userMap = entryCountMap.get(createdDs)!;
+    userMap.set(e.added_by, (userMap.get(e.added_by) ?? 0) + 1);
   }
 
   const visibleUsers =
@@ -496,7 +517,9 @@ export function TrackerView<T extends BaseModuleEntry>({
                     const isSun = d.getDay() === 0 || d.getDay() === 6;
                     const isToday = sameDay(d, today);
                     const isPast = d < today && !isToday;
-                    const hasEntry = entryMap.get(ds)?.has(user.id) ?? false;
+                    const isFuture = d > today;
+                    const entryCount = entryCountMap.get(ds)?.get(user.id) ?? 0;
+                    const hasEntry = entryCount > 0;
 
                     let cellBg = '';
                     let cellStyle: React.CSSProperties | undefined;
@@ -511,13 +534,28 @@ export function TrackerView<T extends BaseModuleEntry>({
                       cellStyle = { backgroundColor: '#F3F4F6' };
                     }
 
+                    const showZero = !hasEntry && isPast && !isSun;
+                    const cellText =
+                      hasEntry ? entryCount : showZero ? 0 : null;
+                    const cellTextClass = hasEntry
+                      ? 'text-green-700'
+                      : showZero
+                      ? 'text-red-700'
+                      : '';
+
                     return (
                       <td
                         key={d.getDate()}
                         className={`px-1 py-2 border-l border-[#E4E4E4] ${cellBg}`}
                         style={cellStyle}
                       >
-                        <div className="w-8 h-8" />
+                        <div className="w-8 h-8 flex items-center justify-center">
+                          {cellText != null && !isFuture && (
+                            <span className={`text-sm font-semibold ${cellTextClass}`}>
+                              {cellText}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     );
                   })}

@@ -257,7 +257,13 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
             const isSunday = d.getDay() === 0 || d.getDay() === 6;
             const isToday = sameDay(d, today);
             const isPast = d < today && !isToday;
-            const hasEntry = monthEntries.some((e) => e.date === ds && ownerId(e) === currentUserId);
+            // Color by Created Date (added_at), not the entry's for-date (e.date),
+            // so the tracker reflects actual submission activity.
+            const hasEntry = monthEntries.some(
+              (e) =>
+                toLocalDateString(new Date(e.added_at)) === ds &&
+                ownerId(e) === currentUserId
+            );
 
             let indicatorBg = '';
             let indicatorStyle: React.CSSProperties | undefined;
@@ -340,10 +346,12 @@ export function TrackerView<T extends BaseModuleEntry>({
     (_, i) => new Date(calYear, calMonth, i + 1)
   );
 
+  // Key by Created Date (added_at) — see PersonalDailyTracker comment above.
   const entryMap = new Map<string, Set<number>>();
   for (const e of monthEntries) {
-    if (!entryMap.has(e.date)) entryMap.set(e.date, new Set());
-    entryMap.get(e.date)!.add(e.added_by);
+    const createdDs = toLocalDateString(new Date(e.added_at));
+    if (!entryMap.has(createdDs)) entryMap.set(createdDs, new Set());
+    entryMap.get(createdDs)!.add(e.added_by);
   }
 
   const visibleUsers =

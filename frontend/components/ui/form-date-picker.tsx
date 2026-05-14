@@ -19,6 +19,7 @@ interface FormDatePickerProps {
   onChange: (date: string) => void
   required?: boolean
   className?: string
+  disablePast?: boolean
 }
 
 export function FormDatePicker({
@@ -27,6 +28,7 @@ export function FormDatePicker({
   onChange,
   required,
   className,
+  disablePast,
 }: FormDatePickerProps) {
   const [open, setOpen] = React.useState(false)
 
@@ -45,6 +47,12 @@ export function FormDatePicker({
       onChange("")
     }
     setOpen(false)
+  }
+
+  const startOfToday = (): Date => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
   }
 
   const formatDisplayDate = (dateStr: string): string => {
@@ -84,6 +92,7 @@ export function FormDatePicker({
             selected={selectedDate}
             onSelect={handleSelect}
             defaultMonth={selectedDate || new Date()}
+            disabled={disablePast ? { before: startOfToday() } : undefined}
             initialFocus
           />
         </PopoverContent>

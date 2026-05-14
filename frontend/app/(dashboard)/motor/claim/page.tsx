@@ -870,6 +870,7 @@ function ClaimForm({
         label="Next call date"
         value={nextCallDate}
         onChange={(d) => setNextCallDate(d)}
+        disablePast
       />
 
       <div className="grid grid-cols-2 gap-3">

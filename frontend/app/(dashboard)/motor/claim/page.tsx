@@ -27,8 +27,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus } from 'lucide-react';
+import { Plus, CalendarIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
@@ -50,6 +52,7 @@ import {
   getUsersForModulePage,
   getMotorClaimStats,
   updateMotorClaimStatus,
+  updateMotorClaimNextCallDate,
   getAccidentTypes,
   getInsuranceCompanies,
   type MotorClaimEntry,
@@ -311,6 +314,23 @@ export default function MotorClaimPage() {
     }
   };
 
+  const changeNextCallDate = async (entry: MotorClaimEntry, nextDate: string | null) => {
+    // Optimistic — show the new value immediately, roll back on failure.
+    const previous = entry.next_call_date;
+    setEntries((curr) =>
+      curr.map((e) => (e.id === entry.id ? { ...e, next_call_date: nextDate } : e))
+    );
+    const result = await updateMotorClaimNextCallDate(entry.id, nextDate);
+    if (result.data) {
+      toast.success(nextDate ? 'Next call date updated' : 'Next call date cleared');
+    } else {
+      setEntries((curr) =>
+        curr.map((e) => (e.id === entry.id ? { ...e, next_call_date: previous } : e))
+      );
+      toast.error(result.error || 'Failed to update next call date');
+    }
+  };
+
   // ── Columns ──────────────────────────────────────────────────────────────
   const columns = [
     {
@@ -367,8 +387,12 @@ export default function MotorClaimPage() {
     {
       key: 'next_call_date',
       header: 'Next call date',
-      render: (item: MotorClaimEntry) =>
-        item.next_call_date ? formatDate(item.next_call_date) : '—',
+      render: (item: MotorClaimEntry) => (
+        <InlineDateCell
+          value={item.next_call_date}
+          onChange={(d) => changeNextCallDate(item, d)}
+        />
+      ),
     },
     { key: 'garage_name', header: 'Garage Name' },
     { key: 'garage_number', header: 'Garage Number' },
@@ -910,5 +934,61 @@ function ClaimForm({
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+// ── Inline next-call-date cell ─────────────────────────────────────────────
+// Click the date to open a calendar popover; picking a day saves immediately
+// via /update-next-call-date/ (bypasses the 30-min edit window).
+function InlineDateCell({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (date: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = value ? new Date(value + 'T00:00:00') : undefined;
+
+  const startOfToday = () => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const handleSelect = (d: Date | undefined) => {
+    if (!d) {
+      onChange(null);
+    } else {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      onChange(`${y}-${m}-${day}`);
+    }
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 -mx-2 -my-1 text-sm text-[#374151] hover:bg-[#F3F3F3] transition-colors"
+        >
+          <CalendarIcon className="h-3.5 w-3.5 text-[#71717A]" />
+          <span>{value ? formatDate(value) : '—'}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={selected}
+          onSelect={handleSelect}
+          defaultMonth={selected || new Date()}
+          disabled={{ before: startOfToday() }}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
   );
 }

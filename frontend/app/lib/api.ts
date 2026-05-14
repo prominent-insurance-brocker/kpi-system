@@ -595,6 +595,18 @@ export async function updateMotorClaimStatus(
   });
 }
 
+// Inline edit for next_call_date — bypasses the 30-min edit window.
+// Pass an empty string or null to clear the date.
+export async function updateMotorClaimNextCallDate(
+  id: number,
+  next_call_date: string | null
+): Promise<ApiResponse<MotorClaimEntry>> {
+  return fetchApi<MotorClaimEntry>(`/api/entries/motor-claim/${id}/update-next-call-date/`, {
+    method: 'PATCH',
+    body: JSON.stringify({ next_call_date: next_call_date || null }),
+  });
+}
+
 // AI Chat
 export interface AiChatResponse {
   success: boolean;

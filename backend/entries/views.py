@@ -444,6 +444,37 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
             MotorClaimEntrySerializer(entry, context={'request': request}).data
         )
 
+    @action(detail=True, methods=['patch'], url_path='update-next-call-date')
+    def update_next_call_date(self, request, pk=None):
+        """Inline edit for next_call_date — bypasses the 30-min edit window so
+        the field can be rescheduled anytime by anyone with module access.
+        Accepts {"next_call_date": "YYYY-MM-DD"} or {"next_call_date": null}.
+        Rejects past dates (must be today or later).
+        """
+        entry = self.get_object()
+        raw = request.data.get('next_call_date')
+        if raw in (None, ''):
+            entry.next_call_date = None
+        else:
+            from datetime import datetime
+            try:
+                parsed = datetime.strptime(raw, '%Y-%m-%d').date()
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'next_call_date must be in YYYY-MM-DD format or null.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if parsed < timezone.localdate():
+                return Response(
+                    {'error': 'next_call_date cannot be in the past.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            entry.next_call_date = parsed
+        entry.save(update_fields=['next_call_date', 'updated_at'])
+        return Response(
+            MotorClaimEntrySerializer(entry, context={'request': request}).data
+        )
+
     @action(detail=False, methods=['get'])
     def stats(self, request):
         """Cumulative per-status counts (lifecycle funnel) — RBAC + date filtered.

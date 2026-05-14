@@ -393,6 +393,16 @@ export function TrackerView<T extends BaseModuleEntry>({
               ))}
             </SelectContent>
           </Select>
+          {trackerUserFilter !== 'all' && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => onTrackerUserFilterChange('all')}
+            >
+              Clear filter
+            </Button>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

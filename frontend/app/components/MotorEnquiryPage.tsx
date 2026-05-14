@@ -115,7 +115,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
     ],
     successValue: 'retained',
     successLabel: 'Retained',
-    totalLabel: 'Total Enquiries Assigned',
+    totalLabel: 'Total Enquiries Added',
     showRatioCard: true,
   },
 };
@@ -800,6 +800,13 @@ export function MotorEnquiryPage({
             }}
           />
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 xl:grid-cols-7">
+            {config.showRatioCard && (
+              <RatioCard
+                label={`${config.successLabel} / Total Assigned Clients`}
+                total={stats.total}
+                success={stats[config.successValue]}
+              />
+            )}
             <StatCard label={config.totalLabel} value={stats.total} accent="text-[#09090B]" />
             <StatCard label="Enquiries Revised" value={stats.revised} accent="text-[#A855F7]" />
             <StatCard
@@ -818,13 +825,6 @@ export function MotorEnquiryPage({
               value={formatAccuracy(stats.avg_accuracy)}
               accent="text-[#F97316]"
             />
-            {config.showRatioCard && (
-              <RatioCard
-                label={`Total Assigned / ${config.successLabel}`}
-                total={stats.total}
-                success={stats[config.successValue]}
-              />
-            )}
           </div>
         </TabsContent>
 
@@ -1225,7 +1225,7 @@ function RatioCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold text-[#09090B]">
-          {total} / {success}
+          {success} / {total}
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">({pct.toFixed(1)}%)</div>
       </CardContent>

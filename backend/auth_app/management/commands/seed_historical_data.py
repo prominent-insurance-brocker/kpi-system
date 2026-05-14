@@ -22,7 +22,10 @@ from auth_app.models import CustomUser
 from roles.models import Role, RoleModulePermission
 from entries.models import (
     GeneralNewEntry,
-    GeneralRenewalEntry,
+    # GeneralRenewalEntry intentionally omitted — module switched from
+    # per-day KPI counters to a per-enquiry workflow; the old seeder no
+    # longer applies. Re-add and adapt to MotorRenewalEntry's seeder shape
+    # if historical seeding is required.
     MotorNewEntry,
     MotorNewStatusTransition,
     MotorRenewalEntry,
@@ -124,7 +127,9 @@ class Command(BaseCommand):
 
             per_day_seeders = {
                 'general_new': self._seed_general_new,
-                'general_renewal': self._seed_general_renewal,
+                # general_renewal seeder dropped: module schema is now
+                # per-enquiry rather than per-day. Use _seed_motor_enquiry
+                # as a template if you re-add it.
                 'motor_new': self._seed_motor_new,
                 'motor_renewal': self._seed_motor_renewal,
                 'sales_kpi': self._seed_sales_kpi,
@@ -235,9 +240,7 @@ class Command(BaseCommand):
         return self._seed_funnel_kpi(users, dates, GeneralNewEntry,
                                      qmin=5, qmax=25, acc_min=85.0, acc_max=99.5)
 
-    def _seed_general_renewal(self, users, dates):
-        return self._seed_funnel_kpi(users, dates, GeneralRenewalEntry,
-                                     qmin=10, qmax=30, acc_min=88.0, acc_max=99.5)
+    # _seed_general_renewal removed — module schema is now per-enquiry.
 
     def _seed_motor_new(self, users, dates):
         return self._seed_motor_enquiry(users, dates, MotorNewEntry, MotorNewStatusTransition)

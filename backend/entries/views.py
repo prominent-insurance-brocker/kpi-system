@@ -12,6 +12,8 @@ from roles.permissions import HasModulePermission
 from .models import (
     GeneralNewEntry,
     GeneralRenewalEntry,
+    GeneralRenewalStatusTransition,
+    GeneralRenewalMonthlyTarget,
     MotorNewEntry,
     MotorNewStatusTransition,
     MotorRenewalEntry,
@@ -31,6 +33,9 @@ from .models import (
 from .serializers import (
     GeneralNewEntrySerializer,
     GeneralRenewalEntrySerializer,
+    GeneralRenewalStatusUpdateSerializer,
+    GeneralRenewalRevisionsUpdateSerializer,
+    GeneralRenewalMonthlyTargetSerializer,
     MotorNewEntrySerializer,
     MotorNewStatusUpdateSerializer,
     MotorNewRevisionsUpdateSerializer,
@@ -135,6 +140,135 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
     queryset = GeneralRenewalEntry.objects.all()
     serializer_class = GeneralRenewalEntrySerializer
     module_key = 'general_renewal'
+    filterset_class = MotorEnquiryFilter
+
+    def get_queryset(self):
+        return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
+
+    def perform_create(self, serializer):
+        instance = serializer.save(
+            added_by=self.request.user,
+            status=GeneralRenewalEntry.STATUS_NEW,
+            revisions=0,
+        )
+        GeneralRenewalStatusTransition.objects.create(
+            entry=instance,
+            from_status='',
+            to_status=instance.status,
+            changed_by=self.request.user,
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        entry = self.get_object()
+
+        if entry.is_terminal:
+            return Response(
+                {'error': 'Cannot change status of a retained or lost enquiry.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = GeneralRenewalStatusUpdateSerializer(
+            data=request.data,
+            context={'entry': entry},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        old_status = entry.status
+        new_status = serializer.validated_data['status']
+        new_revisions = serializer.validated_data.get('revisions')
+
+        entry.status = new_status
+        update_fields = ['status', 'updated_at']
+
+        if new_revisions is not None:
+            entry.revisions = new_revisions
+            update_fields.append('revisions')
+
+        if new_status in GeneralRenewalEntry.TERMINAL_STATUSES:
+            entry.status_changed_at = timezone.now()
+            update_fields.append('status_changed_at')
+
+        entry.save(update_fields=update_fields)
+
+        GeneralRenewalStatusTransition.objects.create(
+            entry=entry,
+            from_status=old_status,
+            to_status=new_status,
+            changed_by=request.user,
+        )
+
+        return Response(
+            GeneralRenewalEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-revisions')
+    def update_revisions(self, request, pk=None):
+        entry = self.get_object()
+
+        if entry.status != GeneralRenewalEntry.STATUS_NEW:
+            return Response(
+                {'error': 'Revisions can only be edited while the enquiry status is New.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = GeneralRenewalRevisionsUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        entry.revisions = serializer.validated_data['revisions']
+        entry.save(update_fields=['revisions', 'updated_at'])
+
+        return Response(
+            GeneralRenewalEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        queryset = self.get_queryset()
+        params = {
+            k: v for k, v in request.query_params.items()
+            if k in ('date_from', 'date_to', 'agent_id', 'status')
+        }
+        filterset = self.filterset_class(params, queryset=queryset)
+        queryset = filterset.qs
+        return Response(_build_enquiry_stats(queryset, success_status='retained'))
+
+
+class GeneralRenewalMonthlyTargetViewSet(viewsets.ModelViewSet):
+    """Per-user retention target for the general renewal module.
+
+    Mirrors MotorRenewalMonthlyTargetViewSet — each user only sees/edits their
+    own targets; admins included. The data_visibility='all' rule applies to
+    entry data, not to personal targets.
+    """
+    serializer_class = GeneralRenewalMonthlyTargetSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = GeneralRenewalMonthlyTarget.objects.filter(user=self.request.user)
+        year = self.request.query_params.get('year')
+        month = self.request.query_params.get('month')
+        if year:
+            queryset = queryset.filter(year=year)
+        if month:
+            queryset = queryset.filter(month=month)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='current')
+    def current(self, request):
+        today = timezone.now().date()
+        try:
+            target = GeneralRenewalMonthlyTarget.objects.get(
+                user=request.user,
+                year=today.year,
+                month=today.month,
+            )
+            return Response(GeneralRenewalMonthlyTargetSerializer(target).data)
+        except GeneralRenewalMonthlyTarget.DoesNotExist:
+            return Response(None)
 
 
 def _build_enquiry_stats(queryset, success_status='converted'):

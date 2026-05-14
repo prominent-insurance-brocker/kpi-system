@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     GeneralNewEntryViewSet,
     GeneralRenewalEntryViewSet,
+    GeneralRenewalMonthlyTargetViewSet,
     MotorNewEntryViewSet,
     MotorRenewalEntryViewSet,
     MotorRenewalMonthlyTargetViewSet,
@@ -18,6 +19,8 @@ from .views import (
 
 router = DefaultRouter()
 router.register(r'general-new', GeneralNewEntryViewSet, basename='general-new')
+# Sub-path must be registered BEFORE the parent so DRF resolves it first.
+router.register(r'general-renewal/monthly-targets', GeneralRenewalMonthlyTargetViewSet, basename='general-renewal-monthly-targets')
 router.register(r'general-renewal', GeneralRenewalEntryViewSet, basename='general-renewal')
 router.register(r'motor-new', MotorNewEntryViewSet, basename='motor-new')
 # Sub-path must be registered BEFORE the parent so DRF resolves it first.

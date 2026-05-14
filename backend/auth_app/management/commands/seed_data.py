@@ -314,10 +314,6 @@ class Command(BaseCommand):
         count = self._seed_general_new_entries(general_users, dates)
         self.stdout.write(f'  - General New entries: {count}')
 
-        # Seed General Renewal entries
-        count = self._seed_general_renewal_entries(general_users, dates)
-        self.stdout.write(f'  - General Renewal entries: {count}')
-
         # Seed Motor New entries
         count = self._seed_motor_new_entries(motor_users, dates)
         self.stdout.write(f'  - Motor New entries: {count}')
@@ -366,27 +362,8 @@ class Command(BaseCommand):
                     count += 1
         return count
 
-    def _seed_general_renewal_entries(self, users, dates):
-        """Seed GeneralRenewalEntry records."""
-        count = 0
-        for user in users:
-            if not user:
-                continue
-            for entry_date in dates:
-                _, created = GeneralRenewalEntry.objects.get_or_create(
-                    date=entry_date,
-                    added_by=user,
-                    defaults={
-                        'quotations': random.randint(10, 30),
-                        'quotes_revised': random.randint(2, 12),
-                        'quotes_converted': random.randint(5, 20),
-                        'tat': random.randint(1, 4),
-                        'accuracy': Decimal(str(round(random.uniform(88.0, 99.9), 2))),
-                    }
-                )
-                if created:
-                    count += 1
-        return count
+    # GeneralRenewalEntry seeder removed: module migrated from per-day KPI
+    # counters to a per-enquiry workflow (mirroring Motor Renewal).
 
     def _seed_motor_enquiry_entries(self, model, users, dates):
         """Seed per-enquiry rows for MotorNewEntry or MotorRenewalEntry.

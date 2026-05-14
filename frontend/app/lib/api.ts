@@ -458,6 +458,130 @@ export async function updateMotorRenewalMonthlyTarget(
   );
 }
 
+// ─── General Renewal (per-enquiry, mirrors Motor Renewal sans chassis_no) ────
+
+export interface GeneralRenewalEntry {
+  id: number;
+  pib_id: string;
+  date: string;                      // YYYY-MM-DD
+  client_name: string;
+  agent: number;                     // FK id
+  agent_name: string;
+  remarks: string;
+  status: 'new' | 'retained' | 'lost';
+  revisions: number;
+  quotes_compared: number;
+  status_changed_at: string | null;
+  tat_display: string;               // "Xd Yh Zm" or "—"
+  accuracy_pct: number | null;
+  allowed_transitions: string[];
+  is_terminal: boolean;
+  added_by: number;
+  added_by_name: string;
+  on_behalf_of: number | null;
+  on_behalf_of_name: string | null;
+  added_at: string;
+  updated_at: string;
+  is_editable: boolean;
+  // Index signature for compatibility with shared tracker components.
+  [key: string]: unknown;
+}
+
+export interface GeneralRenewalStats {
+  total: number;
+  revised: number;
+  converted: number;                 // always 0 for general_renewal
+  retained: number;
+  lost: number;
+  avg_tat_minutes: number | null;
+  avg_accuracy: number | null;
+}
+
+export interface GeneralRenewalMonthlyTarget {
+  id: number;
+  user: number;
+  year: number;
+  month: number;
+  calculated_date: string;
+  clients_assigned: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getGeneralRenewalStats(
+  params: StatsParams = {}
+): Promise<ApiResponse<GeneralRenewalStats>> {
+  return fetchApi<GeneralRenewalStats>(
+    `/api/entries/general-renewal/stats/?${buildQS(params as Record<string, string | undefined>)}`
+  );
+}
+
+export async function updateGeneralRenewalStatus(
+  id: number,
+  payload: { status: 'retained' | 'lost'; revisions?: number }
+): Promise<ApiResponse<GeneralRenewalEntry>> {
+  return fetchApi<GeneralRenewalEntry>(
+    `/api/entries/general-renewal/${id}/update-status/`,
+    { method: 'PATCH', body: JSON.stringify(payload) }
+  );
+}
+
+export async function updateGeneralRenewalRevisions(
+  id: number,
+  revisions: number
+): Promise<ApiResponse<GeneralRenewalEntry>> {
+  return fetchApi<GeneralRenewalEntry>(
+    `/api/entries/general-renewal/${id}/update-revisions/`,
+    { method: 'PATCH', body: JSON.stringify({ revisions }) }
+  );
+}
+
+export async function getCurrentGeneralRenewalMonthlyTarget(): Promise<
+  ApiResponse<GeneralRenewalMonthlyTarget | null>
+> {
+  return fetchApi<GeneralRenewalMonthlyTarget | null>(
+    '/api/entries/general-renewal/monthly-targets/current/'
+  );
+}
+
+export async function getGeneralRenewalMonthlyTargets(params: {
+  year: number;
+  month?: number;
+}): Promise<ApiResponse<GeneralRenewalMonthlyTarget[]>> {
+  const qs = new URLSearchParams();
+  qs.set('year', String(params.year));
+  if (params.month != null) qs.set('month', String(params.month));
+  const result = await fetchApi<{ results: GeneralRenewalMonthlyTarget[] } | GeneralRenewalMonthlyTarget[]>(
+    `/api/entries/general-renewal/monthly-targets/?${qs}`
+  );
+  if (result.data) {
+    const rows = Array.isArray(result.data) ? result.data : result.data.results;
+    return { data: rows };
+  }
+  return { error: result.error };
+}
+
+export async function createGeneralRenewalMonthlyTarget(payload: {
+  year: number;
+  month: number;
+  clients_assigned: number;
+}): Promise<ApiResponse<GeneralRenewalMonthlyTarget>> {
+  return fetchApi<GeneralRenewalMonthlyTarget>(
+    '/api/entries/general-renewal/monthly-targets/',
+    { method: 'POST', body: JSON.stringify(payload) }
+  );
+}
+
+export async function updateGeneralRenewalMonthlyTarget(
+  id: number,
+  payload: { clients_assigned: number }
+): Promise<ApiResponse<GeneralRenewalMonthlyTarget>> {
+  return fetchApi<GeneralRenewalMonthlyTarget>(
+    `/api/entries/general-renewal/monthly-targets/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(payload) }
+  );
+}
+
 // ─── Motor Claim (revamped: client_name + lookup FKs + 8 new fields) ─────────
 
 export interface MotorClaimEntry {

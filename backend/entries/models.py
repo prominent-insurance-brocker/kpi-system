@@ -82,19 +82,140 @@ class GeneralNewEntry(BaseEntry):
 
 
 class GeneralRenewalEntry(BaseEntry):
-    """General Renewal module entry."""
-    quotations = models.PositiveIntegerField()
-    quotes_revised = models.PositiveIntegerField()
-    quotes_converted = models.PositiveIntegerField()
-    tat = models.PositiveIntegerField(null=True, blank=True, verbose_name='TAT')
-    accuracy = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    """General Renewal enquiry — one row per renewal opportunity with status state machine.
+
+    Mirrors MotorRenewalEntry's shape but without the motor-specific chassis
+    number (general insurance products have no chassis).
+    """
+    STATUS_NEW = 'new'
+    STATUS_RETAINED = 'retained'
+    STATUS_LOST = 'lost'
+
+    STATUS_CHOICES = [
+        (STATUS_NEW, 'New Enquiry'),
+        (STATUS_RETAINED, 'Retained'),
+        (STATUS_LOST, 'Lost'),
+    ]
+
+    TERMINAL_STATUSES = {STATUS_RETAINED, STATUS_LOST}
+
+    TRANSITIONS = {
+        STATUS_NEW: [STATUS_RETAINED, STATUS_LOST],
+        STATUS_RETAINED: [],
+        STATUS_LOST: [],
+    }
+
+    ACCURACY_DECAY = Decimal('0.9')
+
+    client_name = models.CharField(max_length=200)
+    agent = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='general_renewal_enquiries_as_agent',
+    )
+    remarks = models.TextField(blank=True, default='')
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW
+    )
+    revisions = models.PositiveIntegerField(default=0)
+    quotes_compared = models.PositiveIntegerField(default=0)
+    status_changed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'General Renewal Entry'
         verbose_name_plural = 'General Renewal Entries'
 
     def __str__(self):
-        return f"General Renewal - {self.date} by {self.added_by}"
+        return f"General Renewal Enquiry - {self.client_name} ({self.status})"
+
+    @classmethod
+    def get_allowed_transitions(cls, current_status):
+        return cls.TRANSITIONS.get(current_status, [])
+
+    @property
+    def is_terminal(self):
+        return self.status in self.TERMINAL_STATUSES
+
+    def get_tat(self):
+        if not self.is_terminal or self.status_changed_at is None:
+            return None
+        return self.status_changed_at - self.added_at
+
+    def get_tat_display(self):
+        delta = self.get_tat()
+        if delta is None:
+            return '—'
+        total_seconds = int(delta.total_seconds())
+        days = total_seconds // 86400
+        hours = (total_seconds % 86400) // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        if days > 0:
+            return f"{days}d {hours}h {minutes}m"
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        if minutes > 0:
+            return f"{minutes}m {seconds}s"
+        return f"{seconds}s"
+
+    @property
+    def accuracy_pct(self):
+        if not self.is_terminal:
+            return None
+        return float(Decimal('100') * (self.ACCURACY_DECAY ** self.revisions))
+
+
+class GeneralRenewalStatusTransition(models.Model):
+    """Records each status change for a general renewal enquiry."""
+    entry = models.ForeignKey(
+        GeneralRenewalEntry,
+        on_delete=models.CASCADE,
+        related_name='status_transitions',
+    )
+    from_status = models.CharField(
+        max_length=20, choices=GeneralRenewalEntry.STATUS_CHOICES, blank=True
+    )
+    to_status = models.CharField(
+        max_length=20, choices=GeneralRenewalEntry.STATUS_CHOICES
+    )
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='general_renewal_status_changes',
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['changed_at']
+
+    def __str__(self):
+        return f"{self.entry_id}: {self.from_status} -> {self.to_status}"
+
+
+class GeneralRenewalMonthlyTarget(models.Model):
+    """Per-user retention target for the general renewal module."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='general_renewal_monthly_targets',
+    )
+    year = models.PositiveIntegerField()
+    month = models.PositiveIntegerField()
+    calculated_date = models.DateField(db_index=True)
+    clients_assigned = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'year', 'month')
+
+    def save(self, *args, **kwargs):
+        from datetime import date
+        self.calculated_date = date(self.year, self.month, 1)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"General Renewal Target {self.year}/{self.month} - {self.user}"
 
 
 class MotorNewEntry(BaseEntry):

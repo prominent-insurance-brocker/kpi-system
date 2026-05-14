@@ -81,7 +81,7 @@ export function ChatWidget() {
       <Button
         onClick={() => setIsOpen(true)}
         size="icon-lg"
-        className="fixed bottom-6 right-6 z-50 rounded-full shadow-lg"
+        className="fixed bottom-20 right-6 z-50 rounded-full shadow-lg"
       >
         <MessageCircle className="h-5 w-5" />
       </Button>
@@ -89,7 +89,7 @@ export function ChatWidget() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-[400px] h-[600px] max-sm:inset-0 max-sm:w-auto max-sm:h-auto flex flex-col bg-background border border-border rounded-lg shadow-xl overflow-hidden">
+    <div className="fixed bottom-20 right-6 z-50 w-[400px] h-[600px] max-sm:inset-0 max-sm:w-auto max-sm:h-auto flex flex-col bg-background border border-border rounded-lg shadow-xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
         <h3 className="font-semibold text-sm">KPI Assistant</h3>

@@ -29,6 +29,16 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+echo "Applying database migrations ..."
+if ! (cd "$BACKEND" && "$PYTHON" manage.py migrate --noinput); then
+  echo "" >&2
+  echo "Migrations failed. If you see 'no such column' / 'column does not exist'," >&2
+  echo "your DB schema is likely ahead of migration history (a previous migration" >&2
+  echo "ran but its file was renamed/replaced). Fake-apply to resync:" >&2
+  echo "  cd backend && \"$PYTHON\" manage.py migrate <app> <latest_migration> --fake" >&2
+  exit 1
+fi
+
 echo "Starting backend on http://localhost:8000 ..."
 (cd "$BACKEND" && "$PYTHON" manage.py runserver) &
 BACKEND_PID=$!

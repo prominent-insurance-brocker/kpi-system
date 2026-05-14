@@ -462,18 +462,16 @@ export default function MotorClaimPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Motor Claim</h1>
-        {activeView === 'enquiries' && (
-          <Button
-            onClick={() => {
-              setEditingEntry(null);
-              setModalError('');
-              setIsModalOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Claim
-          </Button>
-        )}
+        <Button
+          onClick={() => {
+            setEditingEntry(null);
+            setModalError('');
+            setIsModalOpen(true);
+          }}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Claim
+        </Button>
       </div>
 
       <Tabs

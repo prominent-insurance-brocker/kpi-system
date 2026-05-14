@@ -704,24 +704,22 @@ export function MotorEnquiryPage({
               Monthly Targets
             </Button>
           )}
-          {activeView === 'enquiries' && (
-            <Button
-              disabled={noCurrentTarget}
-              title={noCurrentTarget ? 'Set this month\'s retention target first' : undefined}
-              onClick={() => {
-                if (noCurrentTarget) {
-                  setIsTargetModalOpen(true);
-                  return;
-                }
-                setEditingEntry(null);
-                setModalError('');
-                setIsModalOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Enquiry
-            </Button>
-          )}
+          <Button
+            disabled={noCurrentTarget}
+            title={noCurrentTarget ? 'Set this month\'s retention target first' : undefined}
+            onClick={() => {
+              if (noCurrentTarget) {
+                setIsTargetModalOpen(true);
+                return;
+              }
+              setEditingEntry(null);
+              setModalError('');
+              setIsModalOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Enquiry
+          </Button>
         </div>
       </div>
 

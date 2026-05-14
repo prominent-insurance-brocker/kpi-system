@@ -265,19 +265,20 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
                 ownerId(e) === currentUserId
             );
 
+            // Weekends are first-class entry days now (no gating). They get
+            // a neutral solid background when empty so they remain visually
+            // distinct from weekdays, but a submission/today indicator can
+            // still light them up green/blue.
             let indicatorBg = '';
             let indicatorStyle: React.CSSProperties | undefined;
-            if (isSunday) {
-              indicatorStyle = {
-                backgroundImage: 'repeating-linear-gradient(135deg,#D1D5DB 0,#D1D5DB 1px,transparent 1px,transparent 6px)',
-                backgroundColor: '#F9FAFB',
-              };
-            } else if (hasEntry) {
+            if (hasEntry) {
               indicatorBg = 'bg-[#DCFCE7]';
             } else if (isToday) {
               indicatorBg = 'bg-[#EEF2FF]';
-            } else if (isPast) {
+            } else if (isPast && !isSunday) {
               indicatorBg = 'bg-[#FEE2E2]';
+            } else if (isSunday) {
+              indicatorStyle = { backgroundColor: '#F3F4F6' };
             }
 
             return (
@@ -500,18 +501,14 @@ export function TrackerView<T extends BaseModuleEntry>({
                     let cellBg = '';
                     let cellStyle: React.CSSProperties | undefined;
 
-                    if (isSun) {
-                      cellStyle = {
-                        backgroundImage:
-                          'repeating-linear-gradient(135deg,#D1D5DB 0,#D1D5DB 1px,transparent 1px,transparent 6px)',
-                        backgroundColor: '#F9FAFB',
-                      };
-                    } else if (hasEntry) {
-                      cellBg = isToday ? 'bg-[#DCFCE7]' : 'bg-[#DCFCE7]';
+                    if (hasEntry) {
+                      cellBg = 'bg-[#DCFCE7]';
                     } else if (isToday) {
                       cellBg = 'bg-[#EEF2FF]';
-                    } else if (isPast) {
+                    } else if (isPast && !isSun) {
                       cellBg = 'bg-[#FEE2E2]';
+                    } else if (isSun) {
+                      cellStyle = { backgroundColor: '#F3F4F6' };
                     }
 
                     return (
@@ -689,12 +686,12 @@ export function WeeklyView<T extends BaseModuleEntry>({
 
               if (entries.length === 0) {
                 let statusType: 'submitted' | 'not_submitted' | 'upcoming' = 'upcoming';
-                if (past && !isSun) statusType = 'not_submitted';
+                if (past) statusType = 'not_submitted';
 
                 // Admin can only add records for themselves; viewing another user is read-only.
                 const isViewingSelf =
                   weeklyUserFilter === 'all' || weeklyUserFilter === String(currentUserId);
-                const canAddToday = isToday && !isSun && isViewingSelf;
+                const canAddToday = isToday && isViewingSelf;
                 const todayEntryExists = isToday
                   ? monthEntries.some(
                       (e) =>
@@ -706,7 +703,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
                   : false;
 
                 const emptyRowBg = isSun
-                  ? 'bg-[#FAFAFA]'
+                  ? 'bg-[#F3F4F6]'
                   : isToday
                   ? 'bg-[#F5F3FF]'
                   : 'bg-white';
@@ -715,7 +712,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
                     key={toLocalDateString(d)}
                     className={`h-[64px] transition-colors ${
                       isSun
-                        ? 'bg-[#FAFAFA] opacity-60'
+                        ? 'bg-[#F3F4F6] hover:bg-[#EAECEF]'
                         : isToday
                         ? 'bg-[#F5F3FF] hover:bg-[#EEF2FF]'
                         : 'bg-white hover:bg-[#FAFAFA]'
@@ -738,29 +735,27 @@ export function WeeklyView<T extends BaseModuleEntry>({
                       </div>
                     </td>
                     <td className="px-5 py-3">
-                      {!isSun && (
-                        canAddToday && !todayEntryExists ? (
-                          <Button
-                            size="sm"
-                            className="h-8 px-3 text-xs font-medium rounded-lg gap-1"
-                            onClick={() => onAddRecord(toLocalDateString(d))}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                            Add record
-                          </Button>
-                        ) : (
-                          <StatusBadge type={statusType} />
-                        )
+                      {canAddToday && !todayEntryExists ? (
+                        <Button
+                          size="sm"
+                          className="h-8 px-3 text-xs font-medium rounded-lg gap-1"
+                          onClick={() => onAddRecord(toLocalDateString(d))}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Add record
+                        </Button>
+                      ) : (
+                        <StatusBadge type={statusType} />
                       )}
                     </td>
                     <td className="px-5 py-3" />
                     {weeklyColumns.map((col) => (
                       <td key={col.key} className="px-5 py-3">
-                        {!isSun && <span className="text-[#D1D5DB]">—</span>}
+                        <span className="text-[#D1D5DB]">—</span>
                       </td>
                     ))}
                     <td className={`px-3 py-3 sticky right-0 z-10 ${emptyRowBg}`}>
-                      {!isSun && isViewingSelf && (
+                      {isViewingSelf && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button className="w-8 h-8 flex items-center justify-center rounded-md text-[#9CA3AF] hover:text-[#09090B] hover:bg-[#F3F3F3] transition-colors">
@@ -788,7 +783,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
                 const canDeleteEntry = entry.added_by === currentUserId;
                 const showActions = canEditEntry || canDeleteEntry;
                 const entryRowBg = isSun
-                  ? 'bg-[#FAFAFA]'
+                  ? 'bg-[#F3F4F6]'
                   : isToday
                   ? 'bg-[#F0FDF4]'
                   : 'bg-white';
@@ -798,7 +793,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
                     key={`${toLocalDateString(d)}-${entry.id}`}
                     className={`h-[64px] transition-colors ${
                       isSun
-                        ? 'bg-[#FAFAFA] opacity-60'
+                        ? 'bg-[#F3F4F6] hover:bg-[#EAECEF]'
                         : isToday
                         ? 'bg-[#F0FDF4] hover:bg-[#ECFDF5]'
                         : 'bg-white hover:bg-[#FAFAFA]'

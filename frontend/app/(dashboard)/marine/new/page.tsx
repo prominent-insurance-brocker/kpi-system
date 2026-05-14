@@ -15,7 +15,6 @@ export default function MarineNewPage() {
       moduleKey="marine_new"
       apiSlug="marine-new"
       title="Marine New"
-      deptLabel="Marine New DEPT."
       weeklyColumns={[
         { key: 'gross_booked_premium', header: 'Gross booked premium' },
         { key: 'quotes_created', header: 'Quotes created', tooltip: 'Number of quotes created' },

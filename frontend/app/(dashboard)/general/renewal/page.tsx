@@ -16,7 +16,6 @@ export default function GeneralRenewalPage() {
       moduleKey="general_renewal"
       apiSlug="general-renewal"
       title="General Renewal"
-      deptLabel="General Renewal DEPT."
       weeklyColumns={[
         { key: 'quotations', header: 'No. of quotes created' },
         { key: 'quotes_converted', header: 'No. of quotes converted' },

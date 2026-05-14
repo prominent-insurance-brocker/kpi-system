@@ -748,7 +748,6 @@ export default function SalesKPIPage() {
                 monthEntries={monthEntries}
                 moduleUsers={moduleUsers}
                 trackerUserFilter={trackerUserFilter}
-                deptLabel="Sales KPI DEPT."
                 onTrackerUserFilterChange={setTrackerUserFilter}
                 onPrevMonth={prevMonth}
                 onNextMonth={nextMonth}

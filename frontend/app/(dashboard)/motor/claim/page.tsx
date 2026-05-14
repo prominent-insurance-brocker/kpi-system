@@ -114,6 +114,10 @@ export default function MotorClaimPage() {
   const [pageSize, setPageSize] = useState(20);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  // Preset for the Next call date filter. Empty = no filter; 'custom' reveals
+  // a date range picker. The other presets compute from/to off `today` each
+  // time fetchEntries runs (see resolveNextCallBounds below).
+  const [nextCallPreset, setNextCallPreset] = useState('');
   const [nextCallFrom, setNextCallFrom] = useState('');
   const [nextCallTo, setNextCallTo] = useState('');
   const [userId, setUserId] = useState('');
@@ -158,6 +162,41 @@ export default function MotorClaimPage() {
   const [editingEntry, setEditingEntry] = useState<MotorClaimEntry | null>(null);
   const [modalError, setModalError] = useState('');
 
+  // Resolve the Next call date filter's effective from/to bounds based on the
+  // selected preset. Computed each call so "Today" always means "today now".
+  const resolveNextCallBounds = useCallback((): { from: string; to: string } => {
+    const fmt = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    const addDays = (base: Date, days: number) => {
+      const d = new Date(base);
+      d.setDate(d.getDate() + days);
+      return d;
+    };
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const todayStr = fmt(now);
+    switch (nextCallPreset) {
+      case 'overdue':
+        return { from: '', to: fmt(addDays(now, -1)) };
+      case 'today':
+        return { from: todayStr, to: todayStr };
+      case 'plus1':
+        return { from: fmt(addDays(now, 1)), to: fmt(addDays(now, 1)) };
+      case 'plus3':
+        return { from: fmt(addDays(now, 3)), to: fmt(addDays(now, 3)) };
+      case 'plus7':
+        return { from: fmt(addDays(now, 7)), to: fmt(addDays(now, 7)) };
+      case 'custom':
+        return { from: nextCallFrom, to: nextCallTo };
+      default:
+        return { from: '', to: '' };
+    }
+  }, [nextCallPreset, nextCallFrom, nextCallTo]);
+
   // ── Fetchers ─────────────────────────────────────────────────────────────
   const fetchEntries = useCallback(async () => {
     setIsLoading(true);
@@ -167,8 +206,9 @@ export default function MotorClaimPage() {
       qs.set('page_size', String(pageSize));
       if (dateFrom) qs.set('date_from', dateFrom);
       if (dateTo) qs.set('date_to', dateTo);
-      if (nextCallFrom) qs.set('next_call_date_from', nextCallFrom);
-      if (nextCallTo) qs.set('next_call_date_to', nextCallTo);
+      const { from: ncFrom, to: ncTo } = resolveNextCallBounds();
+      if (ncFrom) qs.set('next_call_date_from', ncFrom);
+      if (ncTo) qs.set('next_call_date_to', ncTo);
       if (userId) qs.set('user_id', userId);
       if (agentId) qs.set('agent_id', agentId);
       if (statusFilter) qs.set('status', statusFilter);
@@ -182,7 +222,7 @@ export default function MotorClaimPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, pageSize, dateFrom, dateTo, nextCallFrom, nextCallTo, userId, agentId, statusFilter, accidentTypeFilter, insurerFilter]);
+  }, [page, pageSize, dateFrom, dateTo, resolveNextCallBounds, userId, agentId, statusFilter, accidentTypeFilter, insurerFilter]);
 
   const fetchStats = useCallback(async () => {
     const result = await getMotorClaimStats({
@@ -416,7 +456,7 @@ export default function MotorClaimPage() {
   ];
 
   const hasActiveFilters =
-    !!(dateFrom || dateTo || nextCallFrom || nextCallTo || userId || agentId || statusFilter || accidentTypeFilter || insurerFilter);
+    !!(dateFrom || dateTo || nextCallPreset || userId || agentId || statusFilter || accidentTypeFilter || insurerFilter);
 
   return (
     <div className="p-6 space-y-6">
@@ -542,7 +582,6 @@ export default function MotorClaimPage() {
               monthEntries={monthEntries}
               moduleUsers={moduleUsers}
               trackerUserFilter={trackerUserFilter}
-              deptLabel="Motor Claim DEPT."
               onTrackerUserFilterChange={setTrackerUserFilter}
               onPrevMonth={() => {
                 if (teamCalMonth === 0) {
@@ -581,15 +620,32 @@ export default function MotorClaimPage() {
               },
               label: 'Entry date',
             }}
-            secondaryDateRange={{
-              from: nextCallFrom,
-              to: nextCallTo,
-              onChange: (from, to) => {
+            presetDateRange={{
+              label: 'Next call date',
+              preset: nextCallPreset,
+              onPresetChange: (p) => {
+                setNextCallPreset(p);
+                if (p !== 'custom') {
+                  setNextCallFrom('');
+                  setNextCallTo('');
+                }
+                setPage(1);
+              },
+              options: [
+                { value: 'overdue', label: 'Overdue' },
+                { value: 'today', label: 'Today' },
+                { value: 'plus1', label: '1 day from now' },
+                { value: 'plus3', label: '3 days from now' },
+                { value: 'plus7', label: '1 week from now' },
+                { value: 'custom', label: 'Custom' },
+              ],
+              customFrom: nextCallFrom,
+              customTo: nextCallTo,
+              onCustomChange: (from, to) => {
                 setNextCallFrom(from);
                 setNextCallTo(to);
                 setPage(1);
               },
-              label: 'Next call date',
             }}
             user={
               isAdmin
@@ -667,6 +723,7 @@ export default function MotorClaimPage() {
             onClear={() => {
               setDateFrom('');
               setDateTo('');
+              setNextCallPreset('');
               setNextCallFrom('');
               setNextCallTo('');
               setUserId('');

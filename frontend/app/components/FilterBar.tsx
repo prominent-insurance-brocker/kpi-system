@@ -62,6 +62,20 @@ export interface FilterBarProps {
     options: FilterBarOption[];
     placeholder?: string;
   };
+  // Preset selector for date-range filters (e.g. Motor Claim's "Next call
+  // date"). When `preset === 'custom'` the embedded date range picker is
+  // shown alongside; for other presets the page is responsible for
+  // computing the actual from/to bounds.
+  presetDateRange?: {
+    label: string;
+    preset: string;
+    onPresetChange: (preset: string) => void;
+    options: FilterBarOption[]; // first option is treated as "any" (no filter)
+    customFrom: string;
+    customTo: string;
+    onCustomChange: (from: string, to: string) => void;
+    placeholder?: string;
+  };
   // Generic searchable+paginated filters. Each entry renders a SearchableSelect
   // with its own async fetcher — used today for Type of Accident / Insurance
   // Company on the Motor Claim page.
@@ -89,6 +103,7 @@ export function FilterBar({
   user,
   agent,
   status,
+  presetDateRange,
   extraSearchableFilters,
   onClear,
   hasActiveFilters,
@@ -154,6 +169,41 @@ export function FilterBar({
             onChange={secondaryDateRange.onChange}
           />
         </div>
+      )}
+      {presetDateRange && (
+        <>
+          <div className="flex flex-col gap-2">
+            <Label>{presetDateRange.label}</Label>
+            <Select
+              value={presetDateRange.preset || "any"}
+              onValueChange={(v) =>
+                presetDateRange.onPresetChange(v === "any" ? "" : v)
+              }
+            >
+              <SelectTrigger className="w-[200px] shadow-none">
+                <SelectValue placeholder={presetDateRange.placeholder ?? "Any"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any</SelectItem>
+                {presetDateRange.options.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {presetDateRange.preset === "custom" && (
+            <div className="flex flex-col gap-2">
+              <Label>{presetDateRange.label} range</Label>
+              <DateRangeFilter
+                dateFrom={presetDateRange.customFrom}
+                dateTo={presetDateRange.customTo}
+                onChange={presetDateRange.onCustomChange}
+              />
+            </div>
+          )}
+        </>
       )}
       {user && (
         <div className="flex flex-col gap-2">

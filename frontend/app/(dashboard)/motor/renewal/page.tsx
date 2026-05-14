@@ -8,7 +8,6 @@ export default function MotorRenewalPage() {
       moduleKey="motor_renewal"
       apiSlug="motor-renewal"
       title="Motor Renewal"
-      deptLabel="Motor Renewal DEPT."
     />
   );
 }

@@ -15,7 +15,6 @@ export default function MarineRenewalPage() {
       moduleKey="marine_renewal"
       apiSlug="marine-renewal"
       title="Marine Renewal"
-      deptLabel="Marine Renewal DEPT."
       weeklyColumns={[
         { key: 'monthly_renewal_quotes_assigned', header: 'Monthly renewal quotes assigned' },
         { key: 'gross_booked_premium', header: 'Gross booked premium' },

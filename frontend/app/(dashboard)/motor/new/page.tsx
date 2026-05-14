@@ -8,7 +8,6 @@ export default function MotorNewPage() {
       moduleKey="motor_new"
       apiSlug="motor-new"
       title="Motor New"
-      deptLabel="Motor New DEPT."
     />
   );
 }

@@ -161,14 +161,12 @@ export interface MotorEnquiryPageProps {
   moduleKey: 'motor_new' | 'motor_renewal';
   apiSlug: MotorEnquiryModule;
   title: string;
-  deptLabel: string;
 }
 
 export function MotorEnquiryPage({
   moduleKey,
   apiSlug,
   title,
-  deptLabel,
 }: MotorEnquiryPageProps) {
   const config = STATUS_CONFIG[apiSlug];
   const statusLabelFor = useCallback(
@@ -867,7 +865,6 @@ export function MotorEnquiryPage({
               monthEntries={monthEntries}
               moduleUsers={moduleUsers}
               trackerUserFilter={trackerUserFilter}
-              deptLabel={deptLabel}
               onTrackerUserFilterChange={setTrackerUserFilter}
               onPrevMonth={() => {
                 if (teamCalMonth === 0) {

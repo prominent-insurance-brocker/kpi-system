@@ -16,7 +16,6 @@ export default function GeneralNewPage() {
       moduleKey="general_new"
       apiSlug="general-new"
       title="General New"
-      deptLabel="General New DEPT."
       weeklyColumns={[
         { key: 'quotations', header: 'No. of quotes created' },
         { key: 'quotes_converted', header: 'No. of quotes converted' },

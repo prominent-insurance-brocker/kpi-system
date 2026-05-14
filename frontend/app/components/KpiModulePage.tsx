@@ -320,7 +320,6 @@ export function TrackerView<T extends BaseModuleEntry>({
   monthEntries,
   moduleUsers,
   trackerUserFilter,
-  deptLabel,
   onTrackerUserFilterChange,
   onPrevMonth,
   onNextMonth,
@@ -331,7 +330,6 @@ export function TrackerView<T extends BaseModuleEntry>({
   monthEntries: T[];
   moduleUsers: ModuleUser[];
   trackerUserFilter: string;
-  deptLabel: string;
   onTrackerUserFilterChange: (v: string) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
@@ -982,7 +980,6 @@ export interface KpiModulePageProps<T extends BaseModuleEntry> {
   moduleKey: string;
   apiSlug: string;
   title: string;
-  deptLabel: string;
   weeklyColumns: WeeklyColumnSpec<T>[];
   dataColumns: DataColumnSpec<T>[];
   modalFields: ModalFieldSpec[];
@@ -992,7 +989,6 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   moduleKey,
   apiSlug,
   title,
-  deptLabel,
   weeklyColumns,
   dataColumns,
   modalFields,
@@ -1453,7 +1449,6 @@ export function KpiModulePage<T extends BaseModuleEntry>({
             monthEntries={monthEntries}
             moduleUsers={moduleUsers}
             trackerUserFilter={trackerUserFilter}
-            deptLabel={deptLabel}
             onTrackerUserFilterChange={setTrackerUserFilter}
             onPrevMonth={prevTeamMonth}
             onNextMonth={nextTeamMonth}

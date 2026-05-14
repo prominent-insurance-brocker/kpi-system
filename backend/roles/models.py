@@ -38,6 +38,7 @@ class RoleModulePermission(models.Model):
         ('marine_new', 'Marine New'),
         ('marine_renewal', 'Marine Renewal'),
         ('medical_claim', 'Medical Claim'),
+        ('settings', 'Settings'),
     ]
 
     role = models.ForeignKey(

@@ -273,7 +273,8 @@ export default function MedicalClaimPage() {
         user={canSeeAllData() ? {
           value: userId,
           onChange: (v) => updateFilters({ userId: v, page: 1 }),
-          options: users.map((u) => ({ value: u.id.toString(), label: u.full_name || u.email })),
+          moduleKey: 'medical_claim',
+          selectedLabel: users.find((u) => u.id.toString() === userId)?.full_name ?? null,
         } : undefined}
         status={{
           value: statusFilter,

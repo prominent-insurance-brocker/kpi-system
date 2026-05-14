@@ -68,7 +68,7 @@ const navigation: NavItem[] = [
       { name: 'Roles', href: '/admin/roles' },
     ],
   },
-  { name: 'Settings', href: '/admin/settings', icon: Settings, adminOnly: true },
+  { name: 'Settings', href: '/admin/settings', icon: Settings, moduleKey: 'settings' },
 ];
 
 export function Sidebar() {

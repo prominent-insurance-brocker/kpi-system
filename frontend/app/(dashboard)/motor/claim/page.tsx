@@ -43,9 +43,11 @@ import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate } from '@/app/lib/date';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   fetchApi,
   getUsersForModule,
+  getUsersForModulePage,
   getMotorClaimStats,
   updateMotorClaimStatus,
   getAccidentTypes,
@@ -439,10 +441,9 @@ export default function MotorClaimPage() {
                 ? {
                     value: dashUserId,
                     onChange: (v) => setDashUserId(v),
-                    options: moduleUsers.map((u) => ({
-                      value: String(u.id),
-                      label: u.full_name || u.email,
-                    })),
+                    moduleKey: 'motor_claim',
+                    selectedLabel:
+                      moduleUsers.find((u) => String(u.id) === dashUserId)?.full_name ?? null,
                   }
                 : undefined
             }
@@ -571,10 +572,9 @@ export default function MotorClaimPage() {
                       setUserId(v);
                       setPage(1);
                     },
-                    options: moduleUsers.map((u) => ({
-                      value: String(u.id),
-                      label: u.full_name || u.email,
-                    })),
+                    moduleKey: 'motor_claim',
+                    selectedLabel:
+                      moduleUsers.find((u) => String(u.id) === userId)?.full_name ?? null,
                   }
                 : undefined
             }
@@ -584,10 +584,9 @@ export default function MotorClaimPage() {
                 setAgentId(v);
                 setPage(1);
               },
-              options: salesUsers.map((u) => ({
-                value: String(u.id),
-                label: u.full_name || u.email,
-              })),
+              moduleKey: 'sales_kpi',
+              selectedLabel:
+                salesUsers.find((u) => String(u.id) === agentId)?.full_name ?? null,
             }}
             status={{
               value: statusFilter,
@@ -719,6 +718,17 @@ function ClaimForm({
   const [garageNumber, setGarageNumber] = useState(entry?.garage_number ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const sourceFetchPage = useCallback(
+    async ({ search, page }: { search: string; page: number }) => {
+      const res = await getUsersForModulePage('sales_kpi', { search, page });
+      return {
+        results: res.data?.results ?? [],
+        hasMore: res.data?.has_more ?? false,
+      };
+    },
+    []
+  );
+
   useEffect(() => {
     setClientName(entry?.client_name ?? '');
     setVehicleNumber(entry?.vehicle_number ?? '');
@@ -790,25 +800,16 @@ function ClaimForm({
         </div>
         <div className="space-y-2">
           <Label>Source / Sales Person *</Label>
-          <Select
-            value={sourceId ? String(sourceId) : undefined}
+          <SearchableSelect
+            value={sourceId ? String(sourceId) : null}
             onValueChange={(v) => setSourceId(Number(v))}
-          >
-            <SelectTrigger className="shadow-none">
-              <SelectValue placeholder="Select agent" />
-            </SelectTrigger>
-            <SelectContent>
-              {salesUsers.length === 0 ? (
-                <div className="px-3 py-2 text-sm text-[#71717A]">No agents available</div>
-              ) : (
-                salesUsers.map((u) => (
-                  <SelectItem key={u.id} value={String(u.id)}>
-                    {u.full_name || u.email}
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
+            placeholder="Select agent"
+            emptyLabel="No agents found"
+            selectedLabel={entry?.source_name ?? null}
+            getOptionValue={(u) => String(u.id)}
+            getOptionLabel={(u) => u.full_name || u.email}
+            fetchPage={sourceFetchPage}
+          />
         </div>
       </div>
 
@@ -819,7 +820,7 @@ function ClaimForm({
             value={accidentTypeId ? String(accidentTypeId) : undefined}
             onValueChange={(v) => setAccidentTypeId(Number(v))}
           >
-            <SelectTrigger className="shadow-none">
+            <SelectTrigger className="w-full shadow-none">
               <SelectValue placeholder="Select type" />
             </SelectTrigger>
             <SelectContent>
@@ -843,7 +844,7 @@ function ClaimForm({
             value={insurerId ? String(insurerId) : undefined}
             onValueChange={(v) => setInsurerId(Number(v))}
           >
-            <SelectTrigger className="shadow-none">
+            <SelectTrigger className="w-full shadow-none">
               <SelectValue placeholder="Select insurer" />
             </SelectTrigger>
             <SelectContent>

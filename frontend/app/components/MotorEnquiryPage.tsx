@@ -51,6 +51,7 @@ import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   AddedByCell,
   PersonalDailyTracker,
@@ -65,6 +66,7 @@ import { formatDate } from '@/app/lib/date';
 import {
   fetchApi,
   getUsersForModule,
+  getUsersForModulePage,
   getMotorEnquiryStats,
   updateMotorEnquiryStatus,
   updateMotorEnquiryRevisions,
@@ -696,10 +698,7 @@ export function MotorEnquiryPage({
       <div className={isRenewal ? 'flex-1 min-w-0 space-y-6' : 'contents'}>
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{title}</h1>
-          <p className="text-muted-foreground">{deptLabel}</p>
-        </div>
+        <h1 className="text-2xl font-bold">{title}</h1>
         <div className="flex items-center gap-2">
           {isRenewal && (
             <Button variant="outline" onClick={() => setIsPanelOpen((o) => !o)}>
@@ -789,10 +788,9 @@ export function MotorEnquiryPage({
                 ? {
                     value: dashUserId,
                     onChange: (v) => setDashUserId(v),
-                    options: moduleUsers.map((u) => ({
-                      value: String(u.id),
-                      label: u.full_name || u.email,
-                    })),
+                    moduleKey,
+                    selectedLabel:
+                      moduleUsers.find((u) => String(u.id) === dashUserId)?.full_name ?? null,
                   }
                 : undefined
             }
@@ -924,10 +922,9 @@ export function MotorEnquiryPage({
                       setUserId(v);
                       setPage(1);
                     },
-                    options: moduleUsers.map((u) => ({
-                      value: String(u.id),
-                      label: u.full_name || u.email,
-                    })),
+                    moduleKey,
+                    selectedLabel:
+                      moduleUsers.find((u) => String(u.id) === userId)?.full_name ?? null,
                   }
                 : undefined
             }
@@ -937,10 +934,9 @@ export function MotorEnquiryPage({
                 setAgentId(v);
                 setPage(1);
               },
-              options: salesUsers.map((u) => ({
-                value: String(u.id),
-                label: u.full_name || u.email,
-              })),
+              moduleKey: 'sales_kpi',
+              selectedLabel:
+                salesUsers.find((u) => String(u.id) === agentId)?.full_name ?? null,
             }}
             status={{
               value: statusFilter,
@@ -1012,7 +1008,6 @@ export function MotorEnquiryPage({
           </DialogHeader>
           <EnquiryForm
             entry={editingEntry}
-            salesUsers={salesUsers}
             error={modalError}
             onSave={handleSaveNew}
             onClose={() => {
@@ -1306,13 +1301,11 @@ function RemarksPanel({
 
 function EnquiryForm({
   entry,
-  salesUsers,
   onSave,
   onClose,
   error,
 }: {
   entry: MotorEnquiryEntry | null;
-  salesUsers: ModuleUser[];
   onSave: (payload: {
     client_name: string;
     agent: number;
@@ -1331,6 +1324,17 @@ function EnquiryForm({
     entry?.quotes_compared != null ? String(entry.quotes_compared) : '0'
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const agentFetchPage = useCallback(
+    async ({ search, page }: { search: string; page: number }) => {
+      const res = await getUsersForModulePage('sales_kpi', { search, page });
+      return {
+        results: res.data?.results ?? [],
+        hasMore: res.data?.has_more ?? false,
+      };
+    },
+    []
+  );
 
   useEffect(() => {
     setClientName(entry?.client_name ?? '');
@@ -1375,25 +1379,16 @@ function EnquiryForm({
 
       <div className="space-y-2">
         <Label>Source / Agent *</Label>
-        <Select
-          value={agentId ? String(agentId) : undefined}
+        <SearchableSelect
+          value={agentId ? String(agentId) : null}
           onValueChange={(v) => setAgentId(Number(v))}
-        >
-          <SelectTrigger className="shadow-none">
-            <SelectValue placeholder="Select agent" />
-          </SelectTrigger>
-          <SelectContent>
-            {salesUsers.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-[#71717A]">No agents available</div>
-            ) : (
-              salesUsers.map((u) => (
-                <SelectItem key={u.id} value={String(u.id)}>
-                  {u.full_name || u.email}
-                </SelectItem>
-              ))
-            )}
-          </SelectContent>
-        </Select>
+          placeholder="Select agent"
+          emptyLabel="No agents found"
+          selectedLabel={entry?.agent_name ?? null}
+          getOptionValue={(u) => String(u.id)}
+          getOptionLabel={(u) => u.full_name || u.email}
+          fetchPage={agentFetchPage}
+        />
       </div>
 
       <div className="space-y-2">

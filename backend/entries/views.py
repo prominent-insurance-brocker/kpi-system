@@ -645,15 +645,17 @@ class _LookupViewSet(viewsets.ModelViewSet):
 
     GET/list/retrieve: any authenticated user (so the Motor Claim form can
         populate its dropdowns).
-    POST/PATCH/PUT/DELETE: admin only.
+    POST/PATCH/PUT/DELETE: admins OR users with the 'settings' module
+        permission.
     """
+    module_key = 'settings'
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['is_active']
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
             return [IsAuthenticated()]
-        return [IsAuthenticated(), IsAdminUser()]
+        return [IsAuthenticated(), HasModulePermission()]
 
 
 class TypeOfAccidentViewSet(_LookupViewSet):

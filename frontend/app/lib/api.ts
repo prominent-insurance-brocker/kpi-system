@@ -268,23 +268,41 @@ export async function getUsersForFilter(): Promise<ApiResponse<{ id: number; ema
   return { error: result.error };
 }
 
-// Get active users who have a specific module permission (for tracker views)
+// Get active users who have a specific module permission (for tracker views
+// and "load all" use cases). Requests a large page so existing callers keep
+// receiving every user in one response. For paginated/searchable dropdown
+// usage call getUsersForModulePage instead.
 export async function getUsersForModule(
   moduleKey: string
 ): Promise<ApiResponse<{ id: number; email: string; full_name: string }[]>> {
-  const result = await fetchApi<PaginatedResponse<UserAdmin>>(
-    `/api/auth/users/?module=${encodeURIComponent(moduleKey)}&is_active=true&page_size=1000`
+  const result = await fetchApi<{ results: { id: number; email: string; full_name: string }[] }>(
+    `/api/auth/users/module-members/?module=${encodeURIComponent(moduleKey)}&page_size=200`
   );
   if (result.data) {
-    return {
-      data: result.data.results.map(u => ({
-        id: u.id,
-        email: u.email,
-        full_name: u.full_name,
-      })),
-    };
+    return { data: result.data.results };
   }
   return { error: result.error };
+}
+
+// Paginated + searchable variant for the SearchableSelect combobox component.
+export async function getUsersForModulePage(
+  moduleKey: string,
+  params: { search?: string; page?: number; page_size?: number } = {}
+): Promise<ApiResponse<{
+  results: { id: number; email: string; full_name: string }[];
+  count: number;
+  has_more: boolean;
+}>> {
+  const qs = new URLSearchParams();
+  qs.set('module', moduleKey);
+  if (params.search) qs.set('search', params.search);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.page_size) qs.set('page_size', String(params.page_size));
+  return fetchApi<{
+    results: { id: number; email: string; full_name: string }[];
+    count: number;
+    has_more: boolean;
+  }>(`/api/auth/users/module-members/?${qs}`);
 }
 
 // ─── Motor enquiry (motor_new / motor_renewal share the same shape) ──────────

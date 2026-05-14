@@ -46,6 +46,7 @@ const CATEGORY_CONFIG: { prefix: string; name: string }[] = [
   { prefix: 'sales_', name: 'Sales' },
   { prefix: 'marine_', name: 'Marine' },
   { prefix: 'medical_', name: 'Medical' },
+  { prefix: 'settings', name: 'Settings' },
 ];
 
 function groupModulesByCategory(modules: ModuleInfo[]): ModuleCategory[] {

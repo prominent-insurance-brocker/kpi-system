@@ -337,3 +337,69 @@ class UserViewSet(viewsets.ModelViewSet):
             )
 
         return super().destroy(request, *args, **kwargs)
+
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path='module-members',
+        permission_classes=[IsAuthenticated],
+    )
+    def module_members(self, request):
+        """Paginated, searchable lookup of active users with a given module
+        permission.
+
+        Returns the minimum needed to populate agent/source pickers in entry
+        forms (id, email, full_name). Authenticated to any logged-in user so
+        non-admin entry creators can populate their dropdowns.
+
+        Query params:
+            module    (required) — module key, e.g. "sales_kpi"
+            search    (optional) — case-insensitive match on first/last/email
+            page      (optional, default 1)
+            page_size (optional, default 20, capped at 200)
+        """
+        from django.db import models as db_models
+        module = request.query_params.get('module')
+        if not module:
+            return Response(
+                {'error': 'module query param is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        search = (request.query_params.get('search') or '').strip()
+        try:
+            page = max(int(request.query_params.get('page', 1)), 1)
+            page_size = min(max(int(request.query_params.get('page_size', 20)), 1), 200)
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'page and page_size must be integers'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = (
+            CustomUser.objects
+            .filter(is_active=True)
+            .filter(
+                db_models.Q(is_staff=True) |
+                db_models.Q(role__permissions__module=module)
+            )
+            .distinct()
+            .order_by('full_name', 'email', 'id')
+        )
+        if search:
+            qs = qs.filter(
+                db_models.Q(full_name__icontains=search) |
+                db_models.Q(email__icontains=search)
+            )
+
+        total = qs.count()
+        offset = (page - 1) * page_size
+        users = qs[offset:offset + page_size]
+        data = [
+            {'id': u.id, 'email': u.email, 'full_name': u.get_full_name()}
+            for u in users
+        ]
+        return Response({
+            'results': data,
+            'count': total,
+            'has_more': offset + len(data) < total,
+        })

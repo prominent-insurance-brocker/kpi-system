@@ -704,22 +704,6 @@ export function MotorEnquiryPage({
               Monthly Targets
             </Button>
           )}
-          <Button
-            disabled={noCurrentTarget}
-            title={noCurrentTarget ? 'Set this month\'s retention target first' : undefined}
-            onClick={() => {
-              if (noCurrentTarget) {
-                setIsTargetModalOpen(true);
-                return;
-              }
-              setEditingEntry(null);
-              setModalError('');
-              setIsModalOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Enquiry
-          </Button>
         </div>
       </div>
 
@@ -890,68 +874,86 @@ export function MotorEnquiryPage({
 
         {/* ─── Enquiries ────────────────────────────────────────────────── */}
         <TabsContent value="enquiries" className="mt-4 space-y-4">
-          <FilterBar
-            search={{
-              value: clientName,
-              onChange: (v) => {
-                setClientName(v);
+          <div className="flex items-end justify-between gap-4 flex-wrap">
+            <FilterBar
+              search={{
+                value: clientName,
+                onChange: (v) => {
+                  setClientName(v);
+                  setPage(1);
+                },
+                placeholder: 'Search by client name…',
+                label: 'Client',
+              }}
+              dateRange={{
+                from: dateFrom,
+                to: dateTo,
+                onChange: (from, to) => {
+                  setDateFrom(from);
+                  setDateTo(to);
+                  setPage(1);
+                },
+              }}
+              user={
+                isAdmin
+                  ? {
+                      value: userId,
+                      onChange: (v) => {
+                        setUserId(v);
+                        setPage(1);
+                      },
+                      moduleKey,
+                      selectedLabel:
+                        moduleUsers.find((u) => String(u.id) === userId)?.full_name ?? null,
+                    }
+                  : undefined
+              }
+              agent={{
+                value: agentId,
+                onChange: (v) => {
+                  setAgentId(v);
+                  setPage(1);
+                },
+                moduleKey: 'sales_kpi',
+                selectedLabel:
+                  salesUsers.find((u) => String(u.id) === agentId)?.full_name ?? null,
+              }}
+              status={{
+                value: statusFilter,
+                onChange: (v) => {
+                  setStatusFilter(v);
+                  setPage(1);
+                },
+                options: config.options.map((o) => ({ value: o.value, label: o.label })),
+              }}
+              hasActiveFilters={hasActiveFilters}
+              onClear={() => {
+                setDateFrom('');
+                setDateTo('');
+                setUserId('');
+                setAgentId('');
+                setStatusFilter('');
+                setClientName('');
                 setPage(1);
-              },
-              placeholder: 'Search by client name…',
-              label: 'Client',
-            }}
-            dateRange={{
-              from: dateFrom,
-              to: dateTo,
-              onChange: (from, to) => {
-                setDateFrom(from);
-                setDateTo(to);
-                setPage(1);
-              },
-            }}
-            user={
-              isAdmin
-                ? {
-                    value: userId,
-                    onChange: (v) => {
-                      setUserId(v);
-                      setPage(1);
-                    },
-                    moduleKey,
-                    selectedLabel:
-                      moduleUsers.find((u) => String(u.id) === userId)?.full_name ?? null,
-                  }
-                : undefined
-            }
-            agent={{
-              value: agentId,
-              onChange: (v) => {
-                setAgentId(v);
-                setPage(1);
-              },
-              moduleKey: 'sales_kpi',
-              selectedLabel:
-                salesUsers.find((u) => String(u.id) === agentId)?.full_name ?? null,
-            }}
-            status={{
-              value: statusFilter,
-              onChange: (v) => {
-                setStatusFilter(v);
-                setPage(1);
-              },
-              options: config.options.map((o) => ({ value: o.value, label: o.label })),
-            }}
-            hasActiveFilters={hasActiveFilters}
-            onClear={() => {
-              setDateFrom('');
-              setDateTo('');
-              setUserId('');
-              setAgentId('');
-              setStatusFilter('');
-              setClientName('');
-              setPage(1);
-            }}
-          />
+              }}
+            />
+            <Button
+              disabled={noCurrentTarget}
+              title={noCurrentTarget ? "Set this month's retention target first" : undefined}
+              onClick={() => {
+                if (noCurrentTarget) {
+                  setIsTargetModalOpen(true);
+                  return;
+                }
+                setEditingEntry(null);
+                setModalError('');
+                setIsModalOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Enquiry
+            </Button>
+          </div>
 
           <div className="flex gap-4">
             <div className="flex-1 min-w-0">

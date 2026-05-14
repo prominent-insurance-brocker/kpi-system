@@ -22,6 +22,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 interface MedicalClaimEntry {
   id: number;
+  pib_id: string;
   date: string;
   customer_name: string;
   status: string;
@@ -225,7 +226,8 @@ export default function MedicalClaimPage() {
   };
 
   const columns = [
-    { key: 'date', header: 'Date', render: (item: MedicalClaimEntry) => formatDate(item.date) },
+    { key: 'pib_id', header: 'ID', render: (item: MedicalClaimEntry) => item.pib_id },
+    { key: 'customer_name', header: 'Client Name' },
     {
       key: 'status',
       header: 'Status',
@@ -242,10 +244,10 @@ export default function MedicalClaimPage() {
         );
       },
     },
-    { key: 'added_by_name', header: 'Added By', render: (item: MedicalClaimEntry) => <AddedByCell entry={item} /> },
-    { key: 'added_at', header: 'Added on', render: (item: MedicalClaimEntry) => formatDate(item.added_at.split('T')[0]) },
-    { key: 'customer_name', header: 'Customer Name' },
+    { key: 'added_by_name', header: 'Added by', render: (item: MedicalClaimEntry) => <AddedByCell entry={item} /> },
+    { key: 'date', header: 'Date', render: (item: MedicalClaimEntry) => formatDate(item.date) },
     { key: 'tat_display', header: 'TAT' },
+    { key: 'added_at', header: 'Added on', render: (item: MedicalClaimEntry) => formatDate(item.added_at.split('T')[0]) },
   ];
 
   const hasActiveFilters = dateFrom || dateTo || userId || statusFilter || customerName;

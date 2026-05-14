@@ -577,13 +577,6 @@ export function MotorEnquiryPage({
       render: (item: MotorEnquiryEntry) => item.pib_id,
     },
     { key: 'client_name', header: 'Client Name' },
-    { key: 'agent_name', header: 'Agent Name' },
-    {
-      key: 'added_by_name',
-      header: 'Added by',
-      render: (item: MotorEnquiryEntry) => <AddedByCell entry={item} />,
-    },
-    { key: 'chassis_no', header: 'Chassis No' },
     {
       key: 'status',
       header: 'Status',
@@ -618,6 +611,13 @@ export function MotorEnquiryPage({
           </Select>
         ),
     },
+    {
+      key: 'added_by_name',
+      header: 'Added by',
+      render: (item: MotorEnquiryEntry) => <AddedByCell entry={item} />,
+    },
+    { key: 'agent_name', header: 'Agent Name' },
+    { key: 'chassis_no', header: 'Chassis No' },
     {
       key: 'revisions',
       header: 'Revisions',

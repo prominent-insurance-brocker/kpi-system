@@ -319,23 +319,6 @@ export default function MotorClaimPage() {
       render: (item: MotorClaimEntry) => item.pib_id,
     },
     { key: 'client_name', header: 'Client Name' },
-    { key: 'vehicle_number', header: 'Vehicle Number' },
-    { key: 'claim_number', header: 'Claim Number' },
-    {
-      key: 'source_name',
-      header: 'Source',
-      render: (item: MotorClaimEntry) => item.source_name || '—',
-    },
-    { key: 'type_of_accident_name', header: 'Type of Accident' },
-    { key: 'insurance_company_name', header: 'Insurance Company' },
-    {
-      key: 'next_call_date',
-      header: 'Next call date',
-      render: (item: MotorClaimEntry) =>
-        item.next_call_date ? formatDate(item.next_call_date) : '—',
-    },
-    { key: 'garage_name', header: 'Garage Name' },
-    { key: 'garage_number', header: 'Garage Number' },
     {
       key: 'status',
       header: 'Status',
@@ -368,14 +351,31 @@ export default function MotorClaimPage() {
       },
     },
     {
-      key: 'tat_display',
-      header: 'TAT',
-      render: (item: MotorClaimEntry) => item.tat_display || '—',
-    },
-    {
       key: 'added_by_name',
       header: 'Added by',
       render: (item: MotorClaimEntry) => <AddedByCell entry={item} />,
+    },
+    { key: 'vehicle_number', header: 'Vehicle Number' },
+    { key: 'claim_number', header: 'Claim Number' },
+    {
+      key: 'source_name',
+      header: 'Source',
+      render: (item: MotorClaimEntry) => item.source_name || '—',
+    },
+    { key: 'type_of_accident_name', header: 'Type of Accident' },
+    { key: 'insurance_company_name', header: 'Insurance Company' },
+    {
+      key: 'next_call_date',
+      header: 'Next call date',
+      render: (item: MotorClaimEntry) =>
+        item.next_call_date ? formatDate(item.next_call_date) : '—',
+    },
+    { key: 'garage_name', header: 'Garage Name' },
+    { key: 'garage_number', header: 'Garage Number' },
+    {
+      key: 'tat_display',
+      header: 'TAT',
+      render: (item: MotorClaimEntry) => item.tat_display || '—',
     },
     {
       key: 'added_at',

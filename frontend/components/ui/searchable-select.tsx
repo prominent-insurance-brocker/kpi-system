@@ -161,7 +161,6 @@ export function SearchableSelect<T>({
         align="start"
         sideOffset={4}
         className="w-[var(--radix-popover-trigger-width)] p-0"
-        onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <div className="flex items-center border-b px-3 py-2">
           <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />

@@ -22,18 +22,22 @@ class ClaimEntryFilter(EntryFilter):
 
 class MotorClaimEntryFilter(EntryFilter):
     """Filter for motor-claim entries — status, source agent, client-name search,
-    plus a secondary date range on next_call_date.
+    plus a secondary date range on next_call_date and lookup-FK filters for
+    type_of_accident / insurance_company.
     """
     status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
     client_name = django_filters.CharFilter(field_name='client_name', lookup_expr='icontains')
     agent_id = django_filters.NumberFilter(field_name='source_id')
     next_call_date_from = django_filters.DateFilter(field_name='next_call_date', lookup_expr='gte')
     next_call_date_to = django_filters.DateFilter(field_name='next_call_date', lookup_expr='lte')
+    type_of_accident = django_filters.NumberFilter(field_name='type_of_accident_id')
+    insurance_company = django_filters.NumberFilter(field_name='insurance_company_id')
 
     class Meta:
         fields = [
             'date_from', 'date_to', 'user_id', 'status', 'client_name',
             'agent_id', 'next_call_date_from', 'next_call_date_to',
+            'type_of_accident', 'insurance_company',
         ]
 
 

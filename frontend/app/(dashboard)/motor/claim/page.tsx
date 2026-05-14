@@ -54,7 +54,9 @@ import {
   updateMotorClaimStatus,
   updateMotorClaimNextCallDate,
   getAccidentTypes,
+  getAccidentTypesPage,
   getInsuranceCompanies,
+  getInsuranceCompaniesPage,
   type MotorClaimEntry,
   type MotorClaimStats,
   type AccidentType,
@@ -117,6 +119,8 @@ export default function MotorClaimPage() {
   const [userId, setUserId] = useState('');
   const [agentId, setAgentId] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [accidentTypeFilter, setAccidentTypeFilter] = useState('');
+  const [insurerFilter, setInsurerFilter] = useState('');
 
   // Dashboard filters (independent so Dashboard date range doesn't tug
   // the Enquiries tab around when switching).
@@ -168,6 +172,8 @@ export default function MotorClaimPage() {
       if (userId) qs.set('user_id', userId);
       if (agentId) qs.set('agent_id', agentId);
       if (statusFilter) qs.set('status', statusFilter);
+      if (accidentTypeFilter) qs.set('type_of_accident', accidentTypeFilter);
+      if (insurerFilter) qs.set('insurance_company', insurerFilter);
       const result = await fetchApi<{ results: MotorClaimEntry[]; count: number }>(
         `/api/entries/motor-claim/?${qs}`
       );
@@ -176,7 +182,7 @@ export default function MotorClaimPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, pageSize, dateFrom, dateTo, nextCallFrom, nextCallTo, userId, agentId, statusFilter]);
+  }, [page, pageSize, dateFrom, dateTo, nextCallFrom, nextCallTo, userId, agentId, statusFilter, accidentTypeFilter, insurerFilter]);
 
   const fetchStats = useCallback(async () => {
     const result = await getMotorClaimStats({
@@ -410,15 +416,12 @@ export default function MotorClaimPage() {
   ];
 
   const hasActiveFilters =
-    !!(dateFrom || dateTo || nextCallFrom || nextCallTo || userId || agentId || statusFilter);
+    !!(dateFrom || dateTo || nextCallFrom || nextCallTo || userId || agentId || statusFilter || accidentTypeFilter || insurerFilter);
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Motor Claim</h1>
-          <p className="text-muted-foreground">Motor Claim DEPT.</p>
-        </div>
+        <h1 className="text-2xl font-bold">Motor Claim</h1>
         {activeView === 'enquiries' && (
           <Button
             onClick={() => {
@@ -620,6 +623,46 @@ export default function MotorClaimPage() {
               },
               options: STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
             }}
+            extraSearchableFilters={[
+              {
+                label: 'Type of Accident',
+                value: accidentTypeFilter,
+                onChange: (v) => {
+                  setAccidentTypeFilter(v);
+                  setPage(1);
+                },
+                placeholder: 'All Accident Types',
+                clearLabel: 'All Accident Types',
+                selectedLabel:
+                  accidentTypes.find((t) => String(t.id) === accidentTypeFilter)?.name ?? null,
+                fetchPage: async ({ search, page }) => {
+                  const res = await getAccidentTypesPage({ search, page });
+                  return {
+                    results: res.data?.results ?? [],
+                    hasMore: res.data?.has_more ?? false,
+                  };
+                },
+              },
+              {
+                label: 'Insurance Company',
+                value: insurerFilter,
+                onChange: (v) => {
+                  setInsurerFilter(v);
+                  setPage(1);
+                },
+                placeholder: 'All Insurers',
+                clearLabel: 'All Insurers',
+                selectedLabel:
+                  insurers.find((c) => String(c.id) === insurerFilter)?.name ?? null,
+                fetchPage: async ({ search, page }) => {
+                  const res = await getInsuranceCompaniesPage({ search, page });
+                  return {
+                    results: res.data?.results ?? [],
+                    hasMore: res.data?.has_more ?? false,
+                  };
+                },
+              },
+            ]}
             hasActiveFilters={hasActiveFilters}
             onClear={() => {
               setDateFrom('');
@@ -629,6 +672,8 @@ export default function MotorClaimPage() {
               setUserId('');
               setAgentId('');
               setStatusFilter('');
+              setAccidentTypeFilter('');
+              setInsurerFilter('');
               setPage(1);
             }}
           />
@@ -674,8 +719,6 @@ export default function MotorClaimPage() {
           <ClaimForm
             entry={editingEntry}
             salesUsers={salesUsers}
-            accidentTypes={accidentTypes}
-            insurers={insurers}
             error={modalError}
             onSave={handleSave}
             onClose={() => {
@@ -713,16 +756,12 @@ function StatCard({
 function ClaimForm({
   entry,
   salesUsers,
-  accidentTypes,
-  insurers,
   onSave,
   onClose,
   error,
 }: {
   entry: MotorClaimEntry | null;
   salesUsers: ModuleUser[];
-  accidentTypes: AccidentType[];
-  insurers: InsuranceCompany[];
   onSave: (payload: Partial<MotorClaimEntry>) => void;
   onClose: () => void;
   error: string;
@@ -745,6 +784,28 @@ function ClaimForm({
   const sourceFetchPage = useCallback(
     async ({ search, page }: { search: string; page: number }) => {
       const res = await getUsersForModulePage('sales_kpi', { search, page });
+      return {
+        results: res.data?.results ?? [],
+        hasMore: res.data?.has_more ?? false,
+      };
+    },
+    []
+  );
+
+  const accidentTypeFetchPage = useCallback(
+    async ({ search, page }: { search: string; page: number }) => {
+      const res = await getAccidentTypesPage({ search, page });
+      return {
+        results: res.data?.results ?? [],
+        hasMore: res.data?.has_more ?? false,
+      };
+    },
+    []
+  );
+
+  const insurerFetchPage = useCallback(
+    async ({ search, page }: { search: string; page: number }) => {
+      const res = await getInsuranceCompaniesPage({ search, page });
       return {
         results: res.data?.results ?? [],
         hasMore: res.data?.has_more ?? false,
@@ -840,51 +901,29 @@ function ClaimForm({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label>Type of Accident *</Label>
-          <Select
-            value={accidentTypeId ? String(accidentTypeId) : undefined}
+          <SearchableSelect
+            value={accidentTypeId ? String(accidentTypeId) : null}
             onValueChange={(v) => setAccidentTypeId(Number(v))}
-          >
-            <SelectTrigger className="w-full shadow-none">
-              <SelectValue placeholder="Select type" />
-            </SelectTrigger>
-            <SelectContent>
-              {accidentTypes.length === 0 ? (
-                <div className="px-3 py-2 text-sm text-[#71717A]">
-                  None configured — ask an admin to add some in Settings.
-                </div>
-              ) : (
-                accidentTypes.map((t) => (
-                  <SelectItem key={t.id} value={String(t.id)}>
-                    {t.name}
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
+            placeholder="Select type"
+            emptyLabel="No accident types found"
+            selectedLabel={entry?.type_of_accident_name ?? null}
+            getOptionValue={(t) => String(t.id)}
+            getOptionLabel={(t) => t.name}
+            fetchPage={accidentTypeFetchPage}
+          />
         </div>
         <div className="space-y-2">
           <Label>Insurance Company *</Label>
-          <Select
-            value={insurerId ? String(insurerId) : undefined}
+          <SearchableSelect
+            value={insurerId ? String(insurerId) : null}
             onValueChange={(v) => setInsurerId(Number(v))}
-          >
-            <SelectTrigger className="w-full shadow-none">
-              <SelectValue placeholder="Select insurer" />
-            </SelectTrigger>
-            <SelectContent>
-              {insurers.length === 0 ? (
-                <div className="px-3 py-2 text-sm text-[#71717A]">
-                  None configured — ask an admin to add some in Settings.
-                </div>
-              ) : (
-                insurers.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
+            placeholder="Select insurer"
+            emptyLabel="No insurance companies found"
+            selectedLabel={entry?.insurance_company_name ?? null}
+            getOptionValue={(c) => String(c.id)}
+            getOptionLabel={(c) => c.name}
+            fetchPage={insurerFetchPage}
+          />
         </div>
       </div>
 

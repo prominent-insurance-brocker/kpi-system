@@ -62,6 +62,22 @@ export interface FilterBarProps {
     options: FilterBarOption[];
     placeholder?: string;
   };
+  // Generic searchable+paginated filters. Each entry renders a SearchableSelect
+  // with its own async fetcher — used today for Type of Accident / Insurance
+  // Company on the Motor Claim page.
+  extraSearchableFilters?: Array<{
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+    clearLabel?: string;
+    selectedLabel?: string | null;
+    width?: string;
+    fetchPage: (params: { search: string; page: number }) => Promise<{
+      results: Array<{ id: number; name: string }>;
+      hasMore: boolean;
+    }>;
+  }>;
   onClear?: () => void;
   hasActiveFilters?: boolean;
 }
@@ -73,6 +89,7 @@ export function FilterBar({
   user,
   agent,
   status,
+  extraSearchableFilters,
   onClear,
   hasActiveFilters,
 }: FilterBarProps) {
@@ -195,6 +212,24 @@ export function FilterBar({
           </Select>
         </div>
       )}
+      {extraSearchableFilters?.map((f) => (
+        <div key={f.label} className="flex flex-col gap-2">
+          <Label>{f.label}</Label>
+          <div className={f.width ?? "w-[200px]"}>
+            <SearchableSelect
+              value={f.value || null}
+              onValueChange={(v) => f.onChange(v)}
+              placeholder={f.placeholder ?? `All ${f.label}`}
+              clearLabel={f.clearLabel ?? `All ${f.label}`}
+              selectedLabel={f.selectedLabel ?? null}
+              getOptionValue={(o) => String(o.id)}
+              getOptionLabel={(o) => o.name}
+              fetchPage={f.fetchPage}
+              emptyLabel={`No ${f.label.toLowerCase()} found`}
+            />
+          </div>
+        </div>
+      ))}
       {hasActiveFilters && onClear && (
         <Button variant="outline" onClick={onClear}>
           Clear Filters

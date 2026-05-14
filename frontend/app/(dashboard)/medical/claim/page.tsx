@@ -255,7 +255,7 @@ export default function MedicalClaimPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold">Medical Claim</h1><p className="text-muted-foreground">Manage medical claims</p></div>
+        <h1 className="text-2xl font-bold">Medical Claim</h1>
         {(!userId || userId === String(currentUserId)) && (
           <Button onClick={() => { setEditingEntry(null); setError(''); setIsModalOpen(true); }}><Plus className="h-4 w-4 mr-2" /> Add Entry</Button>
         )}

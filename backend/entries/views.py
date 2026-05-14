@@ -691,8 +691,9 @@ class _LookupViewSet(viewsets.ModelViewSet):
         permission.
     """
     module_key = 'settings'
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ['is_active']
+    search_fields = ['name']
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):

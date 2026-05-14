@@ -535,6 +535,39 @@ export const getAccidentTypes = (params?: { is_active?: boolean }) =>
 export const getInsuranceCompanies = (params?: { is_active?: boolean }) =>
   _listLookup('insurance-companies', params);
 
+// Paginated + searchable variants for SearchableSelect dropdowns.
+async function _listLookupPage(
+  resource: 'accident-types' | 'insurance-companies',
+  params: { search?: string; page?: number; page_size?: number; is_active?: boolean } = {}
+): Promise<ApiResponse<{ results: SettingsLookup[]; count: number; has_more: boolean }>> {
+  const qs = new URLSearchParams();
+  qs.set('is_active', String(params.is_active ?? true));
+  if (params.search) qs.set('search', params.search);
+  qs.set('page', String(params.page ?? 1));
+  qs.set('page_size', String(params.page_size ?? 20));
+  const result = await fetchApi<{ results: SettingsLookup[]; count: number; next: string | null }>(
+    `/api/entries/settings/${resource}/?${qs}`
+  );
+  if (result.data) {
+    return {
+      data: {
+        results: result.data.results,
+        count: result.data.count,
+        has_more: !!result.data.next,
+      },
+    };
+  }
+  return { error: result.error };
+}
+
+export const getAccidentTypesPage = (
+  params: { search?: string; page?: number; page_size?: number; is_active?: boolean } = {}
+) => _listLookupPage('accident-types', params);
+
+export const getInsuranceCompaniesPage = (
+  params: { search?: string; page?: number; page_size?: number; is_active?: boolean } = {}
+) => _listLookupPage('insurance-companies', params);
+
 export async function createAccidentType(
   name: string
 ): Promise<ApiResponse<AccidentType>> {

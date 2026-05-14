@@ -427,8 +427,7 @@ export function TrackerView<T extends BaseModuleEntry>({
           <thead className="sticky top-0 z-20">
             <tr className="border-b border-[#E4E4E4]">
               <th className="sticky left-0 z-30 bg-[#F9F9F9] px-4 py-3 text-left min-w-[180px] border-r border-[#E4E4E4]">
-                <div className="text-sm font-semibold text-[#09090B]">{deptLabel}</div>
-                <div className="text-xs text-[#71717A]">{moduleUsers.length} members</div>
+                <div className="text-xs font-medium text-[#71717A]">{moduleUsers.length} members</div>
               </th>
               {calDays.map((d) => {
                 const isSun = d.getDay() === 0 || d.getDay() === 6;

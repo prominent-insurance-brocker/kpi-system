@@ -12,6 +12,8 @@ from entries.models import (
     GeneralRenewalEntry,
     MotorNewEntry,
     MotorRenewalEntry,
+    MotorFleetNewEntry,
+    MotorFleetRenewalEntry,
     MotorClaimEntry,
     TypeOfAccident,
     InsuranceCompany,
@@ -126,12 +128,14 @@ class Command(BaseCommand):
             'Admin': [
                 'general_new', 'general_renewal', 'general_claim',
                 'motor_new', 'motor_renewal', 'motor_claim',
+                'motor_fleet_new', 'motor_fleet_renewal',
                 'sales_kpi',
                 'medical_claim',
             ],
             'Manager': [
                 'general_new', 'general_renewal', 'general_claim',
                 'motor_new', 'motor_renewal', 'motor_claim',
+                'motor_fleet_new', 'motor_fleet_renewal',
                 'sales_kpi',
                 'medical_claim',
             ],
@@ -140,6 +144,7 @@ class Command(BaseCommand):
             ],
             'Motor Agent': [
                 'motor_new', 'motor_renewal', 'motor_claim',
+                'motor_fleet_new', 'motor_fleet_renewal',
             ],
             'Sales Agent': [
                 'sales_kpi',
@@ -322,6 +327,14 @@ class Command(BaseCommand):
         count = self._seed_motor_renewal_entries(motor_users, dates)
         self.stdout.write(f'  - Motor Renewal entries: {count}')
 
+        # Seed Motor Fleet New entries
+        count = self._seed_motor_fleet_new_entries(motor_users, dates)
+        self.stdout.write(f'  - Motor Fleet New entries: {count}')
+
+        # Seed Motor Fleet Renewal entries
+        count = self._seed_motor_fleet_renewal_entries(motor_users, dates)
+        self.stdout.write(f'  - Motor Fleet Renewal entries: {count}')
+
         # Seed Motor Claim entries
         count = self._seed_motor_claim_entries(motor_users, dates)
         self.stdout.write(f'  - Motor Claim entries: {count}')
@@ -447,6 +460,14 @@ class Command(BaseCommand):
     def _seed_motor_renewal_entries(self, users, dates):
         """Seed MotorRenewalEntry records (per-enquiry rows)."""
         return self._seed_motor_enquiry_entries(MotorRenewalEntry, users, dates)
+
+    def _seed_motor_fleet_new_entries(self, users, dates):
+        """Seed MotorFleetNewEntry records (per-enquiry rows)."""
+        return self._seed_motor_enquiry_entries(MotorFleetNewEntry, users, dates)
+
+    def _seed_motor_fleet_renewal_entries(self, users, dates):
+        """Seed MotorFleetRenewalEntry records (per-enquiry rows)."""
+        return self._seed_motor_enquiry_entries(MotorFleetRenewalEntry, users, dates)
 
     def _seed_motor_claim_entries(self, users, dates):
         """Seed MotorClaimEntry records (per-claim rows with the revamped schema)."""

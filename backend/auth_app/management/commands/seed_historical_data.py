@@ -30,6 +30,10 @@ from entries.models import (
     MotorNewStatusTransition,
     MotorRenewalEntry,
     MotorRenewalStatusTransition,
+    MotorFleetNewEntry,
+    MotorFleetNewStatusTransition,
+    MotorFleetRenewalEntry,
+    MotorFleetRenewalStatusTransition,
     MotorClaimEntry,
     MotorClaimStatusTransition,
     SalesKPIEntry,
@@ -48,6 +52,7 @@ SKIPPED_MODULES = ['general_claim', 'sales_premium_data']
 ALL_MODULES = [
     'general_new', 'general_renewal',
     'motor_new', 'motor_renewal', 'motor_claim',
+    'motor_fleet_new', 'motor_fleet_renewal',
     'sales_kpi',
     'marine_new', 'marine_renewal',
     'medical_claim',
@@ -132,6 +137,8 @@ class Command(BaseCommand):
                 # as a template if you re-add it.
                 'motor_new': self._seed_motor_new,
                 'motor_renewal': self._seed_motor_renewal,
+                'motor_fleet_new': self._seed_motor_fleet_new,
+                'motor_fleet_renewal': self._seed_motor_fleet_renewal,
                 'sales_kpi': self._seed_sales_kpi,
                 'marine_new': self._seed_marine_new,
                 'marine_renewal': self._seed_marine_renewal,
@@ -247,6 +254,12 @@ class Command(BaseCommand):
 
     def _seed_motor_renewal(self, users, dates):
         return self._seed_motor_enquiry(users, dates, MotorRenewalEntry, MotorRenewalStatusTransition)
+
+    def _seed_motor_fleet_new(self, users, dates):
+        return self._seed_motor_enquiry(users, dates, MotorFleetNewEntry, MotorFleetNewStatusTransition)
+
+    def _seed_motor_fleet_renewal(self, users, dates):
+        return self._seed_motor_enquiry(users, dates, MotorFleetRenewalEntry, MotorFleetRenewalStatusTransition)
 
     def _seed_funnel_kpi(self, users, dates, Model, qmin, qmax, acc_min, acc_max):
         """Generic funnel-KPI seeder — still used by general_new / general_renewal

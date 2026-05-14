@@ -19,6 +19,11 @@ from .models import (
     MotorRenewalEntry,
     MotorRenewalStatusTransition,
     MotorRenewalMonthlyTarget,
+    MotorFleetNewEntry,
+    MotorFleetNewStatusTransition,
+    MotorFleetRenewalEntry,
+    MotorFleetRenewalStatusTransition,
+    MotorFleetRenewalMonthlyTarget,
     MotorClaimEntry,
     MotorClaimStatusTransition,
     TypeOfAccident,
@@ -43,6 +48,13 @@ from .serializers import (
     MotorRenewalStatusUpdateSerializer,
     MotorRenewalRevisionsUpdateSerializer,
     MotorRenewalMonthlyTargetSerializer,
+    MotorFleetNewEntrySerializer,
+    MotorFleetNewStatusUpdateSerializer,
+    MotorFleetNewRevisionsUpdateSerializer,
+    MotorFleetRenewalEntrySerializer,
+    MotorFleetRenewalStatusUpdateSerializer,
+    MotorFleetRenewalRevisionsUpdateSerializer,
+    MotorFleetRenewalMonthlyTargetSerializer,
     MotorClaimEntrySerializer,
     MotorClaimStatusUpdateSerializer,
     TypeOfAccidentSerializer,
@@ -714,6 +726,241 @@ class MotorRenewalMonthlyTargetViewSet(viewsets.ModelViewSet):
             )
             return Response(MotorRenewalMonthlyTargetSerializer(target).data)
         except MotorRenewalMonthlyTarget.DoesNotExist:
+            return Response(None)
+
+
+class MotorFleetNewEntryViewSet(BaseEntryViewSet):
+    queryset = MotorFleetNewEntry.objects.all()
+    serializer_class = MotorFleetNewEntrySerializer
+    module_key = 'motor_fleet_new'
+    filterset_class = MotorEnquiryFilter
+
+    def get_queryset(self):
+        return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
+
+    def perform_create(self, serializer):
+        instance = serializer.save(
+            added_by=self.request.user,
+            status=MotorFleetNewEntry.STATUS_NEW,
+            revisions=0,
+        )
+        MotorFleetNewStatusTransition.objects.create(
+            entry=instance,
+            from_status='',
+            to_status=instance.status,
+            changed_by=self.request.user,
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        """Update status with transition validation. Bypasses 30-min window + ownership."""
+        entry = self.get_object()
+
+        if entry.is_terminal:
+            return Response(
+                {'error': 'Cannot change status of a converted or lost enquiry.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = MotorFleetNewStatusUpdateSerializer(
+            data=request.data,
+            context={'entry': entry},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        old_status = entry.status
+        new_status = serializer.validated_data['status']
+        new_revisions = serializer.validated_data.get('revisions')
+
+        entry.status = new_status
+        update_fields = ['status', 'updated_at']
+
+        if new_revisions is not None:
+            entry.revisions = new_revisions
+            update_fields.append('revisions')
+
+        if new_status in MotorFleetNewEntry.TERMINAL_STATUSES:
+            entry.status_changed_at = timezone.now()
+            update_fields.append('status_changed_at')
+
+        entry.save(update_fields=update_fields)
+
+        MotorFleetNewStatusTransition.objects.create(
+            entry=entry,
+            from_status=old_status,
+            to_status=new_status,
+            changed_by=request.user,
+        )
+
+        return Response(
+            MotorFleetNewEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-revisions')
+    def update_revisions(self, request, pk=None):
+        """Update the revisions counter. Only allowed while status='new'."""
+        entry = self.get_object()
+
+        if entry.status != MotorFleetNewEntry.STATUS_NEW:
+            return Response(
+                {'error': 'Revisions can only be edited while the enquiry status is New.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = MotorFleetNewRevisionsUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        entry.revisions = serializer.validated_data['revisions']
+        entry.save(update_fields=['revisions', 'updated_at'])
+
+        return Response(
+            MotorFleetNewEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Return the 6 dashboard metrics respecting RBAC + filters."""
+        queryset = self.get_queryset()
+        params = {
+            k: v for k, v in request.query_params.items()
+            if k in ('date_from', 'date_to', 'agent_id', 'status')
+        }
+        filterset = self.filterset_class(params, queryset=queryset)
+        queryset = filterset.qs
+        return Response(_build_enquiry_stats(queryset))
+
+
+class MotorFleetRenewalEntryViewSet(BaseEntryViewSet):
+    queryset = MotorFleetRenewalEntry.objects.all()
+    serializer_class = MotorFleetRenewalEntrySerializer
+    module_key = 'motor_fleet_renewal'
+    filterset_class = MotorEnquiryFilter
+
+    def get_queryset(self):
+        return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
+
+    def perform_create(self, serializer):
+        instance = serializer.save(
+            added_by=self.request.user,
+            status=MotorFleetRenewalEntry.STATUS_NEW,
+            revisions=0,
+        )
+        MotorFleetRenewalStatusTransition.objects.create(
+            entry=instance,
+            from_status='',
+            to_status=instance.status,
+            changed_by=self.request.user,
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        entry = self.get_object()
+
+        if entry.is_terminal:
+            return Response(
+                {'error': 'Cannot change status of a retained or lost enquiry.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = MotorFleetRenewalStatusUpdateSerializer(
+            data=request.data,
+            context={'entry': entry},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        old_status = entry.status
+        new_status = serializer.validated_data['status']
+        new_revisions = serializer.validated_data.get('revisions')
+
+        entry.status = new_status
+        update_fields = ['status', 'updated_at']
+
+        if new_revisions is not None:
+            entry.revisions = new_revisions
+            update_fields.append('revisions')
+
+        if new_status in MotorFleetRenewalEntry.TERMINAL_STATUSES:
+            entry.status_changed_at = timezone.now()
+            update_fields.append('status_changed_at')
+
+        entry.save(update_fields=update_fields)
+
+        MotorFleetRenewalStatusTransition.objects.create(
+            entry=entry,
+            from_status=old_status,
+            to_status=new_status,
+            changed_by=request.user,
+        )
+
+        return Response(
+            MotorFleetRenewalEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-revisions')
+    def update_revisions(self, request, pk=None):
+        entry = self.get_object()
+
+        if entry.status != MotorFleetRenewalEntry.STATUS_NEW:
+            return Response(
+                {'error': 'Revisions can only be edited while the enquiry status is New.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = MotorFleetRenewalRevisionsUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        entry.revisions = serializer.validated_data['revisions']
+        entry.save(update_fields=['revisions', 'updated_at'])
+
+        return Response(
+            MotorFleetRenewalEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        queryset = self.get_queryset()
+        params = {
+            k: v for k, v in request.query_params.items()
+            if k in ('date_from', 'date_to', 'agent_id', 'status')
+        }
+        filterset = self.filterset_class(params, queryset=queryset)
+        queryset = filterset.qs
+        return Response(_build_enquiry_stats(queryset, success_status='retained'))
+
+
+class MotorFleetRenewalMonthlyTargetViewSet(viewsets.ModelViewSet):
+    """Per-user retention target for the motor fleet renewal module.
+
+    Mirrors MotorRenewalMonthlyTargetViewSet — each user only sees/edits their
+    own targets; admins included.
+    """
+    serializer_class = MotorFleetRenewalMonthlyTargetSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = MotorFleetRenewalMonthlyTarget.objects.filter(user=self.request.user)
+        year = self.request.query_params.get('year')
+        month = self.request.query_params.get('month')
+        if year:
+            queryset = queryset.filter(year=year)
+        if month:
+            queryset = queryset.filter(month=month)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='current')
+    def current(self, request):
+        today = timezone.now().date()
+        try:
+            target = MotorFleetRenewalMonthlyTarget.objects.get(
+                user=request.user,
+                year=today.year,
+                month=today.month,
+            )
+            return Response(MotorFleetRenewalMonthlyTargetSerializer(target).data)
+        except MotorFleetRenewalMonthlyTarget.DoesNotExist:
             return Response(None)
 
 

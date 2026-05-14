@@ -34,6 +34,8 @@ class RoleModulePermission(models.Model):
         ('motor_new', 'Motor New'),
         ('motor_renewal', 'Motor Renewal'),
         ('motor_claim', 'Motor Claim'),
+        ('motor_fleet_new', 'Motor Fleet New'),
+        ('motor_fleet_renewal', 'Motor Fleet Renewal'),
         ('sales_kpi', 'Sales KPI'),
         ('marine_new', 'Marine New'),
         ('marine_renewal', 'Marine Renewal'),

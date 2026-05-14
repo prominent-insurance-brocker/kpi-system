@@ -78,6 +78,7 @@ import {
   type MotorEnquiryEntry,
   type MotorEnquiryStats,
   type MotorEnquiryModule,
+  type MotorRenewalModule,
 } from '@/app/lib/api';
 
 // ─── Per-module configuration ────────────────────────────────────────────────
@@ -108,6 +109,28 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
     showRatioCard: false,
   },
   'motor-renewal': {
+    options: [
+      { value: 'new', label: 'New Enquiry' },
+      { value: 'retained', label: 'Retained' },
+      { value: 'lost', label: 'Lost' },
+    ],
+    successValue: 'retained',
+    successLabel: 'Retained',
+    totalLabel: 'Total Enquiries Added',
+    showRatioCard: true,
+  },
+  'motor-fleet-new': {
+    options: [
+      { value: 'new', label: 'New Enquiry' },
+      { value: 'converted', label: 'Converted' },
+      { value: 'lost', label: 'Lost' },
+    ],
+    successValue: 'converted',
+    successLabel: 'Converted',
+    totalLabel: 'Total Enquiries',
+    showRatioCard: false,
+  },
+  'motor-fleet-renewal': {
     options: [
       { value: 'new', label: 'New Enquiry' },
       { value: 'retained', label: 'Retained' },
@@ -158,7 +181,7 @@ function formatAccuracy(pct: number | null | undefined): string {
 }
 
 export interface MotorEnquiryPageProps {
-  moduleKey: 'motor_new' | 'motor_renewal';
+  moduleKey: 'motor_new' | 'motor_renewal' | 'motor_fleet_new' | 'motor_fleet_renewal';
   apiSlug: MotorEnquiryModule;
   title: string;
 }
@@ -249,11 +272,11 @@ export function MotorEnquiryPage({
   // Remarks side panel
   const [panelEntry, setPanelEntry] = useState<MotorEnquiryEntry | null>(null);
 
-  // ── Motor Renewal monthly target ────────────────────────────────────────
-  // Only used when apiSlug === 'motor-renewal'. The card displays the target
-  // for `targetCardYear/Month` (1-indexed); `targetCard` is the row currently
-  // displayed, `targetActuals` is the count of `status='retained'` enquiries
-  // in that month for the logged-in user.
+  // ── Renewal monthly target ──────────────────────────────────────────────
+  // Used when apiSlug is a renewal module (motor-renewal or motor-fleet-renewal).
+  // The card displays the target for `targetCardYear/Month` (1-indexed);
+  // `targetCard` is the row currently displayed, `targetActuals` is the count
+  // of `status='retained'` enquiries in that month for the logged-in user.
   const [targetCardYear, setTargetCardYear] = useState(today.getFullYear());
   const [targetCardMonth, setTargetCardMonth] = useState(today.getMonth() + 1);
   const [targetCard, setTargetCard] = useState<MotorRenewalMonthlyTarget | null>(null);
@@ -345,20 +368,23 @@ export function MotorEnquiryPage({
   }, [apiSlug, personalCalYear, personalCalMonth, teamCalYear, teamCalMonth]);
 
   // ── Motor Renewal target fetchers ─────────────────────────────────────────
-  const isRenewal = apiSlug === 'motor-renewal';
+  // Both motor-renewal and motor-fleet-renewal expose the monthly-target
+  // sub-resource with the same shape, so they share this code path.
+  const isRenewal = apiSlug === 'motor-renewal' || apiSlug === 'motor-fleet-renewal';
+  const renewalModule = apiSlug as MotorRenewalModule;
 
   const fetchCurrentTarget = useCallback(async () => {
     if (!isRenewal) return;
-    const result = await getCurrentMotorRenewalMonthlyTarget();
+    const result = await getCurrentMotorRenewalMonthlyTarget(renewalModule);
     setCurrentTarget(result.data ?? null);
     setCurrentTargetLoaded(true);
-  }, [isRenewal]);
+  }, [isRenewal, renewalModule]);
 
   const fetchSheetTargets = useCallback(async () => {
     if (!isRenewal) return;
-    const result = await getMotorRenewalMonthlyTargets({ year: sheetYear });
+    const result = await getMotorRenewalMonthlyTargets(renewalModule, { year: sheetYear });
     setSheetTargets(result.data ?? []);
-  }, [isRenewal, sheetYear]);
+  }, [isRenewal, renewalModule, sheetYear]);
 
   const handleSheetInlineSave = async (month: number) => {
     const raw = sheetInlineValues[month];
@@ -373,8 +399,8 @@ export function MotorEnquiryPage({
     }
     const existing = sheetTargets.find((t) => t.month === month);
     const result = existing?.id
-      ? await updateMotorRenewalMonthlyTarget(existing.id, { clients_assigned: value })
-      : await createMotorRenewalMonthlyTarget({
+      ? await updateMotorRenewalMonthlyTarget(renewalModule, existing.id, { clients_assigned: value })
+      : await createMotorRenewalMonthlyTarget(renewalModule, {
           year: sheetYear,
           month,
           clients_assigned: value,
@@ -406,7 +432,7 @@ export function MotorEnquiryPage({
     // Fetch the target row for the displayed month + count of retained
     // enquiries in that same month for the logged-in user.
     const [targetResult, statsResult] = await Promise.all([
-      getMotorRenewalMonthlyTargets({
+      getMotorRenewalMonthlyTargets(renewalModule, {
         year: targetCardYear,
         month: targetCardMonth,
       }),
@@ -419,12 +445,12 @@ export function MotorEnquiryPage({
           status: 'retained',
         });
         if (currentUserId != null) qs.set('user_id', String(currentUserId));
-        return fetchApi<{ count: number }>(`/api/entries/motor-renewal/?${qs}`);
+        return fetchApi<{ count: number }>(`/api/entries/${apiSlug}/?${qs}`);
       })(),
     ]);
     setTargetCard(targetResult.data?.[0] ?? null);
     setTargetActuals(statsResult.data?.count ?? 0);
-  }, [isRenewal, targetCardYear, targetCardMonth, currentUserId]);
+  }, [isRenewal, renewalModule, apiSlug, targetCardYear, targetCardMonth, currentUserId]);
 
   // ── Initial loads ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1028,9 +1054,10 @@ export function MotorEnquiryPage({
         />
       )}
 
-      {/* ── Client Retention edit-target modal (motor-renewal only) ────────── */}
+      {/* ── Client Retention edit-target modal (renewal modules only) ────── */}
       {isRenewal && (
         <MotorRenewalTargetModal
+          module={renewalModule}
           isOpen={isTargetModalOpen}
           // While the user has no current-month target, force the modal onto
           // the current month regardless of which card month is displayed —
@@ -1056,7 +1083,7 @@ export function MotorEnquiryPage({
       )}
       </div>
 
-      {/* ── Right-side Monthly Targets panel (motor-renewal only) ──────────── */}
+      {/* ── Right-side Monthly Targets panel (renewal modules only) ────────── */}
       {isRenewal && isPanelOpen && (
         <div className="w-[340px] shrink-0 border rounded-lg overflow-hidden bg-white">
           <div className="flex items-start justify-between px-4 py-3 border-b">
@@ -1535,7 +1562,7 @@ function StatusTransitionModal({
   );
 }
 
-// ─── Client Retention monthly target card (motor-renewal only) ───────────────
+// ─── Client Retention monthly target card (renewal modules only) ────────────
 
 const TARGET_MULTIPLIER = 1.5;
 
@@ -1637,6 +1664,7 @@ function ClientRetentionTargetCard({
 }
 
 function MotorRenewalTargetModal({
+  module,
   isOpen,
   year,
   month,
@@ -1645,6 +1673,7 @@ function MotorRenewalTargetModal({
   onClose,
   onSaved,
 }: {
+  module: MotorRenewalModule;
   isOpen: boolean;
   year: number;
   month: number;
@@ -1676,8 +1705,8 @@ function MotorRenewalTargetModal({
     }
     setIsSubmitting(true);
     const result = existing?.id
-      ? await updateMotorRenewalMonthlyTarget(existing.id, { clients_assigned: value })
-      : await createMotorRenewalMonthlyTarget({ year, month, clients_assigned: value });
+      ? await updateMotorRenewalMonthlyTarget(module, existing.id, { clients_assigned: value })
+      : await createMotorRenewalMonthlyTarget(module, { year, month, clients_assigned: value });
     setIsSubmitting(false);
     if (result.data) {
       onSaved();

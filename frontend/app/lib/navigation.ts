@@ -7,6 +7,8 @@ const MODULE_ROUTES: Array<[string, string]> = [
   ['motor_new', '/motor/new'],
   ['motor_renewal', '/motor/renewal'],
   ['motor_claim', '/motor/claim'],
+  ['motor_fleet_new', '/motor/fleet-new'],
+  ['motor_fleet_renewal', '/motor/fleet-renewal'],
   ['sales_kpi', '/sales/kpi'],
   ['marine_new', '/marine/new'],
   ['marine_renewal', '/marine/renewal'],

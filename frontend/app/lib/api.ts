@@ -362,7 +362,10 @@ export interface MotorRenewalMonthlyTarget {
   updated_at: string;
 }
 
-export type MotorEnquiryModule = 'motor-new' | 'motor-renewal';
+export type MotorEnquiryModule = 'motor-new' | 'motor-renewal' | 'motor-fleet-new' | 'motor-fleet-renewal';
+
+// Renewal-style modules that have monthly retention targets (clients_assigned).
+export type MotorRenewalModule = 'motor-renewal' | 'motor-fleet-renewal';
 
 interface StatsParams {
   date_from?: string;
@@ -410,24 +413,27 @@ export async function updateMotorEnquiryRevisions(
 }
 
 // ─── Motor Renewal monthly target (Client Retention) ─────────────────────────
+// Shared between motor-renewal and motor-fleet-renewal: both expose an
+// identically-shaped `/monthly-targets/` sub-resource. Each call takes the
+// module slug so the same functions service both routes.
 
-export async function getCurrentMotorRenewalMonthlyTarget(): Promise<
-  ApiResponse<MotorRenewalMonthlyTarget | null>
-> {
+export async function getCurrentMotorRenewalMonthlyTarget(
+  module: MotorRenewalModule
+): Promise<ApiResponse<MotorRenewalMonthlyTarget | null>> {
   return fetchApi<MotorRenewalMonthlyTarget | null>(
-    '/api/entries/motor-renewal/monthly-targets/current/'
+    `/api/entries/${module}/monthly-targets/current/`
   );
 }
 
-export async function getMotorRenewalMonthlyTargets(params: {
-  year: number;
-  month?: number;
-}): Promise<ApiResponse<MotorRenewalMonthlyTarget[]>> {
+export async function getMotorRenewalMonthlyTargets(
+  module: MotorRenewalModule,
+  params: { year: number; month?: number }
+): Promise<ApiResponse<MotorRenewalMonthlyTarget[]>> {
   const qs = new URLSearchParams();
   qs.set('year', String(params.year));
   if (params.month != null) qs.set('month', String(params.month));
   const result = await fetchApi<{ results: MotorRenewalMonthlyTarget[] } | MotorRenewalMonthlyTarget[]>(
-    `/api/entries/motor-renewal/monthly-targets/?${qs}`
+    `/api/entries/${module}/monthly-targets/?${qs}`
   );
   if (result.data) {
     // DRF returns paginated {results} for list endpoints; unwrap to a flat array.
@@ -437,23 +443,23 @@ export async function getMotorRenewalMonthlyTargets(params: {
   return { error: result.error };
 }
 
-export async function createMotorRenewalMonthlyTarget(payload: {
-  year: number;
-  month: number;
-  clients_assigned: number;
-}): Promise<ApiResponse<MotorRenewalMonthlyTarget>> {
+export async function createMotorRenewalMonthlyTarget(
+  module: MotorRenewalModule,
+  payload: { year: number; month: number; clients_assigned: number }
+): Promise<ApiResponse<MotorRenewalMonthlyTarget>> {
   return fetchApi<MotorRenewalMonthlyTarget>(
-    '/api/entries/motor-renewal/monthly-targets/',
+    `/api/entries/${module}/monthly-targets/`,
     { method: 'POST', body: JSON.stringify(payload) }
   );
 }
 
 export async function updateMotorRenewalMonthlyTarget(
+  module: MotorRenewalModule,
   id: number,
   payload: { clients_assigned: number }
 ): Promise<ApiResponse<MotorRenewalMonthlyTarget>> {
   return fetchApi<MotorRenewalMonthlyTarget>(
-    `/api/entries/motor-renewal/monthly-targets/${id}/`,
+    `/api/entries/${module}/monthly-targets/${id}/`,
     { method: 'PATCH', body: JSON.stringify(payload) }
   );
 }

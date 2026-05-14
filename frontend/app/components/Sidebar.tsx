@@ -35,6 +35,8 @@ const navigation: NavItem[] = [
       { name: 'Motor New', href: '/motor/new', moduleKey: 'motor_new' },
       { name: 'Motor Renewal', href: '/motor/renewal', moduleKey: 'motor_renewal' },
       { name: 'Motor Claim', href: '/motor/claim', moduleKey: 'motor_claim' },
+      { name: 'Motor Fleet New', href: '/motor/fleet-new', moduleKey: 'motor_fleet_new' },
+      { name: 'Motor Fleet Renewal', href: '/motor/fleet-renewal', moduleKey: 'motor_fleet_renewal' },
     ],
   },
   {

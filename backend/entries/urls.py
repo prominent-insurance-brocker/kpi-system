@@ -7,6 +7,9 @@ from .views import (
     MotorNewEntryViewSet,
     MotorRenewalEntryViewSet,
     MotorRenewalMonthlyTargetViewSet,
+    MotorFleetNewEntryViewSet,
+    MotorFleetRenewalEntryViewSet,
+    MotorFleetRenewalMonthlyTargetViewSet,
     MotorClaimEntryViewSet,
     SalesKPIEntryViewSet,
     SalesMonthlyTargetViewSet,
@@ -26,6 +29,10 @@ router.register(r'motor-new', MotorNewEntryViewSet, basename='motor-new')
 # Sub-path must be registered BEFORE the parent so DRF resolves it first.
 router.register(r'motor-renewal/monthly-targets', MotorRenewalMonthlyTargetViewSet, basename='motor-renewal-monthly-targets')
 router.register(r'motor-renewal', MotorRenewalEntryViewSet, basename='motor-renewal')
+router.register(r'motor-fleet-new', MotorFleetNewEntryViewSet, basename='motor-fleet-new')
+# Sub-path must be registered BEFORE the parent so DRF resolves it first.
+router.register(r'motor-fleet-renewal/monthly-targets', MotorFleetRenewalMonthlyTargetViewSet, basename='motor-fleet-renewal-monthly-targets')
+router.register(r'motor-fleet-renewal', MotorFleetRenewalEntryViewSet, basename='motor-fleet-renewal')
 router.register(r'motor-claim', MotorClaimEntryViewSet, basename='motor-claim')
 router.register(r'sales-kpi/monthly-targets', SalesMonthlyTargetViewSet, basename='sales-monthly-targets')
 router.register(r'sales-kpi', SalesKPIEntryViewSet, basename='sales-kpi')

@@ -446,26 +446,32 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        """Return per-status counts respecting RBAC and date filters."""
+        """Cumulative per-status counts (lifecycle funnel) — RBAC + date filtered.
+
+        Each card counts entries that have *ever* reached that status. A claim
+        currently Resolved still counts under Opened and In Progress. For
+        terminal statuses this equals the current-status count.
+        """
         queryset = self.get_queryset()
 
         date_params = {k: v for k, v in request.query_params.items() if k in ('date_from', 'date_to')}
         filterset = self.filterset_class(date_params, queryset=queryset)
         queryset = filterset.qs
 
-        rows = queryset.values('status').annotate(count=Count('id'))
+        entry_ids = list(queryset.values_list('id', flat=True))
+        total = len(entry_ids)
+        transitions = MotorClaimStatusTransition.objects.filter(entry_id__in=entry_ids)
 
-        counts = {
-            'claims_opened': 0,
-            'claims_in_progress': 0,
-            'claims_resolved': 0,
-            'claims_rejected': 0,
-        }
-        for row in rows:
-            if row['status'] in counts:
-                counts[row['status']] = row['count']
+        def reached(s):
+            return transitions.filter(to_status=s).values('entry_id').distinct().count()
 
-        return Response(counts)
+        return Response({
+            # Every claim is created in claims_opened — total entries.
+            'claims_opened': total,
+            'claims_in_progress': reached('claims_in_progress'),
+            'claims_resolved': reached('claims_resolved'),
+            'claims_rejected': reached('claims_rejected'),
+        })
 
 
 class SalesKPIEntryViewSet(BaseEntryViewSet):
@@ -612,7 +618,12 @@ class MedicalClaimEntryViewSet(BaseEntryViewSet):
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        """Return per-status counts respecting RBAC and date filters."""
+        """Cumulative per-status counts (lifecycle funnel) — RBAC + date filtered.
+
+        Each card counts entries that have *ever* reached that status. A claim
+        currently Resolved still counts under Opened and In Progress. For
+        terminal statuses this equals the current-status count.
+        """
         queryset = self.get_queryset()
 
         # Apply only date filters (user_id already handled by get_queryset RBAC logic)
@@ -620,19 +631,19 @@ class MedicalClaimEntryViewSet(BaseEntryViewSet):
         filterset = self.filterset_class(date_params, queryset=queryset)
         queryset = filterset.qs
 
-        rows = queryset.values('status').annotate(count=Count('id'))
+        entry_ids = list(queryset.values_list('id', flat=True))
+        total = len(entry_ids)
+        transitions = MedicalClaimStatusTransition.objects.filter(entry_id__in=entry_ids)
 
-        counts = {
-            'claims_opened': 0,
-            'claims_in_progress': 0,
-            'claims_resolved': 0,
-            'claims_rejected': 0,
-        }
-        for row in rows:
-            if row['status'] in counts:
-                counts[row['status']] = row['count']
+        def reached(s):
+            return transitions.filter(to_status=s).values('entry_id').distinct().count()
 
-        return Response(counts)
+        return Response({
+            'claims_opened': total,
+            'claims_in_progress': reached('claims_in_progress'),
+            'claims_resolved': reached('claims_resolved'),
+            'claims_rejected': reached('claims_rejected'),
+        })
 
 
 # Settings (admin-managed lookup tables for Motor Claim).

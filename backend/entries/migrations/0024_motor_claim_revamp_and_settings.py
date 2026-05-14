@@ -1,9 +1,13 @@
 """Motor Claim revamp + Settings lookup tables.
 
-Adds TypeOfAccident + InsuranceCompany models, wipes existing MotorClaimEntry
-rows (the schema change is destructive — old rows have no values for the new
-required fields), renames customer_name -> client_name, adds 8 new fields, and
-seeds 5 default rows in each lookup table so new claims have something to pick.
+Adds TypeOfAccident + InsuranceCompany models, renames customer_name -> client_name,
+adds 8 new fields on MotorClaimEntry, and seeds 5 default rows in each lookup table
+so new claims have something to pick.
+
+The destructive wipe of existing MotorClaimEntry rows happens in the preceding
+migration (0023_motor_claim_wipe_existing) — splitting it out is required because
+Postgres won't ALTER TABLE while deferred FK trigger events from the DELETE are
+still pending in the same transaction.
 """
 from django.conf import settings
 from django.db import migrations, models
@@ -13,14 +17,6 @@ DEFAULT_ACCIDENT_TYPES = ['Collision', 'Theft', 'Fire', 'Flood', 'Vandalism']
 DEFAULT_INSURANCE_COMPANIES = [
     'Acme Insurance', 'BlueShield', 'GlobalCover', 'OmniSure', 'PremierGuard',
 ]
-
-
-def wipe_motor_claim_rows(apps, schema_editor):
-    """Drop existing MotorClaimEntry data before changing the schema."""
-    MotorClaimEntry = apps.get_model('entries', 'MotorClaimEntry')
-    MotorClaimStatusTransition = apps.get_model('entries', 'MotorClaimStatusTransition')
-    MotorClaimStatusTransition.objects.all().delete()
-    MotorClaimEntry.objects.all().delete()
 
 
 def seed_lookups(apps, schema_editor):
@@ -40,15 +36,12 @@ def noop_reverse(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('entries', '0022_motor_renewal_retained_and_quotes_compared'),
+        ('entries', '0023_motor_claim_wipe_existing'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
-        # 1. Wipe existing rows first so the schema change is safe.
-        migrations.RunPython(wipe_motor_claim_rows, reverse_code=noop_reverse),
-
-        # 2. Create the two new lookup tables.
+        # 1. Create the two new lookup tables.
         migrations.CreateModel(
             name='TypeOfAccident',
             fields=[
@@ -72,10 +65,10 @@ class Migration(migrations.Migration):
             options={'ordering': ['name']},
         ),
 
-        # 3. Seed defaults so dropdowns have something even on a fresh DB.
+        # 2. Seed defaults so dropdowns have something even on a fresh DB.
         migrations.RunPython(seed_lookups, reverse_code=noop_reverse),
 
-        # 4. Rename customer_name -> client_name, then resize to 200.
+        # 3. Rename customer_name -> client_name, then resize to 200.
         migrations.RenameField(
             model_name='motorclaimentry',
             old_name='customer_name',
@@ -87,9 +80,9 @@ class Migration(migrations.Migration):
             field=models.CharField(max_length=200),
         ),
 
-        # 5. Add the 8 new fields. The three FKs are added nullable so the
-        #    migration works against the now-empty table; if any row existed
-        #    it would already have been wiped above.
+        # 4. Add the 8 new fields. The three FKs are added nullable so the
+        #    migration works against the now-empty table; the wipe in 0023
+        #    ensures no row exists at this point.
         migrations.AddField(
             model_name='motorclaimentry',
             name='vehicle_number',

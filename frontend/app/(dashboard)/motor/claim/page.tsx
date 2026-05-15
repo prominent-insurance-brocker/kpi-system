@@ -13,6 +13,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -27,13 +28,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, CalendarIcon } from 'lucide-react';
+import { Plus, CalendarIcon, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
+import { RemarksPanel } from '@/app/components/RemarksPanel';
 import {
   AddedByCell,
   PersonalDailyTracker,
@@ -57,6 +59,8 @@ import {
   getAccidentTypesPage,
   getInsuranceCompanies,
   getInsuranceCompaniesPage,
+  getRemarksContentTypes,
+  REMARKS_MODEL_NAME_BY_API_SLUG,
   type MotorClaimEntry,
   type MotorClaimStats,
   type AccidentType,
@@ -164,6 +168,16 @@ export default function MotorClaimPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<MotorClaimEntry | null>(null);
   const [modalError, setModalError] = useState('');
+
+  // Cross-module comments panel
+  const [panelEntry, setPanelEntry] = useState<MotorClaimEntry | null>(null);
+  const [ctMap, setCtMap] = useState<Record<string, number>>({});
+  useEffect(() => {
+    getRemarksContentTypes().then((res) => {
+      if (res.data) setCtMap(res.data);
+    });
+  }, []);
+  const remarksContentTypeId = ctMap[REMARKS_MODEL_NAME_BY_API_SLUG['motor-claim']] ?? null;
 
   // Resolve the Next call date filter's effective from/to bounds based on the
   // selected preset. Computed each call so "Today" always means "today now".
@@ -467,6 +481,20 @@ export default function MotorClaimPage() {
       header: 'Added on',
       render: (item: MotorClaimEntry) =>
         formatDate(item.added_at.split('T')[0]),
+    },
+    {
+      key: 'remarks',
+      header: 'Remarks',
+      render: (item: MotorClaimEntry) => (
+        <button
+          type="button"
+          aria-label="View remarks"
+          className="p-1 rounded hover:bg-zinc-100 text-zinc-700"
+          onClick={() => setPanelEntry(item)}
+        >
+          <FileText className="h-4 w-4" />
+        </button>
+      ),
     },
   ];
 
@@ -779,29 +807,42 @@ export default function MotorClaimPage() {
             }}
           />
 
-          <DataTable
-            columns={columns}
-            data={entries}
-            totalCount={totalCount}
-            page={page}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={(s) => {
-              setPageSize(s);
-              setPage(1);
-            }}
-            onEdit={(entry) => {
-              setEditingEntry(entry);
-              setModalError('');
-              setIsModalOpen(true);
-            }}
-            onDelete={handleDelete}
-            canEdit={(entry) => entry.is_editable}
-            canDelete={(entry) =>
-              entry.added_by === currentUserId && entry.status === 'claims_opened'
-            }
-            isLoading={isLoading}
-          />
+          <div className="flex gap-4">
+            <div className="flex-1 min-w-0">
+              <DataTable
+                columns={columns}
+                data={entries}
+                totalCount={totalCount}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={(s) => {
+                  setPageSize(s);
+                  setPage(1);
+                }}
+                onEdit={(entry) => {
+                  setEditingEntry(entry);
+                  setModalError('');
+                  setIsModalOpen(true);
+                }}
+                onDelete={handleDelete}
+                canEdit={(entry) => entry.is_editable}
+                canDelete={(entry) =>
+                  entry.added_by === currentUserId && entry.status === 'claims_opened'
+                }
+                isLoading={isLoading}
+              />
+            </div>
+            <RemarksPanel
+              contentTypeId={remarksContentTypeId}
+              objectId={panelEntry?.id ?? null}
+              entryLabel={panelEntry ? `Motor Claim — ${panelEntry.pib_id}` : ''}
+              open={!!panelEntry}
+              onOpenChange={(open) => {
+                if (!open) setPanelEntry(null);
+              }}
+            />
+          </div>
         </TabsContent>
       </Tabs>
 

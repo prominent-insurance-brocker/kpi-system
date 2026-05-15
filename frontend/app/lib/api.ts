@@ -317,7 +317,6 @@ export interface MotorEnquiryEntry {
   agent_name: string;
   // chassis_no is set on the motor variants only — general_new has no chassis.
   chassis_no?: string;
-  remarks: string;
   // Motor New uses 'converted'; Motor Renewal uses 'retained'. Both modules
   // share the same row type; the page's per-module STATUS_CONFIG narrows it.
   status: 'new' | 'converted' | 'retained' | 'lost';
@@ -480,7 +479,6 @@ export interface GeneralRenewalEntry {
   client_name: string;
   agent: number;                     // FK id
   agent_name: string;
-  remarks: string;
   status: 'new' | 'retained' | 'lost';
   revisions: number;
   quotes_compared: number;
@@ -798,6 +796,74 @@ export async function askAiChat(question: string): Promise<ApiResponse<AiChatRes
     body: JSON.stringify({ question }),
   });
 }
+
+// ─── Per-entry comments (EntryRemark, cross-module via GenericFK) ────────────
+
+export interface EntryRemark {
+  id: number;
+  content_type: number;
+  object_id: number;
+  text: string;
+  author: number;
+  author_name: string;
+  can_edit: boolean;
+  can_delete: boolean;
+  created_at: string;   // ISO
+  updated_at: string;
+}
+
+export async function listRemarks(
+  contentType: number,
+  objectId: number
+): Promise<ApiResponse<PaginatedResponse<EntryRemark>>> {
+  return fetchApi<PaginatedResponse<EntryRemark>>(
+    `/api/entries/remarks/?content_type=${contentType}&object_id=${objectId}`
+  );
+}
+
+export async function createRemark(
+  contentType: number,
+  objectId: number,
+  text: string
+): Promise<ApiResponse<EntryRemark>> {
+  return fetchApi<EntryRemark>('/api/entries/remarks/', {
+    method: 'POST',
+    body: JSON.stringify({ content_type: contentType, object_id: objectId, text }),
+  });
+}
+
+export async function updateRemark(
+  id: number,
+  text: string
+): Promise<ApiResponse<EntryRemark>> {
+  return fetchApi<EntryRemark>(`/api/entries/remarks/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify({ text }),
+  });
+}
+
+export async function deleteRemark(id: number): Promise<ApiResponse<void>> {
+  return fetchApi<void>(`/api/entries/remarks/${id}/`, { method: 'DELETE' });
+}
+
+// Map of {modelname: content_type_id} for the 7 modules that support remarks.
+// Frontend fetches once on mount and caches it.
+export async function getRemarksContentTypes(): Promise<ApiResponse<Record<string, number>>> {
+  return fetchApi<Record<string, number>>('/api/entries/remarks-content-types/');
+}
+
+// Maps a module's apiSlug (e.g. 'motor-new') to the ContentType.model string
+// that the backend uses (e.g. 'motornewentry'). Keep in sync with
+// `ALLOWED_REMARK_MODELS` in backend/entries/views.py.
+export const REMARKS_MODEL_NAME_BY_API_SLUG: Record<string, string> = {
+  'general-new': 'generalnewentry',
+  'general-renewal': 'generalrenewalentry',
+  'motor-new': 'motornewentry',
+  'motor-renewal': 'motorrenewalentry',
+  'motor-fleet-new': 'motorfleetnewentry',
+  'motor-fleet-renewal': 'motorfleetrenewalentry',
+  'motor-claim': 'motorclaimentry',
+};
 
 // Generic fetch helper for other API calls
 export { fetchApi, API_BASE_URL };

@@ -2,6 +2,8 @@ from decimal import Decimal
 
 from django.db import models, transaction
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType  # noqa: F401  (re-exported for callers)
 from django.utils import timezone
 from datetime import timedelta
 
@@ -105,7 +107,6 @@ class GeneralNewEntry(BaseEntry):
         on_delete=models.PROTECT,
         related_name='general_new_enquiries_as_agent',
     )
-    remarks = models.TextField(blank=True, default='')
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW
     )
@@ -216,7 +217,6 @@ class GeneralRenewalEntry(BaseEntry):
         on_delete=models.PROTECT,
         related_name='general_renewal_enquiries_as_agent',
     )
-    remarks = models.TextField(blank=True, default='')
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW
     )
@@ -350,7 +350,6 @@ class MotorNewEntry(BaseEntry):
         related_name='motor_new_enquiries_as_agent',
     )
     chassis_no = models.CharField(max_length=100)
-    remarks = models.TextField(blank=True, default='')
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW
     )
@@ -461,7 +460,6 @@ class MotorRenewalEntry(BaseEntry):
         related_name='motor_renewal_enquiries_as_agent',
     )
     chassis_no = models.CharField(max_length=100)
-    remarks = models.TextField(blank=True, default='')
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW
     )
@@ -602,7 +600,6 @@ class MotorFleetNewEntry(BaseEntry):
         related_name='motor_fleet_new_enquiries_as_agent',
     )
     chassis_no = models.CharField(max_length=100)
-    remarks = models.TextField(blank=True, default='')
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW
     )
@@ -713,7 +710,6 @@ class MotorFleetRenewalEntry(BaseEntry):
         related_name='motor_fleet_renewal_enquiries_as_agent',
     )
     chassis_no = models.CharField(max_length=100)
-    remarks = models.TextField(blank=True, default='')
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW
     )
@@ -1129,3 +1125,37 @@ class MedicalClaimStatusTransition(models.Model):
 
     def __str__(self):
         return f"{self.entry_id}: {self.from_status} -> {self.to_status}"
+
+
+class EntryRemark(models.Model):
+    """Per-entry comment. One entry (any supported module) can have many remarks.
+
+    `entry` is a GenericForeignKey so a single table serves all 7 supported
+    modules (motor_new / motor_renewal / motor_fleet_new / motor_fleet_renewal
+    / general_new / general_renewal / motor_claim) without polluting the
+    per-module schemas. Only the author can edit or delete their own remark.
+    """
+    content_type = models.ForeignKey('contenttypes.ContentType', on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    entry = GenericForeignKey('content_type', 'object_id')
+
+    text = models.TextField()
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='entry_remarks',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['content_type', 'object_id', '-created_at'],
+                name='entries_er_ct_obj_cr_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f"Remark by {self.author_id} on {self.content_type_id}:{self.object_id}"

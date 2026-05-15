@@ -21,7 +21,6 @@ def get_ddl_statements():
                 date DATE NOT NULL,
                 client_name VARCHAR(200) NOT NULL,
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
-                remarks TEXT NOT NULL,
                 status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
                 revisions INTEGER NOT NULL DEFAULT 0,
                 quotes_compared INTEGER NOT NULL DEFAULT 0,
@@ -52,7 +51,6 @@ def get_ddl_statements():
                 client_name VARCHAR(200) NOT NULL,
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 chassis_no VARCHAR(100) NOT NULL,
-                remarks TEXT NOT NULL,
                 status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
                 revisions INTEGER NOT NULL DEFAULT 0,
                 quotes_compared INTEGER NOT NULL DEFAULT 0,
@@ -69,7 +67,6 @@ def get_ddl_statements():
                 client_name VARCHAR(200) NOT NULL,
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 chassis_no VARCHAR(100) NOT NULL,
-                remarks TEXT NOT NULL,
                 status VARCHAR(20) NOT NULL,         -- 'new' | 'retained' | 'lost'
                 revisions INTEGER NOT NULL DEFAULT 0,
                 quotes_compared INTEGER NOT NULL DEFAULT 0,
@@ -166,6 +163,21 @@ def get_ddl_statements():
                 role_id INTEGER REFERENCES roles_role(id)
             );
             """,
+            """
+            -- Cross-module comments. One row per remark; `content_type` +
+            -- `object_id` link to the parent entry (any of the 7 supported
+            -- modules). To join, look up the content_type row in
+            -- django_content_type by app_label='entries' + model name.
+            CREATE TABLE entries_entryremark (
+                id BIGSERIAL PRIMARY KEY,
+                content_type_id INTEGER NOT NULL REFERENCES django_content_type(id),
+                object_id INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                author_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL
+            );
+            """,
         ]
     else:
         return [
@@ -175,7 +187,6 @@ def get_ddl_statements():
                 date DATE NOT NULL,
                 client_name VARCHAR(200) NOT NULL,
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
-                remarks TEXT NOT NULL,
                 status VARCHAR(20) NOT NULL,
                 revisions INTEGER UNSIGNED NOT NULL DEFAULT 0,
                 quotes_compared INTEGER UNSIGNED NOT NULL DEFAULT 0,
@@ -206,7 +217,6 @@ def get_ddl_statements():
                 client_name VARCHAR(200) NOT NULL,
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 chassis_no VARCHAR(100) NOT NULL,
-                remarks TEXT NOT NULL,
                 status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
                 revisions INTEGER UNSIGNED NOT NULL DEFAULT 0,
                 quotes_compared INTEGER UNSIGNED NOT NULL DEFAULT 0,
@@ -223,7 +233,6 @@ def get_ddl_statements():
                 client_name VARCHAR(200) NOT NULL,
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 chassis_no VARCHAR(100) NOT NULL,
-                remarks TEXT NOT NULL,
                 status VARCHAR(20) NOT NULL,         -- 'new' | 'retained' | 'lost'
                 revisions INTEGER UNSIGNED NOT NULL DEFAULT 0,
                 quotes_compared INTEGER UNSIGNED NOT NULL DEFAULT 0,
@@ -320,6 +329,19 @@ def get_ddl_statements():
                 role_id INTEGER REFERENCES roles_role(id)
             );
             """,
+            """
+            -- Cross-module comments. content_type_id + object_id form a
+            -- generic foreign key to any of the 7 supported entry modules.
+            CREATE TABLE entries_entryremark (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content_type_id INTEGER NOT NULL REFERENCES django_content_type(id),
+                object_id INTEGER UNSIGNED NOT NULL,
+                text TEXT NOT NULL,
+                author_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            """,
         ]
 
 
@@ -330,7 +352,7 @@ def get_documentation():
         "It tracks daily metrics across General Insurance, Motor Insurance, and Sales departments.",
 
         "The 'General New' module (entries_generalnewentry) tracks new general insurance ENQUIRIES — one row per customer enquiry. "
-        "Each row has client_name, an agent_id (the salesperson source), remarks, "
+        "Each row has client_name, an agent_id (the salesperson source), "
         "a status (one of 'new', 'converted', 'lost'), a revisions counter, quotes_compared, and a status_changed_at timestamp set when the status becomes terminal. "
         "TAT for an enquiry = status_changed_at - added_at (only meaningful when status != 'new'). "
         "Accuracy = 100 * (0.9 ^ revisions), only meaningful when status != 'new'. "
@@ -341,13 +363,13 @@ def get_documentation():
         "It has the same structure as General New.",
 
         "The 'Motor New' module (entries_motornewentry) tracks new motor insurance ENQUIRIES — one row per customer enquiry. "
-        "Each row has client_name, an agent_id (the salesperson source), chassis_no, remarks, "
+        "Each row has client_name, an agent_id (the salesperson source), chassis_no, "
         "a status (one of 'new', 'converted', 'lost'), a revisions counter, and a status_changed_at timestamp set when the status becomes terminal. "
         "TAT for an enquiry = status_changed_at - added_at (only meaningful when status != 'new'). "
         "Accuracy = 100 * (0.9 ^ revisions), only meaningful when status != 'new'.",
 
         "The 'Motor Renewal' module (entries_motorrenewalentry) tracks renewal ENQUIRIES with the same per-enquiry shape "
-        "as Motor New (client_name, agent_id, chassis_no, remarks, status, revisions, quotes_compared, status_changed_at). "
+        "as Motor New (client_name, agent_id, chassis_no, status, revisions, quotes_compared, status_changed_at). "
         "Critical difference: status is one of 'new', 'retained' (positive outcome), 'lost' — NOT 'converted'. "
         "A separate table entries_motorrenewalmonthlytarget tracks each user's monthly retention target (clients_assigned).",
 
@@ -367,6 +389,13 @@ def get_documentation():
 
         "All entry tables have an added_by_id foreign key to auth_app_customuser. "
         "To find who entered data, JOIN with auth_app_customuser ON added_by_id = auth_app_customuser.id.",
+
+        "Per-entry comments live in entries_entryremark (one row per remark, many remarks per entry). "
+        "It uses a generic FK: content_type_id + object_id together identify the parent entry. "
+        "To find remarks on a specific module, JOIN django_content_type ON content_type_id = django_content_type.id "
+        "WHERE django_content_type.app_label = 'entries' AND django_content_type.model = 'motornewentry' "
+        "(or 'generalnewentry', 'motorclaimentry', etc — lowercase model name). "
+        "author_id is the user who wrote the comment; entries_entryremark.created_at is when they wrote it.",
 
         "The accuracy field is a percentage (0-100) stored as DECIMAL(5,2). "
         "TAT (turnaround time) is stored as a positive integer representing hours.",

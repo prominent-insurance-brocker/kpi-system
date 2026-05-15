@@ -3,6 +3,7 @@ from .models import (
     GeneralNewEntry, GeneralRenewalEntry,
     MotorNewEntry, MotorRenewalEntry, MotorClaimEntry,
     MedicalClaimEntry,
+    EntryRemark,
 )
 
 class BaseEntryAdmin(admin.ModelAdmin):
@@ -34,3 +35,11 @@ class MotorClaimEntryAdmin(BaseEntryAdmin):
 @admin.register(MedicalClaimEntry)
 class MedicalClaimEntryAdmin(BaseEntryAdmin):
     list_display = BaseEntryAdmin.list_display + ('customer_name', 'status')
+
+
+@admin.register(EntryRemark)
+class EntryRemarkAdmin(admin.ModelAdmin):
+    list_display = ('id', 'content_type', 'object_id', 'author', 'created_at')
+    list_filter = ('content_type', 'created_at')
+    search_fields = ('text', 'author__email')
+    readonly_fields = ('created_at', 'updated_at')

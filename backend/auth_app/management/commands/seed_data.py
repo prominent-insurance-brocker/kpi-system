@@ -414,7 +414,6 @@ class Command(BaseCommand):
                         added_by=user,
                         client_name=random.choice(client_names),
                         agent=random.choice(users),
-                        remarks=random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
                         status=status_value,
                         revisions=revisions,
                         quotes_compared=random.randint(0, 5),
@@ -439,7 +438,25 @@ class Command(BaseCommand):
                             to_status=status_value,
                             changed_by=user,
                         )
+                    # Seed 0–2 EntryRemark rows so the new comments panel
+                    # isn't empty in dev — feels closer to real usage.
+                    self._seed_entry_remarks(entry, user)
         return count
+
+    def _seed_entry_remarks(self, entry, user):
+        """Create 0–2 EntryRemark rows for a freshly-created entry."""
+        from django.contrib.contenttypes.models import ContentType
+        from entries.models import EntryRemark
+        n = random.choice([0, 0, 1, 1, 2])
+        if not n:
+            return
+        ct = ContentType.objects.get_for_model(type(entry))
+        for _ in range(n):
+            EntryRemark.objects.create(
+                content_type=ct, object_id=entry.id,
+                text=random.choice(['Follow up tomorrow', 'Pending docs', 'Customer asked for revised quote']),
+                author=user,
+            )
 
     def _seed_motor_new_entries(self, users, dates):
         """Seed MotorNewEntry records (per-enquiry rows)."""

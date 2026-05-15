@@ -1,15 +1,17 @@
 from decimal import Decimal
 
-from rest_framework import viewsets, status, filters
+from rest_framework import viewsets, status, filters, serializers as drf_serializers
+from django.contrib.contenttypes.models import ContentType
 from django.db.models import Avg, Count, Q
 from django.utils import timezone
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 
 from roles.permissions import HasModulePermission
 from .models import (
+    EntryRemark,
     GeneralNewEntry,
     GeneralNewStatusTransition,
     GeneralRenewalEntry,
@@ -37,6 +39,7 @@ from .models import (
     MedicalClaimStatusTransition,
 )
 from .serializers import (
+    EntryRemarkSerializer,
     GeneralNewEntrySerializer,
     GeneralNewStatusUpdateSerializer,
     GeneralNewRevisionsUpdateSerializer,
@@ -71,6 +74,20 @@ from .serializers import (
 )
 from .filters import EntryFilter, ClaimEntryFilter, MotorEnquiryFilter, MotorClaimEntryFilter
 from roles.permissions import IsAdminUser
+
+
+def _seed_initial_remark(text, instance, user):
+    """If the request included a non-empty `initial_remark`, persist it as the
+    entry's first EntryRemark. Back-dated to the entry's `added_at` so the
+    seed comment timestamp matches the enquiry's creation.
+    """
+    if not text:
+        return
+    ct = ContentType.objects.get_for_model(type(instance))
+    remark = EntryRemark.objects.create(
+        content_type=ct, object_id=instance.id, text=text, author=user,
+    )
+    EntryRemark.objects.filter(pk=remark.pk).update(created_at=instance.added_at)
 
 
 class BaseEntryViewSet(viewsets.ModelViewSet):
@@ -155,6 +172,7 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
         return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
 
     def perform_create(self, serializer):
+        initial_remark = serializer.validated_data.pop('initial_remark', '').strip()
         instance = serializer.save(
             added_by=self.request.user,
             status=GeneralNewEntry.STATUS_NEW,
@@ -166,6 +184,7 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
             to_status=instance.status,
             changed_by=self.request.user,
         )
+        _seed_initial_remark(initial_remark, instance, self.request.user)
 
     @action(detail=True, methods=['patch'], url_path='update-status')
     def update_status(self, request, pk=None):
@@ -253,6 +272,7 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
         return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
 
     def perform_create(self, serializer):
+        initial_remark = serializer.validated_data.pop('initial_remark', '').strip()
         instance = serializer.save(
             added_by=self.request.user,
             status=GeneralRenewalEntry.STATUS_NEW,
@@ -264,6 +284,7 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
             to_status=instance.status,
             changed_by=self.request.user,
         )
+        _seed_initial_remark(initial_remark, instance, self.request.user)
 
     @action(detail=True, methods=['patch'], url_path='update-status')
     def update_status(self, request, pk=None):
@@ -439,6 +460,7 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
         return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
 
     def perform_create(self, serializer):
+        initial_remark = serializer.validated_data.pop('initial_remark', '').strip()
         instance = serializer.save(
             added_by=self.request.user,
             status=MotorNewEntry.STATUS_NEW,
@@ -450,6 +472,7 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
             to_status=instance.status,
             changed_by=self.request.user,
         )
+        _seed_initial_remark(initial_remark, instance, self.request.user)
 
     @action(detail=True, methods=['patch'], url_path='update-status')
     def update_status(self, request, pk=None):
@@ -540,6 +563,7 @@ class MotorRenewalEntryViewSet(BaseEntryViewSet):
         return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
 
     def perform_create(self, serializer):
+        initial_remark = serializer.validated_data.pop('initial_remark', '').strip()
         instance = serializer.save(
             added_by=self.request.user,
             status=MotorRenewalEntry.STATUS_NEW,
@@ -551,6 +575,7 @@ class MotorRenewalEntryViewSet(BaseEntryViewSet):
             to_status=instance.status,
             changed_by=self.request.user,
         )
+        _seed_initial_remark(initial_remark, instance, self.request.user)
 
     @action(detail=True, methods=['patch'], url_path='update-status')
     def update_status(self, request, pk=None):
@@ -643,6 +668,7 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
         )
 
     def perform_create(self, serializer):
+        initial_remark = serializer.validated_data.pop('initial_remark', '').strip()
         instance = serializer.save(added_by=self.request.user)
         MotorClaimStatusTransition.objects.create(
             entry=instance,
@@ -650,6 +676,7 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
             to_status=instance.status,
             changed_by=self.request.user,
         )
+        _seed_initial_remark(initial_remark, instance, self.request.user)
 
     @action(detail=True, methods=['patch'], url_path='update-status')
     def update_status(self, request, pk=None):
@@ -844,6 +871,7 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
         return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
 
     def perform_create(self, serializer):
+        initial_remark = serializer.validated_data.pop('initial_remark', '').strip()
         instance = serializer.save(
             added_by=self.request.user,
             status=MotorFleetNewEntry.STATUS_NEW,
@@ -855,6 +883,7 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
             to_status=instance.status,
             changed_by=self.request.user,
         )
+        _seed_initial_remark(initial_remark, instance, self.request.user)
 
     @action(detail=True, methods=['patch'], url_path='update-status')
     def update_status(self, request, pk=None):
@@ -945,6 +974,7 @@ class MotorFleetRenewalEntryViewSet(BaseEntryViewSet):
         return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
 
     def perform_create(self, serializer):
+        initial_remark = serializer.validated_data.pop('initial_remark', '').strip()
         instance = serializer.save(
             added_by=self.request.user,
             status=MotorFleetRenewalEntry.STATUS_NEW,
@@ -956,6 +986,7 @@ class MotorFleetRenewalEntryViewSet(BaseEntryViewSet):
             to_status=instance.status,
             changed_by=self.request.user,
         )
+        _seed_initial_remark(initial_remark, instance, self.request.user)
 
     @action(detail=True, methods=['patch'], url_path='update-status')
     def update_status(self, request, pk=None):
@@ -1197,3 +1228,77 @@ class TypeOfAccidentViewSet(_LookupViewSet):
 class InsuranceCompanyViewSet(_LookupViewSet):
     queryset = InsuranceCompany.objects.all()
     serializer_class = InsuranceCompanySerializer
+
+
+# ─── Cross-module per-entry comments ──────────────────────────────────────────
+
+# Lowercase model names of the seven entry types that support remarks. Matches
+# Django ContentType.model values. Sales KPI / Marine / Medical Claim are
+# intentionally excluded — they don't currently expose a remarks workflow.
+ALLOWED_REMARK_MODELS = {
+    'generalnewentry', 'generalrenewalentry',
+    'motornewentry', 'motorrenewalentry',
+    'motorfleetnewentry', 'motorfleetrenewalentry',
+    'motorclaimentry',
+}
+
+
+class EntryRemarkViewSet(viewsets.ModelViewSet):
+    """CRUD for EntryRemark. List requires a (content_type, object_id) filter
+    so callers always scope to one entry. Only the comment's author can edit
+    or delete it — admins do not get an override.
+    """
+    queryset = EntryRemark.objects.select_related('author', 'content_type').all()
+    serializer_class = EntryRemarkSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.action == 'list':
+            ct_id = self.request.query_params.get('content_type')
+            obj_id = self.request.query_params.get('object_id')
+            if not (ct_id and obj_id):
+                return qs.none()
+            qs = qs.filter(content_type_id=ct_id, object_id=obj_id)
+        return qs
+
+    def perform_create(self, serializer):
+        ct = serializer.validated_data['content_type']
+        if ct.model not in ALLOWED_REMARK_MODELS:
+            raise drf_serializers.ValidationError(
+                {'content_type': 'Remarks are not supported on this model.'}
+            )
+        if not ct.model_class().objects.filter(pk=serializer.validated_data['object_id']).exists():
+            raise drf_serializers.ValidationError(
+                {'object_id': 'Referenced entry does not exist.'}
+            )
+        serializer.save(author=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.author_id != request.user.id:
+            return Response(
+                {'error': 'Only the author can edit a comment.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.author_id != request.user.id:
+            return Response(
+                {'error': 'Only the author can delete a comment.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def remarks_content_types(request):
+    """Return {model_name: content_type_id} for the 7 modules that support
+    remarks. The frontend hits this once on mount and caches the map, so
+    page code doesn't need to hard-code ContentType ids.
+    """
+    cts = ContentType.objects.filter(app_label='entries', model__in=ALLOWED_REMARK_MODELS)
+    return Response({ct.model: ct.id for ct in cts})

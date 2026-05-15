@@ -329,7 +329,6 @@ class Command(BaseCommand):
                         added_by=user,
                         client_name=random.choice(client_pool),
                         agent=random.choice(users),
-                        remarks=random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
                         status=status_value,
                         revisions=revisions,
                         quotes_compared=random.randint(0, 5),

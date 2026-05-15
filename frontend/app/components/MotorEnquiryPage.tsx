@@ -51,6 +51,7 @@ import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
+import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   AddedByCell,
@@ -70,6 +71,8 @@ import {
   getMotorEnquiryStats,
   updateMotorEnquiryStatus,
   updateMotorEnquiryRevisions,
+  getRemarksContentTypes,
+  REMARKS_MODEL_NAME_BY_API_SLUG,
   getCurrentMotorRenewalMonthlyTarget,
   getMotorRenewalMonthlyTargets,
   createMotorRenewalMonthlyTarget,
@@ -286,6 +289,15 @@ export function MotorEnquiryPage({
 
   // Remarks side panel
   const [panelEntry, setPanelEntry] = useState<MotorEnquiryEntry | null>(null);
+  // Map of {model_name: content_type_id} for all 7 remark-supporting modules;
+  // fetched once on mount and cached. Used by the shared RemarksPanel.
+  const [ctMap, setCtMap] = useState<Record<string, number>>({});
+  useEffect(() => {
+    getRemarksContentTypes().then((res) => {
+      if (res.data) setCtMap(res.data);
+    });
+  }, []);
+  const remarksContentTypeId = ctMap[REMARKS_MODEL_NAME_BY_API_SLUG[apiSlug]] ?? null;
 
   // ── Renewal monthly target ──────────────────────────────────────────────
   // Used when apiSlug is a renewal module (motor-renewal or motor-fleet-renewal).
@@ -537,9 +549,12 @@ export function MotorEnquiryPage({
     const url = isEdit
       ? `/api/entries/${apiSlug}/${editingEntry!.id}/`
       : `/api/entries/${apiSlug}/`;
+    // Remarks textarea is hidden on edit; on create, the typed text becomes
+    // the entry's first EntryRemark via the write-only `initial_remark` field.
+    const { remarks, ...rest } = payload;
     const body = isEdit
-      ? payload
-      : { date: toLocalDateString(today), ...payload };
+      ? rest
+      : { date: toLocalDateString(today), ...rest, initial_remark: remarks };
     const result = await fetchApi<MotorEnquiryEntry>(url, {
       method: isEdit ? 'PATCH' : 'POST',
       body: JSON.stringify(body),
@@ -1022,9 +1037,15 @@ export function MotorEnquiryPage({
                 isLoading={isLoading}
               />
             </div>
-            {panelEntry && (
-              <RemarksPanel entry={panelEntry} onClose={() => setPanelEntry(null)} />
-            )}
+            <RemarksPanel
+              contentTypeId={remarksContentTypeId}
+              objectId={panelEntry?.id ?? null}
+              entryLabel={panelEntry ? `${title} — ${panelEntry.pib_id}` : ''}
+              open={!!panelEntry}
+              onOpenChange={(open) => {
+                if (!open) setPanelEntry(null);
+              }}
+            />
           </div>
         </TabsContent>
       </Tabs>
@@ -1296,46 +1317,6 @@ function StatCard({
   );
 }
 
-// ─── Remarks side panel ──────────────────────────────────────────────────────
-
-function RemarksPanel({
-  entry,
-  onClose,
-}: {
-  entry: MotorEnquiryEntry;
-  onClose: () => void;
-}) {
-  return (
-    <aside className="w-[300px] shrink-0 bg-white border border-[#E4E4E4] rounded-2xl shadow-sm overflow-hidden self-start">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#E4E4E4]">
-        <h3 className="text-sm font-semibold text-[#09090B]">Remarks</h3>
-        <button
-          type="button"
-          onClick={onClose}
-          className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-[#F3F3F3]"
-          aria-label="Close remarks panel"
-        >
-          <X className="h-4 w-4 text-[#71717A]" />
-        </button>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="space-y-1">
-          <div className="text-xs uppercase tracking-wide text-[#71717A]">Client</div>
-          <div className="text-base font-semibold text-[#09090B]">{entry.client_name}</div>
-        </div>
-        <div className="space-y-1">
-          <div className="text-xs uppercase tracking-wide text-[#71717A]">Remarks</div>
-          <div className="text-sm text-[#374151] whitespace-pre-wrap min-h-[80px]">
-            {entry.remarks?.trim() || (
-              <span className="text-[#9CA3AF] italic">No remarks</span>
-            )}
-          </div>
-        </div>
-      </div>
-    </aside>
-  );
-}
-
 // ─── Enquiry create/edit form ────────────────────────────────────────────────
 
 function EnquiryForm({
@@ -1358,7 +1339,7 @@ function EnquiryForm({
   const [clientName, setClientName] = useState(entry?.client_name ?? '');
   const [agentId, setAgentId] = useState<number | null>(entry?.agent ?? null);
   const [chassisNo, setChassisNo] = useState(entry?.chassis_no ?? '');
-  const [remarks, setRemarks] = useState(entry?.remarks ?? '');
+  const [remarks, setRemarks] = useState('');
   const [quotesCompared, setQuotesCompared] = useState<string>(
     entry?.quotes_compared != null ? String(entry.quotes_compared) : '0'
   );
@@ -1379,7 +1360,7 @@ function EnquiryForm({
     setClientName(entry?.client_name ?? '');
     setAgentId(entry?.agent ?? null);
     setChassisNo(entry?.chassis_no ?? '');
-    setRemarks(entry?.remarks ?? '');
+    setRemarks('');
     setQuotesCompared(entry?.quotes_compared != null ? String(entry.quotes_compared) : '0');
   }, [entry]);
 
@@ -1453,15 +1434,20 @@ function EnquiryForm({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label>Remarks</Label>
-        <Textarea
-          placeholder="Add notes or remarks…"
-          value={remarks}
-          onChange={(e) => setRemarks(e.target.value)}
-          rows={3}
-        />
-      </div>
+      {/* Remarks textarea only on Add — on Edit, comments are managed via the
+          panel (the note icon on the row). The text typed here becomes the
+          new enquiry's first comment via `initial_remark`. */}
+      {!entry && (
+        <div className="space-y-2">
+          <Label>Remarks</Label>
+          <Textarea
+            placeholder="Add notes or remarks…"
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            rows={3}
+          />
+        </div>
+      )}
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>

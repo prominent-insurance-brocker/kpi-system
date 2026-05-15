@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import (
+    EntryRemark,
     GeneralNewEntry,
     GeneralNewStatusTransition,
     GeneralRenewalEntry,
@@ -88,12 +89,14 @@ class GeneralNewEntrySerializer(BaseEntrySerializer):
     accuracy_pct = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
+    # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new entry.
+    initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
     class Meta:
         model = GeneralNewEntry
         fields = [
             'id', 'pib_id', 'date',
-            'client_name', 'agent', 'agent_name', 'remarks',
+            'client_name', 'agent', 'agent_name', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
@@ -157,12 +160,14 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
     accuracy_pct = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
+    # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new entry.
+    initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
     class Meta:
         model = GeneralRenewalEntry
         fields = [
             'id', 'pib_id', 'date',
-            'client_name', 'agent', 'agent_name', 'remarks',
+            'client_name', 'agent', 'agent_name', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
@@ -240,12 +245,14 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
     accuracy_pct = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
+    # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new entry.
+    initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
     class Meta:
         model = MotorNewEntry
         fields = [
             'id', 'pib_id', 'date',
-            'client_name', 'agent', 'agent_name', 'chassis_no', 'remarks',
+            'client_name', 'agent', 'agent_name', 'chassis_no', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
@@ -307,12 +314,14 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
     accuracy_pct = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
+    # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new entry.
+    initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
     class Meta:
         model = MotorRenewalEntry
         fields = [
             'id', 'pib_id', 'date',
-            'client_name', 'agent', 'agent_name', 'chassis_no', 'remarks',
+            'client_name', 'agent', 'agent_name', 'chassis_no', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
@@ -378,6 +387,8 @@ class MotorClaimEntrySerializer(BaseEntrySerializer):
     tat_display = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
+    # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new claim.
+    initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
     class Meta:
         model = MotorClaimEntry
@@ -388,7 +399,7 @@ class MotorClaimEntrySerializer(BaseEntrySerializer):
             'type_of_accident', 'type_of_accident_name',
             'insurance_company', 'insurance_company_name',
             'next_call_date', 'garage_name', 'garage_number',
-            'status',
+            'status', 'initial_remark',
             'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name',
             'added_at', 'updated_at', 'is_editable',
             'tat_display', 'allowed_transitions', 'is_terminal',
@@ -509,12 +520,14 @@ class MotorFleetNewEntrySerializer(BaseEntrySerializer):
     accuracy_pct = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
+    # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new entry.
+    initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
     class Meta:
         model = MotorFleetNewEntry
         fields = [
             'id', 'pib_id', 'date',
-            'client_name', 'agent', 'agent_name', 'chassis_no', 'remarks',
+            'client_name', 'agent', 'agent_name', 'chassis_no', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
@@ -576,12 +589,14 @@ class MotorFleetRenewalEntrySerializer(BaseEntrySerializer):
     accuracy_pct = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
+    # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new entry.
+    initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
     class Meta:
         model = MotorFleetRenewalEntry
         fields = [
             'id', 'pib_id', 'date',
-            'client_name', 'agent', 'agent_name', 'chassis_no', 'remarks',
+            'client_name', 'agent', 'agent_name', 'chassis_no', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
@@ -716,3 +731,33 @@ class MedicalClaimStatusUpdateSerializer(serializers.Serializer):
                 f"Allowed: {allowed_labels}"
             )
         return value
+
+
+class EntryRemarkSerializer(serializers.ModelSerializer):
+    """Per-entry comment serializer. Author + author_name surfaced for the
+    panel UI; can_edit / can_delete tell the frontend whether to render the
+    pencil and trash icons (true only when the requester authored the row).
+    """
+    author_name = serializers.CharField(source='author.get_full_name', read_only=True)
+    can_edit = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EntryRemark
+        fields = [
+            'id', 'content_type', 'object_id', 'text',
+            'author', 'author_name', 'can_edit', 'can_delete',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'author', 'author_name', 'can_edit', 'can_delete',
+            'created_at', 'updated_at',
+        ]
+
+    def get_can_edit(self, obj):
+        request = self.context.get('request')
+        return bool(request and request.user.is_authenticated and request.user.id == obj.author_id)
+
+    def get_can_delete(self, obj):
+        request = self.context.get('request')
+        return bool(request and request.user.is_authenticated and request.user.id == obj.author_id)

@@ -1097,7 +1097,7 @@ function InlineDateCell({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 -mx-2 -my-1 text-sm text-[#374151] hover:bg-[#F3F3F3] transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[#E4E4E4] bg-white px-2 py-1 text-sm text-[#374151] shadow-xs hover:bg-[#F3F3F3] transition-colors"
         >
           <CalendarIcon className="h-3.5 w-3.5 text-[#71717A]" />
           <span>{value ? formatDate(value) : '—'}</span>

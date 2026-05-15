@@ -555,10 +555,10 @@ export function TrackerView<T extends BaseModuleEntry>({
                     return (
                       <td
                         key={d.getDate()}
-                        className={`px-1 py-2 border-l border-[#E4E4E4] ${cellBg}`}
+                        className={`px-1 py-2 border-l border-[#E4E4E4] text-center ${cellBg}`}
                         style={cellStyle}
                       >
-                        <div className="w-8 h-8 flex items-center justify-center">
+                        <div className="mx-auto w-8 h-8 flex items-center justify-center">
                           {cellText != null && !isFuture && (
                             <span className={`text-sm font-semibold ${cellTextClass}`}>
                               {cellText}

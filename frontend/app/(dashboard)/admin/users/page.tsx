@@ -58,6 +58,13 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
+  // Alert dialog shown when the server blocks a delete (user has uploaded
+  // data or is referenced as agent on someone else's entries).
+  const [deleteBlocked, setDeleteBlocked] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
+
   const fetchUsers = async () => {
     setIsLoading(true);
     const params = new URLSearchParams();
@@ -114,7 +121,12 @@ export default function UsersPage() {
     if (!ok) return;
     const result = await deleteUser(user.id);
     if (result.error) {
-      toast.error(result.error);
+      // Block-delete errors (user has uploaded data, or is referenced as an
+      // agent on someone else's entries) deserve a dialog, not a toast.
+      setDeleteBlocked({
+        title: 'Cannot delete user',
+        message: result.error,
+      });
     } else {
       toast.success('User deleted');
       fetchUsers();
@@ -283,6 +295,26 @@ export default function UsersPage() {
             onClose={() => setIsModalOpen(false)}
             error={error}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Single-button alert dialog for blocked deletes (user has uploaded
+          data or is referenced as agent). Replaces the toast that used to
+          fire here, since admins need to read the longer message. */}
+      <Dialog
+        open={deleteBlocked !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteBlocked(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{deleteBlocked?.title ?? 'Cannot delete user'}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{deleteBlocked?.message}</p>
+          <DialogFooter>
+            <Button onClick={() => setDeleteBlocked(null)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

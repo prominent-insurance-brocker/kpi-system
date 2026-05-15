@@ -327,13 +327,88 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response({'message': 'User deactivated successfully'})
 
     def destroy(self, request, *args, **kwargs):
-        """Prevent self-deletion."""
+        """Block self-deletion + block deletion when the user has data tied to them.
+
+        Rule: a user can only be deleted when they have neither uploaded any
+        entries themselves (`added_by`) NOR been assigned as the agent / source
+        on someone else's entry (PROTECT FKs that would 500 the cascade anyway).
+        Otherwise admins should deactivate the account instead.
+        """
         instance = self.get_object()
 
         if instance == request.user:
             return Response(
-                {'error': 'You cannot delete your own account'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': 'You cannot delete your own account.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from entries.models import (
+            GeneralNewEntry, GeneralRenewalEntry,
+            MotorNewEntry, MotorRenewalEntry, MotorClaimEntry,
+            SalesKPIEntry, MarineNewEntry, MarineRenewalEntry,
+            MedicalClaimEntry,
+        )
+        # Motor Fleet models were added later; import defensively in case the
+        # branch is run on an older codebase.
+        try:
+            from entries.models import MotorFleetNewEntry, MotorFleetRenewalEntry  # type: ignore
+            fleet_models = [MotorFleetNewEntry, MotorFleetRenewalEntry]
+        except ImportError:
+            fleet_models = []
+
+        uploader_models = [
+            GeneralNewEntry, GeneralRenewalEntry,
+            MotorNewEntry, MotorRenewalEntry, MotorClaimEntry,
+            SalesKPIEntry, MarineNewEntry, MarineRenewalEntry,
+            MedicalClaimEntry,
+            *fleet_models,
+        ]
+
+        # 1. Has this user uploaded data themselves?
+        uploaded = sum(M.objects.filter(added_by=instance).count() for M in uploader_models)
+        if uploaded > 0:
+            return Response(
+                {
+                    'error': (
+                        f'This user has uploaded {uploaded} '
+                        f'{"entry" if uploaded == 1 else "entries"}. '
+                        'Deactivate the user instead of deleting.'
+                    ),
+                    'reason': 'has_uploaded_data',
+                    'count': uploaded,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 2. Are they referenced as agent / source on someone else's entry?
+        #    Those FKs use on_delete=PROTECT, so without this check the
+        #    DB would 500 with ProtectedError.
+        agent_reverse_attrs = [
+            'general_new_enquiries_as_agent',
+            'general_renewal_enquiries_as_agent',
+            'motor_new_enquiries_as_agent',
+            'motor_renewal_enquiries_as_agent',
+            'motor_claim_enquiries_as_source',
+            'motor_fleet_new_enquiries_as_agent',
+            'motor_fleet_renewal_enquiries_as_agent',
+        ]
+        agent_count = 0
+        for attr in agent_reverse_attrs:
+            mgr = getattr(instance, attr, None)
+            if mgr is not None:
+                agent_count += mgr.count()
+        if agent_count > 0:
+            return Response(
+                {
+                    'error': (
+                        f'This user is assigned as the agent or source on '
+                        f'{agent_count} {"enquiry" if agent_count == 1 else "enquiries"}. '
+                        'Deactivate the user instead of deleting.'
+                    ),
+                    'reason': 'referenced_as_agent',
+                    'count': agent_count,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         return super().destroy(request, *args, **kwargs)

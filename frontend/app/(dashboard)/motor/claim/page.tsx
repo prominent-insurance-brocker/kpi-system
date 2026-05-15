@@ -125,6 +125,7 @@ export default function MotorClaimPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [accidentTypeFilter, setAccidentTypeFilter] = useState('');
   const [insurerFilter, setInsurerFilter] = useState('');
+  const [clientNameFilter, setClientNameFilter] = useState('');
 
   // Dashboard filters (independent so Dashboard date range doesn't tug
   // the Enquiries tab around when switching).
@@ -214,6 +215,7 @@ export default function MotorClaimPage() {
       if (statusFilter) qs.set('status', statusFilter);
       if (accidentTypeFilter) qs.set('type_of_accident', accidentTypeFilter);
       if (insurerFilter) qs.set('insurance_company', insurerFilter);
+      if (clientNameFilter) qs.set('client_name', clientNameFilter);
       const result = await fetchApi<{ results: MotorClaimEntry[]; count: number }>(
         `/api/entries/motor-claim/?${qs}`
       );
@@ -222,7 +224,7 @@ export default function MotorClaimPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, pageSize, dateFrom, dateTo, resolveNextCallBounds, userId, agentId, statusFilter, accidentTypeFilter, insurerFilter]);
+  }, [page, pageSize, dateFrom, dateTo, resolveNextCallBounds, userId, agentId, statusFilter, accidentTypeFilter, insurerFilter, clientNameFilter]);
 
   const fetchStats = useCallback(async () => {
     const result = await getMotorClaimStats({
@@ -456,7 +458,7 @@ export default function MotorClaimPage() {
   ];
 
   const hasActiveFilters =
-    !!(dateFrom || dateTo || nextCallPreset || userId || agentId || statusFilter || accidentTypeFilter || insurerFilter);
+    !!(dateFrom || dateTo || nextCallPreset || userId || agentId || statusFilter || accidentTypeFilter || insurerFilter || clientNameFilter);
 
   return (
     <div className="p-6 space-y-6">
@@ -608,6 +610,15 @@ export default function MotorClaimPage() {
         {/* Enquiries */}
         <TabsContent value="enquiries" className="mt-4 space-y-4">
           <FilterBar
+            search={{
+              value: clientNameFilter,
+              onChange: (v) => {
+                setClientNameFilter(v);
+                setPage(1);
+              },
+              placeholder: 'Search by client name…',
+              label: 'Client',
+            }}
             dateRange={{
               from: dateFrom,
               to: dateTo,
@@ -729,6 +740,7 @@ export default function MotorClaimPage() {
               setStatusFilter('');
               setAccidentTypeFilter('');
               setInsurerFilter('');
+              setClientNameFilter('');
               setPage(1);
             }}
           />

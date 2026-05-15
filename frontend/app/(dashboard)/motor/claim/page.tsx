@@ -361,7 +361,6 @@ export default function MotorClaimPage() {
         description: 'This action cannot be undone. Please confirm before proceeding.',
         confirmLabel: 'Proceed',
         cancelLabel: 'Cancel',
-        danger: true,
       });
       if (!ok) return;
     }

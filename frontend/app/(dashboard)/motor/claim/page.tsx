@@ -322,7 +322,7 @@ export default function MotorClaimPage() {
     fetchMonthEntries();
   };
 
-  const handleSave = async (payload: Partial<MotorClaimEntry>) => {
+  const handleSave = async (payload: Partial<MotorClaimEntry> & { initial_remark?: string }) => {
     setModalError('');
     const isEdit = !!editingEntry;
     const url = isEdit
@@ -906,7 +906,7 @@ function ClaimForm({
 }: {
   entry: MotorClaimEntry | null;
   salesUsers: ModuleUser[];
-  onSave: (payload: Partial<MotorClaimEntry>) => void;
+  onSave: (payload: Partial<MotorClaimEntry> & { initial_remark?: string }) => void;
   onClose: () => void;
   error: string;
 }) {
@@ -923,6 +923,8 @@ function ClaimForm({
   const [nextCallDate, setNextCallDate] = useState(entry?.next_call_date ?? '');
   const [garageName, setGarageName] = useState(entry?.garage_name ?? '');
   const [garageNumber, setGarageNumber] = useState(entry?.garage_number ?? '');
+  // Add-mode only: seed the new claim's first comment.
+  const [remarks, setRemarks] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const sourceFetchPage = useCallback(
@@ -974,7 +976,7 @@ function ClaimForm({
     e.preventDefault();
     if (!sourceId || !accidentTypeId || !insurerId) return;
     setIsSubmitting(true);
-    onSave({
+    const base = {
       client_name: clientName,
       vehicle_number: vehicleNumber,
       claim_number: claimNumber,
@@ -984,7 +986,9 @@ function ClaimForm({
       next_call_date: nextCallDate || null,
       garage_name: garageName,
       garage_number: garageNumber,
-    });
+    };
+    // On Add only, seed the first comment from the Remarks textarea.
+    onSave(entry ? base : { ...base, initial_remark: remarks });
     setIsSubmitting(false);
   };
 
@@ -1101,6 +1105,21 @@ function ClaimForm({
           />
         </div>
       </div>
+
+      {/* Remarks textarea only on Add — on Edit, comments are managed via the
+          note icon on the row. The text typed here becomes the new claim's
+          first comment via `initial_remark`. */}
+      {!entry && (
+        <div className="space-y-2">
+          <Label>Remarks</Label>
+          <Textarea
+            placeholder="Add notes or remarks…"
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            rows={3}
+          />
+        </div>
+      )}
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>

@@ -341,6 +341,12 @@ function RoleForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // HOD roles must oversee at least one module — match the backend check so
+    // users get instant feedback instead of waiting for the API error.
+    if (formData.is_hod && formData.module_permissions.length === 0) {
+      toast.error('HOD roles must have at least one module permission.');
+      return;
+    }
     setIsSubmitting(true);
     await onSave(formData);
     setIsSubmitting(false);

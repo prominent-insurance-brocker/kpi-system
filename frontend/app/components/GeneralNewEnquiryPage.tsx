@@ -1,11 +1,15 @@
 'use client';
 
 /**
- * Shared standalone page for the Motor New + Motor Renewal modules.
+ * Standalone page for the General New module.
  *
- * Both modules share an identical per-enquiry schema (client_name, agent FK,
- * chassis_no, remarks, status state-machine, revisions, status_changed_at),
- * so a single page implementation is reused for both routes.
+ * Cloned from MotorEnquiryPage on 2026-05-15. Mirrors Motor New's per-enquiry
+ * workflow (client_name, agent FK, remarks, status state machine, revisions,
+ * status_changed_at) but WITHOUT the motor-specific chassis_no field — general
+ * insurance products don't have a chassis.
+ *
+ * IMPORTANT: this file was duplicated rather than refactored into a shared
+ * base. Future bug fixes in MotorEnquiryPage need to be mirrored here too.
  *
  * Tabs: Dashboard | Tracker View | Enquiries
  *   - Dashboard: 6 stat cards driven by /stats/
@@ -97,10 +101,6 @@ interface ModuleStatusConfig {
 }
 
 const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
-  // 'general-new' has its own page (GeneralNewEnquiryPage). This entry exists
-  // only to satisfy the Record key requirement after `MotorEnquiryModule` was
-  // widened to include 'general-new'; MotorEnquiryPage itself is never
-  // instantiated with apiSlug='general-new'.
   'general-new': {
     options: [
       { value: 'new', label: 'New Enquiry' },
@@ -195,17 +195,10 @@ function formatAccuracy(pct: number | null | undefined): string {
   return `${pct.toFixed(1)}%`;
 }
 
-export interface MotorEnquiryPageProps {
-  moduleKey: 'motor_new' | 'motor_renewal' | 'motor_fleet_new' | 'motor_fleet_renewal';
-  apiSlug: MotorEnquiryModule;
-  title: string;
-}
-
-export function MotorEnquiryPage({
-  moduleKey,
-  apiSlug,
-  title,
-}: MotorEnquiryPageProps) {
+export function GeneralNewEnquiryPage() {
+  const moduleKey = 'general_new' as const;
+  const apiSlug: MotorEnquiryModule = 'general-new';
+  const title = 'General New';
   const config = STATUS_CONFIG[apiSlug];
   const statusLabelFor = useCallback(
     (value: MotorEnquiryEntry['status']) => {
@@ -383,9 +376,12 @@ export function MotorEnquiryPage({
   }, [apiSlug, personalCalYear, personalCalMonth, teamCalYear, teamCalMonth]);
 
   // ── Motor Renewal target fetchers ─────────────────────────────────────────
-  // Both motor-renewal and motor-fleet-renewal expose the monthly-target
-  // sub-resource with the same shape, so they share this code path.
-  const isRenewal = apiSlug === 'motor-renewal' || apiSlug === 'motor-fleet-renewal';
+  // General New has no monthly retention target — these are renewal-only.
+  // Hardcoded false so the renewal-target code paths below are unreachable;
+  // they remain in the file because this component was cloned from
+  // MotorEnquiryPage and the dead branches help keep diffs against the source
+  // small for future bug-fix mirroring.
+  const isRenewal = false;
   const renewalModule = apiSlug as MotorRenewalModule;
 
   const fetchCurrentTarget = useCallback(async () => {
@@ -528,7 +524,6 @@ export function MotorEnquiryPage({
   const handleSaveNew = async (payload: {
     client_name: string;
     agent: number;
-    chassis_no: string;
     remarks: string;
     quotes_compared: number;
   }) => {
@@ -656,7 +651,6 @@ export function MotorEnquiryPage({
       render: (item: MotorEnquiryEntry) => <AddedByCell entry={item} />,
     },
     { key: 'agent_name', header: 'Agent Name' },
-    { key: 'chassis_no', header: 'Chassis No' },
     {
       key: 'revisions',
       header: 'Revisions',
@@ -1348,7 +1342,6 @@ function EnquiryForm({
   onSave: (payload: {
     client_name: string;
     agent: number;
-    chassis_no: string;
     remarks: string;
     quotes_compared: number;
   }) => void;
@@ -1357,7 +1350,6 @@ function EnquiryForm({
 }) {
   const [clientName, setClientName] = useState(entry?.client_name ?? '');
   const [agentId, setAgentId] = useState<number | null>(entry?.agent ?? null);
-  const [chassisNo, setChassisNo] = useState(entry?.chassis_no ?? '');
   const [remarks, setRemarks] = useState(entry?.remarks ?? '');
   const [quotesCompared, setQuotesCompared] = useState<string>(
     entry?.quotes_compared != null ? String(entry.quotes_compared) : '0'
@@ -1378,7 +1370,6 @@ function EnquiryForm({
   useEffect(() => {
     setClientName(entry?.client_name ?? '');
     setAgentId(entry?.agent ?? null);
-    setChassisNo(entry?.chassis_no ?? '');
     setRemarks(entry?.remarks ?? '');
     setQuotesCompared(entry?.quotes_compared != null ? String(entry.quotes_compared) : '0');
   }, [entry]);
@@ -1390,7 +1381,6 @@ function EnquiryForm({
     onSave({
       client_name: clientName,
       agent: agentId,
-      chassis_no: chassisNo,
       remarks,
       quotes_compared: Math.max(0, Number(quotesCompared || 0)),
     });
@@ -1431,17 +1421,6 @@ function EnquiryForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Chassis No *</Label>
-        <Input
-          type="text"
-          placeholder="Enter chassis number"
-          value={chassisNo}
-          onChange={(e) => setChassisNo(e.target.value)}
-          required
-        />
-      </div>
-
-      <div className="space-y-2">
         <Label>No. of Quotes Compared</Label>
         <Input
           type="number"
@@ -1467,7 +1446,7 @@ function EnquiryForm({
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting || !clientName || !chassisNo || !agentId}>
+        <Button type="submit" disabled={isSubmitting || !clientName || !agentId}>
           {isSubmitting ? 'Saving…' : entry ? 'Update' : 'Add Enquiry'}
         </Button>
       </DialogFooter>

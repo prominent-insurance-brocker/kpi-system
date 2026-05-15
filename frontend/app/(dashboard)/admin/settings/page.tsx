@@ -243,7 +243,7 @@ function LookupTab({ resource }: { resource: LookupResource }) {
                           className="max-w-sm"
                         />
                       ) : (
-                        <span className={!row.is_active ? 'text-muted-foreground line-through' : ''}>
+                        <span className={!row.is_active ? 'text-muted-foreground' : ''}>
                           {row.name}
                         </span>
                       )}

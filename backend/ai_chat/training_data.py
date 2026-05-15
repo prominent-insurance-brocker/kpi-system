@@ -19,11 +19,13 @@ def get_ddl_statements():
             CREATE TABLE entries_generalnewentry (
                 id SERIAL PRIMARY KEY,
                 date DATE NOT NULL,
-                quotations INTEGER NOT NULL,
-                quotes_revised INTEGER NOT NULL,
-                quotes_converted INTEGER NOT NULL,
-                tat INTEGER NOT NULL,
-                accuracy NUMERIC(5, 2) NOT NULL,
+                client_name VARCHAR(200) NOT NULL,
+                agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                remarks TEXT NOT NULL,
+                status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
+                revisions INTEGER NOT NULL DEFAULT 0,
+                quotes_compared INTEGER NOT NULL DEFAULT 0,
+                status_changed_at TIMESTAMPTZ NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at TIMESTAMPTZ NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL
@@ -171,11 +173,13 @@ def get_ddl_statements():
             CREATE TABLE entries_generalnewentry (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date DATE NOT NULL,
-                quotations INTEGER UNSIGNED NOT NULL,
-                quotes_revised INTEGER UNSIGNED NOT NULL,
-                quotes_converted INTEGER UNSIGNED NOT NULL,
-                tat INTEGER UNSIGNED NOT NULL,
-                accuracy DECIMAL(5, 2) NOT NULL,
+                client_name VARCHAR(200) NOT NULL,
+                agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
+                remarks TEXT NOT NULL,
+                status VARCHAR(20) NOT NULL,
+                revisions INTEGER UNSIGNED NOT NULL DEFAULT 0,
+                quotes_compared INTEGER UNSIGNED NOT NULL DEFAULT 0,
+                status_changed_at DATETIME NULL,
                 added_by_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 added_at DATETIME NOT NULL,
                 updated_at DATETIME NOT NULL
@@ -325,9 +329,12 @@ def get_documentation():
         "This is an insurance company KPI (Key Performance Indicator) tracking system. "
         "It tracks daily metrics across General Insurance, Motor Insurance, and Sales departments.",
 
-        "The 'General New' module (entries_generalnewentry) tracks new general insurance business: "
-        "quotations issued, quotes revised, quotes converted to policies, TAT (turnaround time in hours), "
-        "and accuracy percentage.",
+        "The 'General New' module (entries_generalnewentry) tracks new general insurance ENQUIRIES — one row per customer enquiry. "
+        "Each row has client_name, an agent_id (the salesperson source), remarks, "
+        "a status (one of 'new', 'converted', 'lost'), a revisions counter, quotes_compared, and a status_changed_at timestamp set when the status becomes terminal. "
+        "TAT for an enquiry = status_changed_at - added_at (only meaningful when status != 'new'). "
+        "Accuracy = 100 * (0.9 ^ revisions), only meaningful when status != 'new'. "
+        "Same per-enquiry shape as Motor New but without chassis_no (general insurance has no chassis).",
 
         "The 'General Renewal' module (entries_generalrenewalentry) tracks renewal of existing general insurance policies: "
         "quotations issued, quotes revised, quotes converted, TAT, and accuracy. "
@@ -392,9 +399,9 @@ def get_example_queries():
     if _is_postgres():
         return [
             {
-                "question": "What were the total quotations across all General New entries this month?",
+                "question": "How many General New enquiries were created this month?",
                 "sql": """
-                    SELECT SUM(quotations) AS total_quotations
+                    SELECT COUNT(*) AS total_enquiries
                     FROM entries_generalnewentry
                     WHERE date >= date_trunc('month', CURRENT_DATE)
                       AND date <= CURRENT_DATE;
@@ -448,12 +455,14 @@ def get_example_queries():
                 """,
             },
             {
-                "question": "What is the conversion rate for General New entries last month?",
+                "question": "What is the conversion rate for General New enquiries last month?",
                 "sql": """
                     SELECT
-                        SUM(quotations) AS total_quotations,
-                        SUM(quotes_converted) AS total_converted,
-                        ROUND(SUM(quotes_converted)::FLOAT / NULLIF(SUM(quotations), 0) * 100, 2) AS conversion_rate_pct
+                        COUNT(*) FILTER (WHERE status = 'converted') AS converted,
+                        COUNT(*) FILTER (WHERE status IN ('converted','lost')) AS closed,
+                        COUNT(*) AS total,
+                        ROUND(COUNT(*) FILTER (WHERE status = 'converted')::FLOAT
+                              / NULLIF(COUNT(*), 0) * 100, 2) AS conversion_rate_pct
                     FROM entries_generalnewentry
                     WHERE date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
                       AND date < date_trunc('month', CURRENT_DATE);
@@ -499,17 +508,17 @@ def get_example_queries():
                 """,
             },
             {
-                "question": "Compare General New vs General Renewal quotations this month",
+                "question": "Compare General New vs General Renewal enquiry counts this month",
                 "sql": """
                     SELECT
                         'General New' AS module,
-                        SUM(quotations) AS total_quotations
+                        COUNT(*) AS total_enquiries
                     FROM entries_generalnewentry
                     WHERE date >= date_trunc('month', CURRENT_DATE) AND date <= CURRENT_DATE
                     UNION ALL
                     SELECT
                         'General Renewal' AS module,
-                        SUM(quotations) AS total_quotations
+                        COUNT(*) AS total_enquiries
                     FROM entries_generalrenewalentry
                     WHERE date >= date_trunc('month', CURRENT_DATE) AND date <= CURRENT_DATE;
                 """,
@@ -518,9 +527,9 @@ def get_example_queries():
     else:
         return [
             {
-                "question": "What were the total quotations across all General New entries this month?",
+                "question": "How many General New enquiries were created this month?",
                 "sql": """
-                    SELECT SUM(quotations) AS total_quotations
+                    SELECT COUNT(*) AS total_enquiries
                     FROM entries_generalnewentry
                     WHERE date >= date('now', 'start of month')
                       AND date <= date('now');
@@ -574,12 +583,14 @@ def get_example_queries():
                 """,
             },
             {
-                "question": "What is the conversion rate for General New entries last month?",
+                "question": "What is the conversion rate for General New enquiries last month?",
                 "sql": """
                     SELECT
-                        SUM(quotations) AS total_quotations,
-                        SUM(quotes_converted) AS total_converted,
-                        ROUND(CAST(SUM(quotes_converted) AS FLOAT) / NULLIF(SUM(quotations), 0) * 100, 2) AS conversion_rate_pct
+                        SUM(CASE WHEN status = 'converted' THEN 1 ELSE 0 END) AS converted,
+                        SUM(CASE WHEN status IN ('converted','lost') THEN 1 ELSE 0 END) AS closed,
+                        COUNT(*) AS total,
+                        ROUND(CAST(SUM(CASE WHEN status = 'converted' THEN 1 ELSE 0 END) AS FLOAT)
+                              / NULLIF(COUNT(*), 0) * 100, 2) AS conversion_rate_pct
                     FROM entries_generalnewentry
                     WHERE date >= date('now', 'start of month', '-1 month')
                       AND date < date('now', 'start of month');
@@ -625,17 +636,17 @@ def get_example_queries():
                 """,
             },
             {
-                "question": "Compare General New vs General Renewal quotations this month",
+                "question": "Compare General New vs General Renewal enquiry counts this month",
                 "sql": """
                     SELECT
                         'General New' AS module,
-                        SUM(quotations) AS total_quotations
+                        COUNT(*) AS total_enquiries
                     FROM entries_generalnewentry
                     WHERE date >= date('now', 'start of month') AND date <= date('now')
                     UNION ALL
                     SELECT
                         'General Renewal' AS module,
-                        SUM(quotations) AS total_quotations
+                        COUNT(*) AS total_enquiries
                     FROM entries_generalrenewalentry
                     WHERE date >= date('now', 'start of month') AND date <= date('now');
                 """,

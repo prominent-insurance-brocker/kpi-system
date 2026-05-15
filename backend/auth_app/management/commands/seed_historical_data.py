@@ -22,6 +22,7 @@ from auth_app.models import CustomUser
 from roles.models import Role, RoleModulePermission
 from entries.models import (
     GeneralNewEntry,
+    GeneralNewStatusTransition,
     # GeneralRenewalEntry intentionally omitted — module switched from
     # per-day KPI counters to a per-enquiry workflow; the old seeder no
     # longer applies. Re-add and adapt to MotorRenewalEntry's seeder shape
@@ -244,8 +245,7 @@ class Command(BaseCommand):
     # ------------- per-day KPI seeders -------------
 
     def _seed_general_new(self, users, dates):
-        return self._seed_funnel_kpi(users, dates, GeneralNewEntry,
-                                     qmin=5, qmax=25, acc_min=85.0, acc_max=99.5)
+        return self._seed_motor_enquiry(users, dates, GeneralNewEntry, GeneralNewStatusTransition)
 
     # _seed_general_renewal removed — module schema is now per-enquiry.
 
@@ -290,11 +290,12 @@ class Command(BaseCommand):
         return count
 
     def _seed_motor_enquiry(self, users, dates, Model, TransitionModel):
-        """Seed per-enquiry rows for motor_new / motor_renewal.
+        """Seed per-enquiry rows for motor_new / motor_renewal / general_new.
 
         Each row represents one customer enquiry with a status state-machine.
         Generates 1–3 enquiries per agent per day and seeds a transition
-        history record for each status change.
+        history record for each status change. chassis_no is set only on
+        models that have the field — general_new omits it.
         """
         client_pool = [
             'Haris', 'Mubashid', 'Jimshad', 'Hisham', 'Vishnu', 'Rashid',
@@ -323,18 +324,23 @@ class Command(BaseCommand):
                             hours=random.randint(1, 48),
                             minutes=random.randint(0, 59),
                         )
-                    entry = Model.objects.create(
+                    create_kwargs = dict(
                         date=d,
                         added_by=user,
                         client_name=random.choice(client_pool),
                         agent=random.choice(users),
-                        chassis_no=f"CH-{random.randint(100, 999)}-{random.randint(1000, 9999)}",
                         remarks=random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
                         status=status_value,
                         revisions=revisions,
                         quotes_compared=random.randint(0, 5),
                         status_changed_at=status_changed_at,
                     )
+                    # General modules (general_new) skip chassis_no — only motor variants have it.
+                    if any(f.name == 'chassis_no' for f in Model._meta.get_fields()):
+                        create_kwargs['chassis_no'] = (
+                            f"CH-{random.randint(100, 999)}-{random.randint(1000, 9999)}"
+                        )
+                    entry = Model.objects.create(**create_kwargs)
                     self._backdate(Model, entry.pk, added_at_dt)
                     TransitionModel.objects.create(
                         entry=entry,

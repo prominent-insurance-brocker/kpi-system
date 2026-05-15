@@ -305,7 +305,8 @@ export async function getUsersForModulePage(
   }>(`/api/auth/users/module-members/?${qs}`);
 }
 
-// ─── Motor enquiry (motor_new / motor_renewal share the same shape) ──────────
+// ─── Motor enquiry (motor_new / motor_renewal / general_new share the same
+//     shape — general_new omits chassis_no). ───────────────────────────────
 
 export interface MotorEnquiryEntry {
   id: number;
@@ -314,7 +315,8 @@ export interface MotorEnquiryEntry {
   client_name: string;
   agent: number;                     // FK id
   agent_name: string;
-  chassis_no: string;
+  // chassis_no is set on the motor variants only — general_new has no chassis.
+  chassis_no?: string;
   remarks: string;
   // Motor New uses 'converted'; Motor Renewal uses 'retained'. Both modules
   // share the same row type; the page's per-module STATUS_CONFIG narrows it.
@@ -362,7 +364,12 @@ export interface MotorRenewalMonthlyTarget {
   updated_at: string;
 }
 
-export type MotorEnquiryModule = 'motor-new' | 'motor-renewal' | 'motor-fleet-new' | 'motor-fleet-renewal';
+export type MotorEnquiryModule =
+  | 'motor-new'
+  | 'motor-renewal'
+  | 'motor-fleet-new'
+  | 'motor-fleet-renewal'
+  | 'general-new';  // general_new shares the per-enquiry shape (minus chassis_no)
 
 // Renewal-style modules that have monthly retention targets (clients_assigned).
 export type MotorRenewalModule = 'motor-renewal' | 'motor-fleet-renewal';

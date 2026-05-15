@@ -13,7 +13,7 @@ class BaseEntryAdmin(admin.ModelAdmin):
 
 @admin.register(GeneralNewEntry)
 class GeneralNewEntryAdmin(BaseEntryAdmin):
-    list_display = BaseEntryAdmin.list_display + ('quotations', 'quotes_converted', 'accuracy')
+    list_display = BaseEntryAdmin.list_display + ('client_name', 'agent', 'status', 'revisions')
 
 @admin.register(GeneralRenewalEntry)
 class GeneralRenewalEntryAdmin(BaseEntryAdmin):

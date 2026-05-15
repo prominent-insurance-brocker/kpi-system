@@ -354,26 +354,8 @@ class Command(BaseCommand):
         self.stdout.write(f'  - Medical Claim entries: {count}')
 
     def _seed_general_new_entries(self, users, dates):
-        """Seed GeneralNewEntry records."""
-        count = 0
-        for user in users:
-            if not user:
-                continue
-            for entry_date in dates:
-                _, created = GeneralNewEntry.objects.get_or_create(
-                    date=entry_date,
-                    added_by=user,
-                    defaults={
-                        'quotations': random.randint(5, 25),
-                        'quotes_revised': random.randint(1, 10),
-                        'quotes_converted': random.randint(1, 8),
-                        'tat': random.randint(1, 5),
-                        'accuracy': Decimal(str(round(random.uniform(85.0, 99.9), 2))),
-                    }
-                )
-                if created:
-                    count += 1
-        return count
+        """Seed GeneralNewEntry records (per-enquiry rows, no chassis)."""
+        return self._seed_motor_enquiry_entries(GeneralNewEntry, users, dates)
 
     # GeneralRenewalEntry seeder removed: module migrated from per-day KPI
     # counters to a per-enquiry workflow (mirroring Motor Renewal).
@@ -407,6 +389,10 @@ class Command(BaseCommand):
             + [model.STATUS_LOST] * 20
         )
 
+        # General modules (general_new, general_renewal) drop chassis_no — only
+        # the motor variants have it.
+        has_chassis = any(f.name == 'chassis_no' for f in model._meta.get_fields())
+
         count = 0
         for user in users:
             if not user:
@@ -414,7 +400,6 @@ class Command(BaseCommand):
             for entry_date in dates:
                 # 1–3 enquiries per agent per day.
                 for _ in range(random.randint(1, 3)):
-                    chassis_suffix = f"{random.randint(100, 999)}-{random.randint(1000, 9999)}"
                     status_value = random.choice(status_pool)
                     revisions = random.randint(0, 4)
                     status_changed_at = None
@@ -424,18 +409,21 @@ class Command(BaseCommand):
                         status_changed_at = timezone.now() + timedelta(
                             hours=random.randint(1, 24)
                         )
-                    entry = model.objects.create(
+                    create_kwargs = dict(
                         date=entry_date,
                         added_by=user,
                         client_name=random.choice(client_names),
                         agent=random.choice(users),
-                        chassis_no=f"CH-{chassis_suffix}",
                         remarks=random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
                         status=status_value,
                         revisions=revisions,
                         quotes_compared=random.randint(0, 5),
                         status_changed_at=status_changed_at,
                     )
+                    if has_chassis:
+                        chassis_suffix = f"{random.randint(100, 999)}-{random.randint(1000, 9999)}"
+                        create_kwargs['chassis_no'] = f"CH-{chassis_suffix}"
+                    entry = model.objects.create(**create_kwargs)
                     count += 1
                     transition_model = entry.status_transitions.model
                     transition_model.objects.create(

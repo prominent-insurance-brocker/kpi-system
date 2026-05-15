@@ -338,6 +338,19 @@ def motor_enquiry_payload(date_iso, added_by_id):
     }
 
 
+def general_enquiry_payload(date_iso, added_by_id):
+    """Per-enquiry payload for general_new — same shape as motor_enquiry_payload
+    minus chassis_no (general insurance has no chassis)."""
+    return {
+        'date': date_iso,
+        'added_by': added_by_id,
+        'client_name': random.choice(_MOTOR_CLIENT_POOL),
+        'agent': added_by_id,
+        'quotes_compared': random.randint(0, 5),
+        'remarks': random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
+    }
+
+
 def sales_kpi_payload(date_iso, added_by_id):
     leads = random.randint(15, 40)
     quotes_from_ops = random.randint(0, leads)
@@ -534,7 +547,7 @@ def main():
     print(f'\nDate pool: {len(weekday_dates)} weekdays\n')
 
     payload_fns = {
-        'general_new': lambda d, u: kpi_funnel_payload(d, u, 5, 25, 85.0, 99.5),
+        'general_new': general_enquiry_payload,
         'general_renewal': lambda d, u: kpi_funnel_payload(d, u, 10, 30, 88.0, 99.5),
         'motor_new': motor_enquiry_payload,
         'motor_renewal': motor_enquiry_payload,

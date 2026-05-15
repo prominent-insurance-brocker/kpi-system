@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CalendarIcon, ChevronDownIcon } from "lucide-react"
+import { CalendarIcon } from "lucide-react"
 import { type DateRange } from "react-day-picker"
 
 import { Button } from "@/components/ui/button"
@@ -98,9 +98,13 @@ const formatDisplayDate = (dateStr: string): string => {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 }
 
+type PickerMode = "single" | "range"
+
 export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterProps) {
   const [isCalendarOpen, setIsCalendarOpen] = React.useState(false)
   const [tempRange, setTempRange] = React.useState<DateRange | undefined>(undefined)
+  const [tempSingle, setTempSingle] = React.useState<Date | undefined>(undefined)
+  const [pickerMode, setPickerMode] = React.useState<PickerMode>("range")
   const [isCustomMode, setIsCustomMode] = React.useState(false)
   const justOpenedRef = React.useRef(false)
 
@@ -111,6 +115,7 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
     if (!dateFrom && !dateTo) {
       setIsCustomMode(false)
       setTempRange(undefined)
+      setTempSingle(undefined)
       setIsCalendarOpen(false)
     }
   }, [dateFrom, dateTo])
@@ -122,14 +127,23 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
     const preset = value as PresetKey
 
     if (preset === "custom") {
-      // Initialize temp range with current values or undefined
-      if (dateFrom || dateTo) {
+      // Pick a sensible initial mode based on current values: if from === to
+      // (or only one bound is set) default to Single date, else Date range.
+      if (dateFrom && dateTo && dateFrom === dateTo) {
+        setPickerMode("single")
+        setTempSingle(new Date(dateFrom + "T00:00:00"))
+        setTempRange(undefined)
+      } else if (dateFrom || dateTo) {
+        setPickerMode("range")
         setTempRange({
           from: dateFrom ? new Date(dateFrom + "T00:00:00") : undefined,
           to: dateTo ? new Date(dateTo + "T00:00:00") : undefined,
         })
+        setTempSingle(undefined)
       } else {
+        setPickerMode("range")
         setTempRange(undefined)
+        setTempSingle(undefined)
       }
       setIsCustomMode(true)
       // Mark that we're about to open, so onOpenChange doesn't immediately close
@@ -161,19 +175,46 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
     }
   }
 
-  const handleCalendarSelect = (range: DateRange | undefined) => {
+  const handleRangeSelect = (range: DateRange | undefined) => {
     setTempRange(range)
   }
 
+  const handleSingleSelect = (date: Date | undefined) => {
+    setTempSingle(date)
+  }
+
+  const handleModeChange = (mode: PickerMode) => {
+    if (mode === pickerMode) return
+    // Carry the current selection across modes when sensible so switching
+    // doesn't always wipe the user's pick.
+    if (mode === "single") {
+      // From range → single: take the start date if there is one.
+      setTempSingle(tempRange?.from ?? tempSingle)
+    } else {
+      // From single → range: seed range.from with the single date.
+      if (tempSingle && !tempRange) {
+        setTempRange({ from: tempSingle, to: undefined })
+      }
+    }
+    setPickerMode(mode)
+  }
+
   const handleApply = () => {
-    const from = tempRange?.from ? formatDate(tempRange.from) : ""
-    const to = tempRange?.to ? formatDate(tempRange.to) : ""
-    onChange(from, to)
+    if (pickerMode === "single") {
+      const ds = tempSingle ? formatDate(tempSingle) : ""
+      // Single-date mode filters to that exact day (from = to = day).
+      onChange(ds, ds)
+    } else {
+      const from = tempRange?.from ? formatDate(tempRange.from) : ""
+      const to = tempRange?.to ? formatDate(tempRange.to) : ""
+      onChange(from, to)
+    }
     setIsCalendarOpen(false)
   }
 
   const handleClear = () => {
     setTempRange(undefined)
+    setTempSingle(undefined)
     onChange("", "")
     setIsCalendarOpen(false)
     setIsCustomMode(false)
@@ -183,6 +224,8 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
     if (detectedPreset === "custom" && (dateFrom || dateTo)) {
       const from = formatDisplayDate(dateFrom)
       const to = formatDisplayDate(dateTo)
+      // Same-day filter — show as a single date instead of "X - X".
+      if (from && to && dateFrom === dateTo) return from
       if (from && to) return `${from} - ${to}`
       if (from) return `From ${from}`
       if (to) return `To ${to}`
@@ -191,6 +234,12 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
   }
 
   const showCustomButton = currentPreset === "custom" || isCustomMode
+
+  // Apply button enablement — require a value matching the active mode.
+  const canApply =
+    pickerMode === "single"
+      ? !!tempSingle
+      : !!(tempRange?.from || tempRange?.to)
 
   return (
     <div className="flex items-center gap-2">
@@ -230,19 +279,59 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
 
         <PopoverContent className="w-auto p-0" align="start">
           <div className="p-3">
-            <Calendar
-              mode="range"
-              defaultMonth={tempRange?.from || new Date()}
-              selected={tempRange}
-              onSelect={handleCalendarSelect}
-              numberOfMonths={2}
-              className="rounded-md border-0"
-            />
+            {/* Mode toggle — single date vs date range */}
+            <div className="inline-flex items-center rounded-md border border-[#E4E4E4] p-0.5 mb-3 text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => handleModeChange("single")}
+                className={cn(
+                  "px-3 py-1 rounded-sm transition-colors",
+                  pickerMode === "single"
+                    ? "bg-[#09090B] text-white"
+                    : "text-[#71717A] hover:text-[#09090B]"
+                )}
+              >
+                Single date
+              </button>
+              <button
+                type="button"
+                onClick={() => handleModeChange("range")}
+                className={cn(
+                  "px-3 py-1 rounded-sm transition-colors",
+                  pickerMode === "range"
+                    ? "bg-[#09090B] text-white"
+                    : "text-[#71717A] hover:text-[#09090B]"
+                )}
+              >
+                Date range
+              </button>
+            </div>
+
+            {pickerMode === "single" ? (
+              <Calendar
+                mode="single"
+                defaultMonth={tempSingle || new Date()}
+                selected={tempSingle}
+                onSelect={handleSingleSelect}
+                numberOfMonths={1}
+                className="rounded-md border-0"
+              />
+            ) : (
+              <Calendar
+                mode="range"
+                defaultMonth={tempRange?.from || new Date()}
+                selected={tempRange}
+                onSelect={handleRangeSelect}
+                numberOfMonths={2}
+                className="rounded-md border-0"
+              />
+            )}
+
             <div className="flex justify-end gap-2 pt-3 border-t mt-3">
               <Button variant="outline" size="sm" onClick={handleClear}>
                 Clear
               </Button>
-              <Button size="sm" onClick={handleApply}>
+              <Button size="sm" onClick={handleApply} disabled={!canApply}>
                 Apply
               </Button>
             </div>

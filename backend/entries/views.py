@@ -718,11 +718,21 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        """Cumulative per-status counts (lifecycle funnel) — RBAC + date filtered.
+        """Current-status counts for the Motor Claim Dashboard.
 
-        Each card counts entries that have *ever* reached that status. A claim
-        currently Resolved still counts under Opened and In Progress. For
-        terminal statuses this equals the current-status count.
+        Returns six numbers feeding two card groups on the frontend:
+
+        Overview (aggregates):
+          - claims_opened:  total row count (every claim was opened on create)
+          - claims_pending: status in {claims_opened, claims_in_progress}
+          - claims_closed:  status in {claims_resolved, claims_rejected}
+
+        Breakdown (single-status):
+          - claims_in_progress: status == claims_in_progress
+          - claims_resolved:    status == claims_resolved
+          - claims_rejected:    status == claims_rejected
+
+        RBAC + date filters still apply via get_queryset() + filterset.
         """
         queryset = self.get_queryset()
 
@@ -730,19 +740,19 @@ class MotorClaimEntryViewSet(BaseEntryViewSet):
         filterset = self.filterset_class(date_params, queryset=queryset)
         queryset = filterset.qs
 
-        entry_ids = list(queryset.values_list('id', flat=True))
-        total = len(entry_ids)
-        transitions = MotorClaimStatusTransition.objects.filter(entry_id__in=entry_ids)
-
-        def reached(s):
-            return transitions.filter(to_status=s).values('entry_id').distinct().count()
+        counts = dict(queryset.values_list('status').annotate(n=Count('id')))
+        opened = counts.get('claims_opened', 0)
+        in_progress = counts.get('claims_in_progress', 0)
+        resolved = counts.get('claims_resolved', 0)
+        rejected = counts.get('claims_rejected', 0)
 
         return Response({
-            # Every claim is created in claims_opened — total entries.
-            'claims_opened': total,
-            'claims_in_progress': reached('claims_in_progress'),
-            'claims_resolved': reached('claims_resolved'),
-            'claims_rejected': reached('claims_rejected'),
+            'claims_opened': opened + in_progress + resolved + rejected,
+            'claims_pending': opened + in_progress,
+            'claims_closed': resolved + rejected,
+            'claims_in_progress': in_progress,
+            'claims_resolved': resolved,
+            'claims_rejected': rejected,
         })
 
 
@@ -1125,11 +1135,12 @@ class MedicalClaimEntryViewSet(BaseEntryViewSet):
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        """Cumulative per-status counts (lifecycle funnel) — RBAC + date filtered.
+        """Current-status counts for the Medical Claim Dashboard.
 
-        Each card counts entries that have *ever* reached that status. A claim
-        currently Resolved still counts under Opened and In Progress. For
-        terminal statuses this equals the current-status count.
+        Same shape as Motor Claim's /stats/ — six fields covering an Overview
+        group (opened / pending / closed) and a Breakdown group (in_progress
+        / resolved / rejected). All counts are based on the row's CURRENT
+        status, not the cumulative lifecycle path.
         """
         queryset = self.get_queryset()
 
@@ -1138,18 +1149,19 @@ class MedicalClaimEntryViewSet(BaseEntryViewSet):
         filterset = self.filterset_class(date_params, queryset=queryset)
         queryset = filterset.qs
 
-        entry_ids = list(queryset.values_list('id', flat=True))
-        total = len(entry_ids)
-        transitions = MedicalClaimStatusTransition.objects.filter(entry_id__in=entry_ids)
-
-        def reached(s):
-            return transitions.filter(to_status=s).values('entry_id').distinct().count()
+        counts = dict(queryset.values_list('status').annotate(n=Count('id')))
+        opened = counts.get('claims_opened', 0)
+        in_progress = counts.get('claims_in_progress', 0)
+        resolved = counts.get('claims_resolved', 0)
+        rejected = counts.get('claims_rejected', 0)
 
         return Response({
-            'claims_opened': total,
-            'claims_in_progress': reached('claims_in_progress'),
-            'claims_resolved': reached('claims_resolved'),
-            'claims_rejected': reached('claims_rejected'),
+            'claims_opened': opened + in_progress + resolved + rejected,
+            'claims_pending': opened + in_progress,
+            'claims_closed': resolved + rejected,
+            'claims_in_progress': in_progress,
+            'claims_resolved': resolved,
+            'claims_rejected': rejected,
         })
 
 

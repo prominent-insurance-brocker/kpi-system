@@ -139,6 +139,8 @@ export default function MotorClaimPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<MotorClaimStats>({
     claims_opened: 0,
+    claims_pending: 0,
+    claims_closed: 0,
     claims_in_progress: 0,
     claims_resolved: 0,
     claims_rejected: 0,
@@ -532,27 +534,48 @@ export default function MotorClaimPage() {
               setDashUserId('');
             }}
           />
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <StatCard
-              label="Claims Opened"
-              value={stats.claims_opened}
-              accent="text-blue-700"
-            />
-            <StatCard
-              label="Claims In Progress"
-              value={stats.claims_in_progress}
-              accent="text-yellow-600"
-            />
-            <StatCard
-              label="Claims Resolved"
-              value={stats.claims_resolved}
-              accent="text-green-700"
-            />
-            <StatCard
-              label="Claims Rejected"
-              value={stats.claims_rejected}
-              accent="text-red-700"
-            />
+          {/* Overview — aggregates */}
+          <div className="space-y-3">
+            <h2 className="text-base font-semibold text-[#09090B]">Overview</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <StatCard
+                label="Claims Opened"
+                value={stats.claims_opened}
+                accent="text-blue-700"
+              />
+              <StatCard
+                label="Claims Pending"
+                value={stats.claims_pending}
+                accent="text-yellow-600"
+              />
+              <StatCard
+                label="Claims Closed"
+                value={stats.claims_closed}
+                accent="text-green-700"
+              />
+            </div>
+          </div>
+
+          {/* Breakdown — single-status current counts */}
+          <div className="space-y-3">
+            <h2 className="text-base font-semibold text-[#09090B]">Breakdown</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <StatCard
+                label="Claims In Progress"
+                value={stats.claims_in_progress}
+                accent="text-yellow-600"
+              />
+              <StatCard
+                label="Claims Resolved"
+                value={stats.claims_resolved}
+                accent="text-green-700"
+              />
+              <StatCard
+                label="Claims Rejected"
+                value={stats.claims_rejected}
+                accent="text-red-700"
+              />
+            </div>
           </div>
         </TabsContent>
 

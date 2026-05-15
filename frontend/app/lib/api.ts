@@ -630,7 +630,11 @@ export interface MotorClaimEntry {
 }
 
 export interface MotorClaimStats {
-  claims_opened: number;
+  // Overview aggregates
+  claims_opened: number;   // total rows
+  claims_pending: number;  // status in (opened, in_progress)
+  claims_closed: number;   // status in (resolved, rejected)
+  // Breakdown — single-status current counts
   claims_in_progress: number;
   claims_resolved: number;
   claims_rejected: number;

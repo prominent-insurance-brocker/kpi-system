@@ -353,6 +353,18 @@ export default function MotorClaimPage() {
   };
 
   const changeStatus = async (entry: MotorClaimEntry, newStatus: MotorClaimEntry['status']) => {
+    // Confirm before any non-Opened transition — once the claim leaves
+    // "Claims Opened" it can no longer be deleted (see canDelete below).
+    if (newStatus !== 'claims_opened') {
+      const ok = await confirm({
+        title: `Move to ${STATUS_LABEL[newStatus]}?`,
+        description: 'This action cannot be undone. Please confirm before proceeding.',
+        confirmLabel: 'Proceed',
+        cancelLabel: 'Cancel',
+        danger: true,
+      });
+      if (!ok) return;
+    }
     const result = await updateMotorClaimStatus(entry.id, newStatus);
     if (result.data) {
       toast.success(`Status updated to ${STATUS_LABEL[newStatus]}`);
@@ -763,7 +775,9 @@ export default function MotorClaimPage() {
             }}
             onDelete={handleDelete}
             canEdit={(entry) => entry.is_editable}
-            canDelete={(entry) => entry.added_by === currentUserId}
+            canDelete={(entry) =>
+              entry.added_by === currentUserId && entry.status === 'claims_opened'
+            }
             isLoading={isLoading}
           />
         </TabsContent>

@@ -109,6 +109,7 @@ export default function RolesPage() {
     name: string;
     description: string;
     data_visibility: 'all' | 'own';
+    is_hod: boolean;
     module_permissions: string[];
   }) => {
     setError('');
@@ -152,7 +153,20 @@ export default function RolesPage() {
   };
 
   const columns = [
-    { key: 'name', header: 'Name', render: (role: RoleFull) => <div className="font-medium">{role.name}</div> },
+    {
+      key: 'name',
+      header: 'Name',
+      render: (role: RoleFull) => (
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{role.name}</span>
+          {role.is_hod && (
+            <Badge variant="outline" className="bg-purple-100 text-purple-800 border-purple-200">
+              HOD
+            </Badge>
+          )}
+        </div>
+      ),
+    },
     { 
       key: 'description', 
       header: 'Description', 
@@ -252,8 +266,8 @@ export default function RolesPage() {
           setError('');
         }}
       >
-        <DialogContent className="max-w-2xl p-0">
-          <DialogHeader className="p-4 border-b border-[#E4E4E4]">
+        <DialogContent className="max-w-2xl p-0 max-h-[90vh] flex flex-col">
+          <DialogHeader className="p-4 border-b border-[#E4E4E4] shrink-0">
             <DialogTitle>{editingRole ? 'Edit Role' : 'Add New Role'}</DialogTitle>
           </DialogHeader>
           <RoleForm
@@ -279,6 +293,7 @@ function RoleForm({
     name: string;
     description: string;
     data_visibility: 'all' | 'own';
+    is_hod: boolean;
     module_permissions: string[];
   }) => void;
   onClose: () => void;
@@ -288,6 +303,7 @@ function RoleForm({
     name: '',
     description: '',
     data_visibility: 'own' as 'all' | 'own',
+    is_hod: false,
     module_permissions: [] as string[],
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -309,6 +325,7 @@ function RoleForm({
         name: role.name,
         description: role.description || '',
         data_visibility: role.data_visibility,
+        is_hod: role.is_hod ?? false,
         module_permissions: role.permissions.map((p) => p.module),
       });
     } else {
@@ -316,6 +333,7 @@ function RoleForm({
         name: '',
         description: '',
         data_visibility: 'own',
+        is_hod: false,
         module_permissions: [],
       });
     }
@@ -368,7 +386,8 @@ function RoleForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 px-4">
+    <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+      <div className="space-y-4 px-4 py-4 overflow-y-auto flex-1 min-h-0">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
           {error}
@@ -398,10 +417,15 @@ function RoleForm({
       <div className="space-y-2 ">
         <Label>Data Visibility</Label>
         <RadioGroup
-          value={formData.data_visibility}
-          onValueChange={(value: 'all' | 'own') =>
-            setFormData({ ...formData, data_visibility: value })
-          }
+          value={formData.is_hod ? 'hod' : formData.data_visibility}
+          onValueChange={(value: 'all' | 'own' | 'hod') => {
+            if (value === 'hod') {
+              // HOD always sees all team data — store data_visibility='all' alongside is_hod=true.
+              setFormData({ ...formData, data_visibility: 'all', is_hod: true });
+            } else {
+              setFormData({ ...formData, data_visibility: value, is_hod: false });
+            }
+          }}
           className="flex flex-col gap-4 mt-4 bg-[#F9F9F9] p-3 rounded-lg border border-[#E4E4E4]"
         >
           <div className="flex items-center space-x-2">
@@ -415,6 +439,17 @@ function RoleForm({
             <Label htmlFor="all" className="font-normal">
               See all data uploaded by everyone
             </Label>
+          </div>
+          <div className="flex items-start space-x-2">
+            <RadioGroupItem value="hod" id="hod" className="mt-0.5" />
+            <div className="flex flex-col">
+              <Label htmlFor="hod" className="font-normal cursor-pointer">
+                HOD (Head of Department)
+              </Label>
+              <span className="text-xs text-muted-foreground">
+                Oversight-only — sees all team data, cannot add or edit entries.
+              </span>
+            </div>
           </div>
         </RadioGroup>
       </div>
@@ -458,7 +493,8 @@ function RoleForm({
         </div>
       </div>
 
-      <DialogFooter className='py-4'>
+      </div>
+      <DialogFooter className='p-4 border-t border-[#E4E4E4] shrink-0'>
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>

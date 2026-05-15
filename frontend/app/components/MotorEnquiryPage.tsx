@@ -218,7 +218,8 @@ export function MotorEnquiryPage({
     [config]
   );
 
-  const { canSeeAllData, user } = useAuth();
+  const { canSeeAllData, user, isHOD } = useAuth();
+  const isHodUser = isHOD();
   const confirm = useConfirm();
   const isAdmin = canSeeAllData();
   const currentUserId = user?.id;
@@ -511,8 +512,10 @@ export function MotorEnquiryPage({
   }, [fetchTargetCard]);
 
   // True once the /current/ call resolves and finds no target for this month.
-  // Blocks all data-entry mutations on the page until cleared.
-  const noCurrentTarget = isRenewal && currentTargetLoaded && !currentTarget;
+  // Blocks all data-entry mutations on the page until cleared. HOD users see
+  // aggregated team data and can't set targets, so the gate is skipped for them.
+  const noCurrentTarget =
+    isRenewal && !isHodUser && currentTargetLoaded && !currentTarget;
   const isCurrentMonthCard =
     targetCardYear === today.getFullYear() &&
     targetCardMonth === today.getMonth() + 1;
@@ -771,6 +774,7 @@ export function MotorEnquiryPage({
           month={targetCardMonth}
           target={targetCard}
           actuals={targetActuals}
+          isReadOnly={isHodUser}
           onPrev={() => {
             if (targetCardMonth === 1) {
               setTargetCardMonth(12);
@@ -868,35 +872,37 @@ export function MotorEnquiryPage({
 
         {/* ─── Tracker View ─────────────────────────────────────────────── */}
         <TabsContent value="tracker" className="mt-4 space-y-4">
-          <PersonalDailyTracker<MotorEnquiryEntry>
-            calYear={personalCalYear}
-            calMonth={personalCalMonth}
-            today={today}
-            monthEntries={monthEntries}
-            currentUserId={currentUserId}
-            userFullName={userFullName}
-            onPrevMonth={() => {
-              if (personalCalMonth === 0) {
-                setPersonalCalMonth(11);
-                setPersonalCalYear(personalCalYear - 1);
-              } else {
-                setPersonalCalMonth(personalCalMonth - 1);
-              }
-            }}
-            onNextMonth={() => {
-              if (personalCalMonth === 11) {
-                setPersonalCalMonth(0);
-                setPersonalCalYear(personalCalYear + 1);
-              } else {
-                setPersonalCalMonth(personalCalMonth + 1);
-              }
-            }}
-            onGoToday={() => {
-              setPersonalCalYear(today.getFullYear());
-              setPersonalCalMonth(today.getMonth());
-            }}
-          />
-          {isAdmin && (
+          {!isHodUser && (
+            <PersonalDailyTracker<MotorEnquiryEntry>
+              calYear={personalCalYear}
+              calMonth={personalCalMonth}
+              today={today}
+              monthEntries={monthEntries}
+              currentUserId={currentUserId}
+              userFullName={userFullName}
+              onPrevMonth={() => {
+                if (personalCalMonth === 0) {
+                  setPersonalCalMonth(11);
+                  setPersonalCalYear(personalCalYear - 1);
+                } else {
+                  setPersonalCalMonth(personalCalMonth - 1);
+                }
+              }}
+              onNextMonth={() => {
+                if (personalCalMonth === 11) {
+                  setPersonalCalMonth(0);
+                  setPersonalCalYear(personalCalYear + 1);
+                } else {
+                  setPersonalCalMonth(personalCalMonth + 1);
+                }
+              }}
+              onGoToday={() => {
+                setPersonalCalYear(today.getFullYear());
+                setPersonalCalMonth(today.getMonth());
+              }}
+            />
+          )}
+          {(isAdmin || isHodUser) && (
             <TrackerView<MotorEnquiryEntry>
               calYear={teamCalYear}
               calMonth={teamCalMonth}
@@ -904,6 +910,7 @@ export function MotorEnquiryPage({
               moduleUsers={moduleUsers}
               trackerUserFilter={trackerUserFilter}
               onTrackerUserFilterChange={setTrackerUserFilter}
+              excludeUserId={isHodUser ? currentUserId : undefined}
               onPrevMonth={() => {
                 if (teamCalMonth === 0) {
                   setTeamCalMonth(11);
@@ -993,22 +1000,24 @@ export function MotorEnquiryPage({
                 setPage(1);
               }}
             />
-            <Button
-              disabled={noCurrentTarget}
-              title={noCurrentTarget ? "Set this month's retention target first" : undefined}
-              onClick={() => {
-                if (noCurrentTarget) {
-                  setIsTargetModalOpen(true);
-                  return;
-                }
-                setEditingEntry(null);
-                setModalError('');
-                setIsModalOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Enquiry
-            </Button>
+            {!isHodUser && (
+              <Button
+                disabled={noCurrentTarget}
+                title={noCurrentTarget ? "Set this month's retention target first" : undefined}
+                onClick={() => {
+                  if (noCurrentTarget) {
+                    setIsTargetModalOpen(true);
+                    return;
+                  }
+                  setEditingEntry(null);
+                  setModalError('');
+                  setIsModalOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Enquiry
+              </Button>
+            )}
           </div>
 
           <div className="flex gap-4">
@@ -1239,24 +1248,28 @@ export function MotorEnquiryPage({
                   {isSet ? (
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-semibold text-[#09090B]">{val}</span>
-                      <button
-                        onClick={enterEdit}
-                        className="text-muted-foreground hover:text-[#09090B]"
-                        aria-label={`Edit ${name} target`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
+                      {!isHodUser && (
+                        <button
+                          onClick={enterEdit}
+                          className="text-muted-foreground hover:text-[#09090B]"
+                          aria-label={`Edit ${name} target`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="flex items-center gap-3">
                       <span className="text-sm italic text-muted-foreground">Not set</span>
-                      <button
-                        onClick={enterEdit}
-                        className="text-muted-foreground hover:text-[#09090B]"
-                        aria-label={`Set ${name} target`}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
+                      {!isHodUser && (
+                        <button
+                          onClick={enterEdit}
+                          className="text-muted-foreground hover:text-[#09090B]"
+                          aria-label={`Set ${name} target`}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1576,6 +1589,7 @@ function ClientRetentionTargetCard({
   onNext,
   onToday,
   onEdit,
+  isReadOnly = false,
 }: {
   year: number;
   month: number;             // 1-indexed
@@ -1585,6 +1599,9 @@ function ClientRetentionTargetCard({
   onNext: () => void;
   onToday: () => void;
   onEdit: () => void;
+  // When true, hides the Edit control. Used for HOD oversight rendering where
+  // the card shows team-aggregated numbers and isn't editable.
+  isReadOnly?: boolean;
 }) {
   const clientsTarget = target?.clients_assigned ?? null;
   const clientsMax = clientsTarget ? clientsTarget * TARGET_MULTIPLIER : 0;
@@ -1655,10 +1672,12 @@ function ClientRetentionTargetCard({
           <Calendar className="h-3 w-3 mr-1" />
           Today
         </Button>
-        <Button variant="outline" size="sm" className="ml-auto" onClick={onEdit}>
-          <Pencil className="h-3 w-3 mr-1" />
-          Edit
-        </Button>
+        {!isReadOnly && (
+          <Button variant="outline" size="sm" className="ml-auto" onClick={onEdit}>
+            <Pencil className="h-3 w-3 mr-1" />
+            Edit
+          </Button>
+        )}
       </div>
     </div>
   );

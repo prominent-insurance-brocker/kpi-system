@@ -99,9 +99,10 @@ function StatusBadge({ status }: { status: MotorClaimEntry['status'] }) {
 }
 
 export default function MotorClaimPage() {
-  const { canSeeAllData, user } = useAuth();
+  const { canSeeAllData, user, isHOD } = useAuth();
   const confirm = useConfirm();
   const isAdmin = canSeeAllData();
+  const isHodUser = isHOD();
   const currentUserId = user?.id;
   const userFullName = user?.full_name ?? '';
 
@@ -505,16 +506,18 @@ export default function MotorClaimPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Motor Claim</h1>
-        <Button
-          onClick={() => {
-            setEditingEntry(null);
-            setModalError('');
-            setIsModalOpen(true);
-          }}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Claim
-        </Button>
+        {!isHodUser && (
+          <Button
+            onClick={() => {
+              setEditingEntry(null);
+              setModalError('');
+              setIsModalOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Claim
+          </Button>
+        )}
       </div>
 
       <Tabs
@@ -609,35 +612,37 @@ export default function MotorClaimPage() {
 
         {/* Tracker View */}
         <TabsContent value="tracker" className="mt-4 space-y-4">
-          <PersonalDailyTracker<MotorClaimEntry>
-            calYear={personalCalYear}
-            calMonth={personalCalMonth}
-            today={today}
-            monthEntries={monthEntries}
-            currentUserId={currentUserId}
-            userFullName={userFullName}
-            onPrevMonth={() => {
-              if (personalCalMonth === 0) {
-                setPersonalCalMonth(11);
-                setPersonalCalYear(personalCalYear - 1);
-              } else {
-                setPersonalCalMonth(personalCalMonth - 1);
-              }
-            }}
-            onNextMonth={() => {
-              if (personalCalMonth === 11) {
-                setPersonalCalMonth(0);
-                setPersonalCalYear(personalCalYear + 1);
-              } else {
-                setPersonalCalMonth(personalCalMonth + 1);
-              }
-            }}
-            onGoToday={() => {
-              setPersonalCalYear(today.getFullYear());
-              setPersonalCalMonth(today.getMonth());
-            }}
-          />
-          {isAdmin && (
+          {!isHodUser && (
+            <PersonalDailyTracker<MotorClaimEntry>
+              calYear={personalCalYear}
+              calMonth={personalCalMonth}
+              today={today}
+              monthEntries={monthEntries}
+              currentUserId={currentUserId}
+              userFullName={userFullName}
+              onPrevMonth={() => {
+                if (personalCalMonth === 0) {
+                  setPersonalCalMonth(11);
+                  setPersonalCalYear(personalCalYear - 1);
+                } else {
+                  setPersonalCalMonth(personalCalMonth - 1);
+                }
+              }}
+              onNextMonth={() => {
+                if (personalCalMonth === 11) {
+                  setPersonalCalMonth(0);
+                  setPersonalCalYear(personalCalYear + 1);
+                } else {
+                  setPersonalCalMonth(personalCalMonth + 1);
+                }
+              }}
+              onGoToday={() => {
+                setPersonalCalYear(today.getFullYear());
+                setPersonalCalMonth(today.getMonth());
+              }}
+            />
+          )}
+          {(isAdmin || isHodUser) && (
             <TrackerView<MotorClaimEntry>
               calYear={teamCalYear}
               calMonth={teamCalMonth}
@@ -645,6 +650,7 @@ export default function MotorClaimPage() {
               moduleUsers={moduleUsers}
               trackerUserFilter={trackerUserFilter}
               onTrackerUserFilterChange={setTrackerUserFilter}
+              excludeUserId={isHodUser ? currentUserId : undefined}
               onPrevMonth={() => {
                 if (teamCalMonth === 0) {
                   setTeamCalMonth(11);

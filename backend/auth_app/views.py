@@ -1,4 +1,5 @@
 import logging
+import threading
 from datetime import timedelta
 
 from django.conf import settings
@@ -18,6 +19,39 @@ from .models import CustomUser, MagicLink
 from .serializers import UserSerializer, UserAdminSerializer
 
 logger = logging.getLogger(__name__)
+
+
+def _send_magic_link_email(user, link_url):
+    try:
+        logger.info(f"Attempting to send magic link email to {user.email}")
+        logger.info(
+            f"Email config - BACKEND: {settings.EMAIL_BACKEND}, "
+            f"HOST: {settings.EMAIL_HOST}, PORT: {settings.EMAIL_PORT}, "
+            f"TLS: {settings.EMAIL_USE_TLS}, USER: {settings.EMAIL_HOST_USER}, "
+            f"FROM: {settings.DEFAULT_FROM_EMAIL}, "
+            f"CONSOLE_MODE: {getattr(settings, 'EMAIL_CONSOLE_MODE', 'not set')}"
+        )
+
+        result = send_mail(
+            subject='Your login link for KPI System',
+            message=f"""Hi {user.get_short_name()},
+
+Click the link below to login to your account:
+{link_url}
+
+This link expires in 30 minutes.
+
+If you didn't request this, please ignore this email.""",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+        logger.info(f"Magic link email sent to {user.email}, send_mail returned: {result}")
+    except Exception as e:
+        logger.error(
+            f"Failed to send email to {user.email}: {type(e).__name__}: {str(e)}",
+            exc_info=True,
+        )
 
 
 class RequestMagicLinkView(APIView):
@@ -59,38 +93,11 @@ class RequestMagicLinkView(APIView):
         # Build magic link URL
         link_url = f"{settings.FRONTEND_URL}/auth/verify?token={magic_link.token}"
 
-        # Send email
-        try:
-            logger.info(f"Attempting to send magic link email to {user.email}")
-            logger.info(
-                f"Email config - BACKEND: {settings.EMAIL_BACKEND}, "
-                f"HOST: {settings.EMAIL_HOST}, PORT: {settings.EMAIL_PORT}, "
-                f"TLS: {settings.EMAIL_USE_TLS}, USER: {settings.EMAIL_HOST_USER}, "
-                f"FROM: {settings.DEFAULT_FROM_EMAIL}, "
-                f"CONSOLE_MODE: {getattr(settings, 'EMAIL_CONSOLE_MODE', 'not set')}"
-            )
-
-            result = send_mail(
-                subject='Your login link for KPI System',
-                message=f"""Hi {user.get_short_name()},
-
-Click the link below to login to your account:
-{link_url}
-
-This link expires in 30 minutes.
-
-If you didn't request this, please ignore this email.""",
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[user.email],
-                fail_silently=False,
-            )
-            logger.info(f"Magic link email sent to {user.email}, send_mail returned: {result}")
-        except Exception as e:
-            logger.error(f"Failed to send email to {user.email}: {type(e).__name__}: {str(e)}", exc_info=True)
-            return Response(
-                {'error': f'Failed to send email. Please check email and try again.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        threading.Thread(
+            target=_send_magic_link_email,
+            args=(user, link_url),
+            daemon=True,
+        ).start()
 
         return Response(success_message)
 

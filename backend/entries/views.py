@@ -2,9 +2,10 @@ from decimal import Decimal
 
 from rest_framework import viewsets, status, filters, serializers as drf_serializers
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
@@ -73,7 +74,107 @@ from .serializers import (
     MedicalClaimStatusUpdateSerializer,
 )
 from .filters import EntryFilter, ClaimEntryFilter, MotorEnquiryFilter, MotorClaimEntryFilter
-from roles.permissions import IsAdminUser
+from roles.permissions import IsAdminUser, user_is_hod
+
+
+_WRITE_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
+
+
+class HodAwareMonthlyTargetMixin:
+    """Shared HOD behavior for renewal monthly-target viewsets.
+
+    Used by General Renewal, Motor Renewal, and Motor Fleet Renewal targets.
+
+    Non-HOD callers: identical to the original per-user-scoped behavior.
+    HOD callers:
+      * All writes (POST/PUT/PATCH/DELETE) return 403 via check_permissions.
+      * `list` returns one row per (year, month) with `clients_assigned`
+        summed across all users, plus `aggregated: True` and `id: None` so
+        the frontend can render read-only.
+      * `current` returns a single summed row for the current month, or `null`
+        if no targets exist at all.
+
+    Subclasses must set:
+      * `model_class` — concrete *MonthlyTarget Django model
+      * `serializer_class` — concrete *MonthlyTargetSerializer
+    """
+    model_class = None
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if request.method in _WRITE_METHODS and user_is_hod(request.user):
+            raise PermissionDenied('HOD users cannot modify monthly targets.')
+
+    def get_queryset(self):
+        if user_is_hod(self.request.user):
+            qs = self.model_class.objects.all()
+        else:
+            qs = self.model_class.objects.filter(user=self.request.user)
+        year = self.request.query_params.get('year')
+        month = self.request.query_params.get('month')
+        if year:
+            qs = qs.filter(year=year)
+        if month:
+            qs = qs.filter(month=month)
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        if not user_is_hod(request.user):
+            return super().list(request, *args, **kwargs)
+        qs = self.filter_queryset(self.get_queryset())
+        rows = (
+            qs.values('year', 'month')
+            .annotate(clients_assigned=Sum('clients_assigned'))
+            .order_by('year', 'month')
+        )
+        return Response([
+            {
+                'id': None,
+                'user': None,
+                'year': r['year'],
+                'month': r['month'],
+                'calculated_date': f"{r['year']:04d}-{r['month']:02d}-01",
+                'clients_assigned': r['clients_assigned'] or 0,
+                'created_at': None,
+                'updated_at': None,
+                'aggregated': True,
+            }
+            for r in rows
+        ])
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='current')
+    def current(self, request):
+        today = timezone.now().date()
+        Model = self.model_class
+        if user_is_hod(request.user):
+            total = (
+                Model.objects
+                .filter(year=today.year, month=today.month)
+                .aggregate(total=Sum('clients_assigned'))['total']
+            )
+            if total is None:
+                return Response(None)
+            return Response({
+                'id': None,
+                'user': None,
+                'year': today.year,
+                'month': today.month,
+                'calculated_date': today.replace(day=1).isoformat(),
+                'clients_assigned': total,
+                'created_at': None,
+                'updated_at': None,
+                'aggregated': True,
+            })
+        try:
+            target = Model.objects.get(
+                user=request.user, year=today.year, month=today.month,
+            )
+            return Response(self.get_serializer(target).data)
+        except Model.DoesNotExist:
+            return Response(None)
 
 
 def _seed_initial_remark(text, instance, user):
@@ -111,6 +212,7 @@ class BaseEntryViewSet(viewsets.ModelViewSet):
 
         can_see_all = (
             user.is_staff or
+            user_is_hod(user) or
             (hasattr(user, 'role') and user.role and user.role.data_visibility == 'all')
         )
 
@@ -126,6 +228,17 @@ class BaseEntryViewSet(viewsets.ModelViewSet):
             )
 
         return queryset
+
+    def check_permissions(self, request):
+        """Reject writes from HOD users before any view dispatch.
+
+        Covers POST (create), PATCH/PUT (update + custom @action mutations like
+        update-status, update-revisions, update-next-call-date), and DELETE.
+        Reads pass through to the normal HasModulePermission flow.
+        """
+        super().check_permissions(request)
+        if request.method in _WRITE_METHODS and user_is_hod(request.user):
+            raise PermissionDenied('HOD users cannot create, modify, or delete entries.')
 
     def perform_create(self, serializer):
         """Always create as the requesting user. Admins cannot create on behalf of others."""
@@ -362,41 +475,16 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
         return Response(_build_enquiry_stats(queryset, success_status='retained'))
 
 
-class GeneralRenewalMonthlyTargetViewSet(viewsets.ModelViewSet):
+class GeneralRenewalMonthlyTargetViewSet(HodAwareMonthlyTargetMixin, viewsets.ModelViewSet):
     """Per-user retention target for the general renewal module.
 
-    Mirrors MotorRenewalMonthlyTargetViewSet — each user only sees/edits their
-    own targets; admins included. The data_visibility='all' rule applies to
-    entry data, not to personal targets.
+    Non-HOD: each user only sees/edits their own targets; admins included. The
+    data_visibility='all' rule applies to entry data, not to personal targets.
+    HOD: writes blocked; reads return aggregate sums across all users.
     """
+    model_class = GeneralRenewalMonthlyTarget
     serializer_class = GeneralRenewalMonthlyTargetSerializer
     permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        queryset = GeneralRenewalMonthlyTarget.objects.filter(user=self.request.user)
-        year = self.request.query_params.get('year')
-        month = self.request.query_params.get('month')
-        if year:
-            queryset = queryset.filter(year=year)
-        if month:
-            queryset = queryset.filter(month=month)
-        return queryset
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-    @action(detail=False, methods=['get'], url_path='current')
-    def current(self, request):
-        today = timezone.now().date()
-        try:
-            target = GeneralRenewalMonthlyTarget.objects.get(
-                user=request.user,
-                year=today.year,
-                month=today.month,
-            )
-            return Response(GeneralRenewalMonthlyTargetSerializer(target).data)
-        except GeneralRenewalMonthlyTarget.DoesNotExist:
-            return Response(None)
 
 
 def _build_enquiry_stats(queryset, success_status='converted'):
@@ -824,41 +912,16 @@ class SalesMonthlyTargetViewSet(viewsets.ModelViewSet):
             return Response(None)
 
 
-class MotorRenewalMonthlyTargetViewSet(viewsets.ModelViewSet):
+class MotorRenewalMonthlyTargetViewSet(HodAwareMonthlyTargetMixin, viewsets.ModelViewSet):
     """Per-user retention target for the motor renewal module.
 
-    Mirrors SalesMonthlyTargetViewSet — each user only sees/edits their own
-    targets; admins included. The data_visibility='all' rule applies to entry
-    data, not to personal targets.
+    Non-HOD: each user only sees/edits their own targets; admins included. The
+    data_visibility='all' rule applies to entry data, not to personal targets.
+    HOD: writes blocked; reads return aggregate sums across all users.
     """
+    model_class = MotorRenewalMonthlyTarget
     serializer_class = MotorRenewalMonthlyTargetSerializer
     permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        queryset = MotorRenewalMonthlyTarget.objects.filter(user=self.request.user)
-        year = self.request.query_params.get('year')
-        month = self.request.query_params.get('month')
-        if year:
-            queryset = queryset.filter(year=year)
-        if month:
-            queryset = queryset.filter(month=month)
-        return queryset
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-    @action(detail=False, methods=['get'], url_path='current')
-    def current(self, request):
-        today = timezone.now().date()
-        try:
-            target = MotorRenewalMonthlyTarget.objects.get(
-                user=request.user,
-                year=today.year,
-                month=today.month,
-            )
-            return Response(MotorRenewalMonthlyTargetSerializer(target).data)
-        except MotorRenewalMonthlyTarget.DoesNotExist:
-            return Response(None)
 
 
 class MotorFleetNewEntryViewSet(BaseEntryViewSet):
@@ -1064,40 +1127,15 @@ class MotorFleetRenewalEntryViewSet(BaseEntryViewSet):
         return Response(_build_enquiry_stats(queryset, success_status='retained'))
 
 
-class MotorFleetRenewalMonthlyTargetViewSet(viewsets.ModelViewSet):
+class MotorFleetRenewalMonthlyTargetViewSet(HodAwareMonthlyTargetMixin, viewsets.ModelViewSet):
     """Per-user retention target for the motor fleet renewal module.
 
-    Mirrors MotorRenewalMonthlyTargetViewSet — each user only sees/edits their
-    own targets; admins included.
+    Non-HOD: each user only sees/edits their own targets; admins included.
+    HOD: writes blocked; reads return aggregate sums across all users.
     """
+    model_class = MotorFleetRenewalMonthlyTarget
     serializer_class = MotorFleetRenewalMonthlyTargetSerializer
     permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        queryset = MotorFleetRenewalMonthlyTarget.objects.filter(user=self.request.user)
-        year = self.request.query_params.get('year')
-        month = self.request.query_params.get('month')
-        if year:
-            queryset = queryset.filter(year=year)
-        if month:
-            queryset = queryset.filter(month=month)
-        return queryset
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-    @action(detail=False, methods=['get'], url_path='current')
-    def current(self, request):
-        today = timezone.now().date()
-        try:
-            target = MotorFleetRenewalMonthlyTarget.objects.get(
-                user=request.user,
-                year=today.year,
-                month=today.month,
-            )
-            return Response(MotorFleetRenewalMonthlyTargetSerializer(target).data)
-        except MotorFleetRenewalMonthlyTarget.DoesNotExist:
-            return Response(None)
 
 
 class MarineNewEntryViewSet(BaseEntryViewSet):

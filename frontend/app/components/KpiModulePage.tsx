@@ -344,6 +344,7 @@ export function TrackerView<T extends BaseModuleEntry>({
   onPrevMonth,
   onNextMonth,
   onGoToday,
+  excludeUserId,
 }: {
   calYear: number;
   calMonth: number;
@@ -354,6 +355,10 @@ export function TrackerView<T extends BaseModuleEntry>({
   onPrevMonth: () => void;
   onNextMonth: () => void;
   onGoToday: () => void;
+  // When set, the user with this ID is filtered out of the team rows. Used by
+  // HOD viewers — they oversee the team but don't appear as their own row
+  // since HOD users don't submit data.
+  excludeUserId?: number;
 }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -374,10 +379,14 @@ export function TrackerView<T extends BaseModuleEntry>({
     userMap.set(e.added_by, (userMap.get(e.added_by) ?? 0) + 1);
   }
 
+  const filteredModuleUsers =
+    excludeUserId != null
+      ? moduleUsers.filter((u) => u.id !== excludeUserId)
+      : moduleUsers;
   const visibleUsers =
     trackerUserFilter === 'all'
-      ? moduleUsers
-      : moduleUsers.filter((u) => String(u.id) === trackerUserFilter);
+      ? filteredModuleUsers
+      : filteredModuleUsers.filter((u) => String(u.id) === trackerUserFilter);
 
   return (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
@@ -408,7 +417,7 @@ export function TrackerView<T extends BaseModuleEntry>({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Users</SelectItem>
-              {moduleUsers.map((u) => (
+              {filteredModuleUsers.map((u) => (
                 <SelectItem key={u.id} value={String(u.id)}>
                   {u.full_name}
                 </SelectItem>
@@ -608,6 +617,8 @@ export function WeeklyView<T extends BaseModuleEntry>({
   navStickyTop?: string;
   tableMaxHeight?: string;
 }) {
+  const { isHOD } = useAuth();
+  const isHodUser = isHOD();
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const getEntriesForDay = (d: Date): T[] => {
@@ -727,9 +738,10 @@ export function WeeklyView<T extends BaseModuleEntry>({
                 if (past) statusType = 'not_submitted';
 
                 // Admin can only add records for themselves; viewing another user is read-only.
+                // HOD users never add records — they oversee data only.
                 const isViewingSelf =
                   weeklyUserFilter === 'all' || weeklyUserFilter === String(currentUserId);
-                const canAddToday = isToday && isViewingSelf;
+                const canAddToday = isToday && isViewingSelf && !isHodUser;
                 const todayEntryExists = isToday
                   ? monthEntries.some(
                       (e) =>

@@ -108,7 +108,8 @@ function InlineStatusSelect({
 export default function MedicalClaimPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { canSeeAllData, user } = useAuth();
+  const { canSeeAllData, user, isHOD } = useAuth();
+  const isHodUser = isHOD();
   const currentUserId = user?.id;
   const confirm = useConfirm();
   const [entries, setEntries] = useState<MedicalClaimEntry[]>([]);
@@ -256,7 +257,7 @@ export default function MedicalClaimPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Medical Claim</h1>
-        {(!userId || userId === String(currentUserId)) && (
+        {!isHodUser && (!userId || userId === String(currentUserId)) && (
           <Button onClick={() => { setEditingEntry(null); setError(''); setIsModalOpen(true); }}><Plus className="h-4 w-4 mr-2" /> Add Entry</Button>
         )}
       </div>

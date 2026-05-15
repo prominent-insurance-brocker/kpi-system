@@ -179,7 +179,8 @@ const dataColumns = [
 export default function SalesKPIPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { canSeeAllData, user } = useAuth();
+  const { canSeeAllData, user, isHOD } = useAuth();
+  const isHodUser = isHOD();
   const confirm = useConfirm();
 
   const isAdmin = canSeeAllData();
@@ -694,19 +695,21 @@ export default function SalesKPIPage() {
           </div>
 
           {/* Personal Daily Tracker — right of Monthly Target, same line */}
-          <div className="flex-1 min-w-[320px]">
-            <PersonalDailyTracker
-              calYear={calYear}
-              calMonth={calMonth}
-              today={today}
-              monthEntries={monthEntries}
-              currentUserId={currentUserId}
-              userFullName={user?.full_name || ''}
-              onPrevMonth={prevMonth}
-              onNextMonth={nextMonth}
-              onGoToday={goToday}
-            />
-          </div>
+          {!isHodUser && (
+            <div className="flex-1 min-w-[320px]">
+              <PersonalDailyTracker
+                calYear={calYear}
+                calMonth={calMonth}
+                today={today}
+                monthEntries={monthEntries}
+                currentUserId={currentUserId}
+                userFullName={user?.full_name || ''}
+                onPrevMonth={prevMonth}
+                onNextMonth={nextMonth}
+                onGoToday={goToday}
+              />
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -740,7 +743,7 @@ export default function SalesKPIPage() {
             </TabsList>
           </div>
 
-          {isAdmin && (
+          {(isAdmin || isHodUser) && (
             <TabsContent value="tracker" className="mt-4">
               <TrackerView
                 calYear={calYear}
@@ -752,6 +755,7 @@ export default function SalesKPIPage() {
                 onPrevMonth={prevMonth}
                 onNextMonth={nextMonth}
                 onGoToday={goToday}
+                excludeUserId={isHodUser ? currentUserId : undefined}
               />
             </TabsContent>
           )}

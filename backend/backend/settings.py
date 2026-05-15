@@ -253,6 +253,7 @@ EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_TIMEOUT = 10  # seconds; prevents a stuck SMTP socket from holding the thread forever
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'KPI System <noreply@kpisystem.com>')
 
 # EMAIL_CONSOLE_MODE=true  -> Magic links printed to console/logs (for testing)

@@ -284,8 +284,8 @@ export default function UsersPage() {
         }}
 
       >
-        <DialogContent className='p-0' >
-          <DialogHeader className='border-b border-[#E4E4E4] p-4'>
+        <DialogContent className='p-0 max-h-[90vh] flex flex-col'>
+          <DialogHeader className='border-b border-[#E4E4E4] p-4 shrink-0'>
             <DialogTitle>{editingUser ? 'Edit User' : 'Add New User'}</DialogTitle>
           </DialogHeader>
           <UserForm
@@ -363,7 +363,8 @@ function UserForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 px-4">
+    <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+      <div className="space-y-4 px-4 py-4 overflow-y-auto flex-1 min-h-0">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
           {error}
@@ -376,7 +377,6 @@ function UserForm({
           value={formData.email}
           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
           required
-          disabled={!!user}
         />
       </div>
       <div className="space-y-2">
@@ -432,7 +432,8 @@ function UserForm({
           <Label htmlFor="is_active">Active</Label>
         </div>
       </div>
-      <DialogFooter className='py-4'>
+      </div>
+      <DialogFooter className='p-4 border-t border-[#E4E4E4] shrink-0'>
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>

@@ -1,10 +1,17 @@
 "use client";
 
-import { useCallback } from "react";
-import { Search } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { CalendarIcon, Search } from "lucide-react";
+import { type DateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -14,7 +21,184 @@ import {
 } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { cn } from "@/lib/utils";
 import { getUsersForModulePage } from "@/app/lib/api";
+// (FormDatePicker import removed — replaced by the inline CustomRangePopover
+// below so the Custom branch matches Entry-date's single-trigger calendar UX.)
+
+// Single-trigger range picker used for the presetDateRange's Custom branch.
+// Mirrors the visual format of the Entry-date DateRangeFilter's Custom popover:
+// icon-only trigger button → popover with "Single date | Date range" toggle,
+// 2-month calendar, and Clear/Apply buttons. Keeps both filters on the same
+// row visually consistent.
+type PickerMode = "single" | "range";
+
+function CustomRangePopover({
+  from,
+  to,
+  onChange,
+  autoOpenToken,
+}: {
+  from: string;
+  to: string;
+  onChange: (from: string, to: string) => void;
+  // Parent bumps this counter to request that the popover open itself —
+  // e.g. when the user picks "Custom" in the preset Select alongside.
+  autoOpenToken?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pickerMode, setPickerMode] = useState<PickerMode>("range");
+  const [tempRange, setTempRange] = useState<DateRange | undefined>(undefined);
+  const [tempSingle, setTempSingle] = useState<Date | undefined>(undefined);
+
+  // Auto-open when the parent's signal increments. We guard against the
+  // initial render (token=0) so the popover doesn't pop up on page load.
+  useEffect(() => {
+    if (autoOpenToken && autoOpenToken > 0) {
+      // tiny delay so the trigger button has mounted (mirrors the pattern
+      // used inside DateRangeFilter for the same scenario).
+      const t = setTimeout(() => setOpen(true), 50);
+      return () => clearTimeout(t);
+    }
+  }, [autoOpenToken]);
+
+  const fmt = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  const parse = (s: string) => (s ? new Date(s + "T00:00:00") : undefined);
+
+  // Seed the picker with the externally-set range each time it opens, and
+  // default to Single-date mode if the existing values are a same-day filter.
+  useEffect(() => {
+    if (!open) return;
+    if (from && to && from === to) {
+      setPickerMode("single");
+      setTempSingle(parse(from));
+      setTempRange(undefined);
+    } else {
+      setPickerMode("range");
+      setTempRange({ from: parse(from), to: parse(to) });
+      setTempSingle(undefined);
+    }
+  }, [open, from, to]);
+
+  const handleModeChange = (mode: PickerMode) => {
+    if (mode === pickerMode) return;
+    // Carry the current pick across modes when sensible.
+    if (mode === "single") {
+      setTempSingle(tempRange?.from ?? tempSingle);
+    } else if (tempSingle && !tempRange) {
+      setTempRange({ from: tempSingle, to: undefined });
+    }
+    setPickerMode(mode);
+  };
+
+  const canApply =
+    pickerMode === "single" ? !!tempSingle : !!(tempRange?.from || tempRange?.to);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon"
+          className={cn("h-9 w-9 shadow-none", open && "bg-accent")}
+          aria-label="Pick custom date range"
+        >
+          <CalendarIcon className="h-4 w-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <div className="p-3">
+          {/* Mode toggle — single date vs date range, same as DateRangeFilter */}
+          <div className="inline-flex items-center rounded-md border border-[#E4E4E4] p-0.5 mb-3 text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => handleModeChange("single")}
+              className={cn(
+                "px-3 py-1 rounded-sm transition-colors",
+                pickerMode === "single"
+                  ? "bg-[#09090B] text-white"
+                  : "text-[#71717A] hover:text-[#09090B]"
+              )}
+            >
+              Single date
+            </button>
+            <button
+              type="button"
+              onClick={() => handleModeChange("range")}
+              className={cn(
+                "px-3 py-1 rounded-sm transition-colors",
+                pickerMode === "range"
+                  ? "bg-[#09090B] text-white"
+                  : "text-[#71717A] hover:text-[#09090B]"
+              )}
+            >
+              Date range
+            </button>
+          </div>
+
+          {pickerMode === "single" ? (
+            <Calendar
+              mode="single"
+              defaultMonth={tempSingle || new Date()}
+              selected={tempSingle}
+              onSelect={setTempSingle}
+              numberOfMonths={1}
+              className="rounded-md border-0"
+            />
+          ) : (
+            <Calendar
+              mode="range"
+              defaultMonth={tempRange?.from || new Date()}
+              selected={tempRange}
+              onSelect={setTempRange}
+              numberOfMonths={2}
+              className="rounded-md border-0"
+            />
+          )}
+
+          <div className="flex justify-end gap-2 pt-3 border-t mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setTempRange(undefined);
+                setTempSingle(undefined);
+                onChange("", "");
+                setOpen(false);
+              }}
+            >
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              disabled={!canApply}
+              onClick={() => {
+                if (pickerMode === "single") {
+                  // Single-date mode filters to that exact day (from = to).
+                  const ds = tempSingle ? fmt(tempSingle) : "";
+                  onChange(ds, ds);
+                } else {
+                  onChange(
+                    tempRange?.from ? fmt(tempRange.from) : "",
+                    tempRange?.to ? fmt(tempRange.to) : ""
+                  );
+                }
+                setOpen(false);
+              }}
+            >
+              Apply
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export type FilterBarOption = { value: string; label: string };
 
@@ -108,6 +292,9 @@ export function FilterBar({
   onClear,
   hasActiveFilters,
 }: FilterBarProps) {
+  // Bumped each time the user picks "Custom" in the preset Select so the
+  // sibling CustomRangePopover auto-opens, matching DateRangeFilter's UX.
+  const [customAutoOpenToken, setCustomAutoOpenToken] = useState(0);
   const userModuleKey = user?.moduleKey;
   const userFetchPage = useCallback(
     async ({ search: q, page }: { search: string; page: number }) => {
@@ -170,41 +357,70 @@ export function FilterBar({
           />
         </div>
       )}
-      {presetDateRange && (
-        <>
+      {presetDateRange && (() => {
+        // When Custom is active and a range has been picked, show the dates as
+        // the Select's display label (matching DateRangeFilter's behavior).
+        const fmtDisplay = (s: string) => {
+          if (!s) return "";
+          const d = new Date(s + "T00:00:00");
+          return d.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          });
+        };
+        const cf = presetDateRange.customFrom;
+        const ct = presetDateRange.customTo;
+        const customDisplay =
+          presetDateRange.preset === "custom" && (cf || ct)
+            ? cf && ct && cf === ct
+              ? fmtDisplay(cf)
+              : cf && ct
+                ? `${fmtDisplay(cf)} - ${fmtDisplay(ct)}`
+                : cf
+                  ? `From ${fmtDisplay(cf)}`
+                  : `To ${fmtDisplay(ct)}`
+            : null;
+
+        return (
           <div className="flex flex-col gap-2">
             <Label>{presetDateRange.label}</Label>
-            <Select
-              value={presetDateRange.preset || "any"}
-              onValueChange={(v) =>
-                presetDateRange.onPresetChange(v === "any" ? "" : v)
-              }
-            >
-              <SelectTrigger className="w-[200px] shadow-none">
-                <SelectValue placeholder={presetDateRange.placeholder ?? "Any"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Any</SelectItem>
-                {presetDateRange.options.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {presetDateRange.preset === "custom" && (
-            <div className="flex flex-col gap-2">
-              <Label>{presetDateRange.label} range</Label>
-              <DateRangeFilter
-                dateFrom={presetDateRange.customFrom}
-                dateTo={presetDateRange.customTo}
-                onChange={presetDateRange.onCustomChange}
-              />
+            <div className="flex items-center gap-2">
+              <Select
+                value={presetDateRange.preset || "any"}
+                onValueChange={(v) => {
+                  presetDateRange.onPresetChange(v === "any" ? "" : v);
+                  if (v === "custom") {
+                    setCustomAutoOpenToken((t) => t + 1);
+                  }
+                }}
+              >
+                <SelectTrigger className="min-w-[180px] w-fit shadow-none">
+                  <SelectValue placeholder={presetDateRange.placeholder ?? "Any"}>
+                    {customDisplay ?? undefined}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  {presetDateRange.options.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {presetDateRange.preset === "custom" && (
+                <CustomRangePopover
+                  from={presetDateRange.customFrom}
+                  to={presetDateRange.customTo}
+                  onChange={presetDateRange.onCustomChange}
+                  autoOpenToken={customAutoOpenToken}
+                />
+              )}
             </div>
-          )}
-        </>
-      )}
+          </div>
+        );
+      })()}
       {user && (
         <div className="flex flex-col gap-2">
           <Label>User</Label>

@@ -1,6 +1,19 @@
 from rest_framework.permissions import BasePermission
 
 
+def user_is_hod(user):
+    """Return True for non-admin users whose role has is_hod=True.
+
+    HOD (Head of Department) is an oversight role: sees all team data but
+    cannot create/edit/delete entries or targets. Admins (is_staff=True) are
+    excluded by design — they keep their full admin privileges regardless.
+    """
+    if not user or not user.is_authenticated or user.is_staff:
+        return False
+    role = getattr(user, 'role', None)
+    return bool(role and role.is_hod)
+
+
 class HasModulePermission(BasePermission):
     """
     Permission class to check if user has access to a specific module.

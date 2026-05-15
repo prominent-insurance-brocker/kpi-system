@@ -15,6 +15,10 @@ class Role(models.Model):
         choices=DATA_VISIBILITY_CHOICES,
         default='own'
     )
+    is_hod = models.BooleanField(
+        default=False,
+        help_text='Head of Department — oversight role: sees all team data, cannot add/edit entries.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -19,6 +19,7 @@ interface AuthContextType {
   checkAuth: () => Promise<void>;
   hasModulePermission: (moduleKey: string) => boolean;
   canSeeAllData: () => boolean;
+  isHOD: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -77,8 +78,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return false;
     // Super admin can see all data
     if (user.is_staff) return true;
+    // HOD always sees all team data regardless of data_visibility setting
+    if (user.role?.is_hod) return true;
     // Check role data visibility
     return user.role?.data_visibility === 'all';
+  };
+
+  const isHOD = (): boolean => {
+    if (!user) return false;
+    // HOD does NOT apply to admins — they keep full admin privileges.
+    if (user.is_staff) return false;
+    return user.role?.is_hod === true;
   };
 
   return (
@@ -93,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         checkAuth,
         hasModulePermission,
         canSeeAllData,
+        isHOD,
       }}
     >
       {children}

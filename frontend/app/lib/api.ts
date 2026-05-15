@@ -71,6 +71,7 @@ export interface Role {
   id: number;
   name: string;
   data_visibility: 'all' | 'own';
+  is_hod: boolean;
   module_permissions: string[];
 }
 
@@ -79,6 +80,7 @@ export interface RoleFull {
   name: string;
   description: string;
   data_visibility: 'all' | 'own';
+  is_hod: boolean;
   permissions: { module: string }[];
   user_count: number;
   created_at: string;
@@ -220,6 +222,7 @@ export async function createRole(roleData: {
   name: string;
   description?: string;
   data_visibility: 'all' | 'own';
+  is_hod?: boolean;
   module_permissions: string[];
 }): Promise<ApiResponse<RoleFull>> {
   return fetchApi<RoleFull>('/api/roles/', {
@@ -234,6 +237,7 @@ export async function updateRole(
     name?: string;
     description?: string;
     data_visibility?: 'all' | 'own';
+    is_hod?: boolean;
     module_permissions?: string[];
   }
 ): Promise<ApiResponse<RoleFull>> {
@@ -353,14 +357,17 @@ export interface MotorEnquiryStats {
 }
 
 export interface MotorRenewalMonthlyTarget {
-  id: number;
-  user: number;
+  // When `aggregated` is true, this row is a team total (HOD oversight view);
+  // `id` and `user` are null and the row is not editable.
+  id: number | null;
+  user: number | null;
   year: number;
   month: number;
   calculated_date: string;             // YYYY-MM-DD (first of the month)
   clients_assigned: number | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
+  aggregated?: boolean;
 }
 
 export type MotorEnquiryModule =
@@ -509,14 +516,17 @@ export interface GeneralRenewalStats {
 }
 
 export interface GeneralRenewalMonthlyTarget {
-  id: number;
-  user: number;
+  // When `aggregated` is true, this row is a team total (HOD oversight view);
+  // `id` and `user` are null and the row is not editable.
+  id: number | null;
+  user: number | null;
   year: number;
   month: number;
   calculated_date: string;
   clients_assigned: number | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
+  aggregated?: boolean;
 }
 
 export async function getGeneralRenewalStats(

@@ -211,7 +211,8 @@ export function GeneralNewEnquiryPage() {
     [config]
   );
 
-  const { canSeeAllData, user } = useAuth();
+  const { canSeeAllData, user, isHOD } = useAuth();
+  const isHodUser = isHOD();
   const confirm = useConfirm();
   const isAdmin = canSeeAllData();
   const currentUserId = user?.id;
@@ -860,35 +861,37 @@ export function GeneralNewEnquiryPage() {
 
         {/* ─── Tracker View ─────────────────────────────────────────────── */}
         <TabsContent value="tracker" className="mt-4 space-y-4">
-          <PersonalDailyTracker<MotorEnquiryEntry>
-            calYear={personalCalYear}
-            calMonth={personalCalMonth}
-            today={today}
-            monthEntries={monthEntries}
-            currentUserId={currentUserId}
-            userFullName={userFullName}
-            onPrevMonth={() => {
-              if (personalCalMonth === 0) {
-                setPersonalCalMonth(11);
-                setPersonalCalYear(personalCalYear - 1);
-              } else {
-                setPersonalCalMonth(personalCalMonth - 1);
-              }
-            }}
-            onNextMonth={() => {
-              if (personalCalMonth === 11) {
-                setPersonalCalMonth(0);
-                setPersonalCalYear(personalCalYear + 1);
-              } else {
-                setPersonalCalMonth(personalCalMonth + 1);
-              }
-            }}
-            onGoToday={() => {
-              setPersonalCalYear(today.getFullYear());
-              setPersonalCalMonth(today.getMonth());
-            }}
-          />
-          {isAdmin && (
+          {!isHodUser && (
+            <PersonalDailyTracker<MotorEnquiryEntry>
+              calYear={personalCalYear}
+              calMonth={personalCalMonth}
+              today={today}
+              monthEntries={monthEntries}
+              currentUserId={currentUserId}
+              userFullName={userFullName}
+              onPrevMonth={() => {
+                if (personalCalMonth === 0) {
+                  setPersonalCalMonth(11);
+                  setPersonalCalYear(personalCalYear - 1);
+                } else {
+                  setPersonalCalMonth(personalCalMonth - 1);
+                }
+              }}
+              onNextMonth={() => {
+                if (personalCalMonth === 11) {
+                  setPersonalCalMonth(0);
+                  setPersonalCalYear(personalCalYear + 1);
+                } else {
+                  setPersonalCalMonth(personalCalMonth + 1);
+                }
+              }}
+              onGoToday={() => {
+                setPersonalCalYear(today.getFullYear());
+                setPersonalCalMonth(today.getMonth());
+              }}
+            />
+          )}
+          {(isAdmin || isHodUser) && (
             <TrackerView<MotorEnquiryEntry>
               calYear={teamCalYear}
               calMonth={teamCalMonth}
@@ -896,6 +899,7 @@ export function GeneralNewEnquiryPage() {
               moduleUsers={moduleUsers}
               trackerUserFilter={trackerUserFilter}
               onTrackerUserFilterChange={setTrackerUserFilter}
+              excludeUserId={isHodUser ? currentUserId : undefined}
               onPrevMonth={() => {
                 if (teamCalMonth === 0) {
                   setTeamCalMonth(11);
@@ -985,22 +989,24 @@ export function GeneralNewEnquiryPage() {
                 setPage(1);
               }}
             />
-            <Button
-              disabled={noCurrentTarget}
-              title={noCurrentTarget ? "Set this month's retention target first" : undefined}
-              onClick={() => {
-                if (noCurrentTarget) {
-                  setIsTargetModalOpen(true);
-                  return;
-                }
-                setEditingEntry(null);
-                setModalError('');
-                setIsModalOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Enquiry
-            </Button>
+            {!isHodUser && (
+              <Button
+                disabled={noCurrentTarget}
+                title={noCurrentTarget ? "Set this month's retention target first" : undefined}
+                onClick={() => {
+                  if (noCurrentTarget) {
+                    setIsTargetModalOpen(true);
+                    return;
+                  }
+                  setEditingEntry(null);
+                  setModalError('');
+                  setIsModalOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Enquiry
+              </Button>
+            )}
           </div>
 
           <div className="flex gap-4">

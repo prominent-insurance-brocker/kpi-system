@@ -9,7 +9,7 @@ class RoleNestedSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Role
-        fields = ['id', 'name', 'data_visibility', 'module_permissions']
+        fields = ['id', 'name', 'data_visibility', 'is_hod', 'module_permissions']
 
     def get_module_permissions(self, obj):
         return list(obj.permissions.values_list('module', flat=True))

@@ -189,6 +189,9 @@ export function GeneralEnquiryPage() {
     lost: 0,
     avg_tat_minutes: null,
     avg_accuracy: null,
+    converted_premium: 0,
+    lost_premium: 0,
+    total_potential_premium: 0,
   });
 
   // Tracker — month state + entries
@@ -781,6 +784,21 @@ export function GeneralEnquiryPage() {
                 value={formatAccuracy(stats.avg_accuracy)}
                 accent="text-[#F97316]"
               />
+              <StatCard
+                label={`${SUCCESS_LABEL} Premium`}
+                value={formatPremium(stats.converted_premium)}
+                accent="text-green-700"
+              />
+              <StatCard
+                label="Lost Potential Premium"
+                value={formatPremium(stats.lost_premium)}
+                accent="text-red-700"
+              />
+              <RatioCard
+                label={`${SUCCESS_LABEL} vs Potential Premium`}
+                total={stats.total_potential_premium ?? 0}
+                success={stats.converted_premium ?? 0}
+              />
             </div>
           </TabsContent>
 
@@ -1209,12 +1227,17 @@ function RatioCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold text-[#09090B]">
-          {success} / {total}
+          {success.toLocaleString()} / {total.toLocaleString()}
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">({pct.toFixed(1)}%)</div>
       </CardContent>
     </Card>
   );
+}
+
+function formatPremium(n: number | null | undefined): string {
+  if (n == null) return '0';
+  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 function StatCard({

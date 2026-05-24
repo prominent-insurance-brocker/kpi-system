@@ -20,7 +20,9 @@ from .models import (
     MotorClaimStatusTransition,
     TypeOfAccident,
     InsuranceCompany,
+    ClassOfInsurance,
     SalesKPIEntry,
+    SalesKPIStatusTransition,
     SalesMonthlyTarget,
     MarineNewEntry,
     MarineRenewalEntry,
@@ -90,7 +92,7 @@ class GeneralNewEntrySerializer(BaseEntrySerializer):
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
     class_of_insurance_display = serializers.CharField(
-        source='get_class_of_insurance_display', read_only=True,
+        source='class_of_insurance.name', read_only=True, default=None,
     )
     insurance_company_name = serializers.CharField(
         source='insurance_company.name', read_only=True, default=None,
@@ -171,7 +173,7 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
     class_of_insurance_display = serializers.CharField(
-        source='get_class_of_insurance_display', read_only=True,
+        source='class_of_insurance.name', read_only=True, default=None,
     )
     insurance_company_name = serializers.CharField(
         source='insurance_company.name', read_only=True, default=None,
@@ -502,17 +504,123 @@ class MotorClaimStatusUpdateSerializer(serializers.Serializer):
         return value
 
 
+class ClassOfInsuranceSerializer(serializers.ModelSerializer):
+    """Admin-managed Class of Insurance lookup (Settings tab)."""
+    class Meta:
+        model = ClassOfInsurance
+        fields = ['id', 'name', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_name(self, value):
+        cleaned = (value or '').strip()
+        if not cleaned:
+            raise serializers.ValidationError("Name cannot be blank.")
+        return cleaned
+
+
 class SalesKPIEntrySerializer(BaseEntrySerializer):
+    """Per-ticket Sales KPI serializer (TED-446). Replaces the original
+    per-day KPI aggregate serializer in migration 0036."""
+    enforce_one_per_day = False
+
+    assignee_name = serializers.SerializerMethodField()
+    class_of_insurance_name = serializers.CharField(
+        source='class_of_insurance.name', read_only=True, default=None,
+    )
+    entry_type_display = serializers.CharField(
+        source='get_entry_type_display', read_only=True,
+    )
+    status_display = serializers.CharField(
+        source='get_status_display', read_only=True,
+    )
+    allowed_transitions = serializers.SerializerMethodField()
+    is_terminal = serializers.SerializerMethodField()
+    # Write-only: seed the first EntryRemark on create.
+    initial_remark = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, default='',
+    )
+
     class Meta:
         model = SalesKPIEntry
         fields = [
-            'id', 'pib_id', 'date', 'leads_to_ops_team', 'quotes_from_ops_team',
-            'quotes_to_client', 'total_conversions', 'new_clients_acquired',
-            'existing_clients_closed',
-            'gross_booked_premium',
-            'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name', 'added_at', 'updated_at', 'is_editable'
+            'id', 'pib_id', 'date',
+            'customer_name', 'entry_type', 'entry_type_display',
+            'class_of_insurance', 'class_of_insurance_name',
+            'assignee', 'assignee_name',
+            'potential_premium',
+            'status', 'status_display', 'status_changed_at',
+            'sent_for_quote', 'quote_received', 'submitted_to_client',
+            'converted_premium',
+            'allowed_transitions', 'is_terminal',
+            'initial_remark',
+            'added_by', 'added_by_name',
+            'on_behalf_of', 'on_behalf_of_name',
+            'added_at', 'updated_at', 'is_editable',
         ]
-        read_only_fields = ['id', 'pib_id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
+        read_only_fields = [
+            'id', 'pib_id', 'added_by', 'on_behalf_of',
+            # Status + the TED-447 workflow answers are mutated only via the
+            # /update-status/ action, never via plain PATCH on the entry.
+            'status', 'status_display', 'status_changed_at',
+            'sent_for_quote', 'quote_received', 'submitted_to_client',
+            'converted_premium',
+            'allowed_transitions', 'is_terminal',
+            'class_of_insurance_name', 'entry_type_display', 'assignee_name',
+            'added_at', 'updated_at',
+        ]
+
+    def get_assignee_name(self, obj):
+        return obj.assignee.get_full_name() if obj.assignee_id else None
+
+    def get_allowed_transitions(self, obj):
+        return SalesKPIEntry.get_allowed_transitions(obj.status)
+
+    def get_is_terminal(self, obj):
+        return obj.is_terminal
+
+
+class SalesKPIStatusUpdateSerializer(serializers.Serializer):
+    """Validates the TED-447 workflow on a Sales KPI status change.
+
+    Lead -> In Progress is allowed with no extra payload (just the generic
+    confirmation on the frontend). Any transition INTO Won or Lost requires
+    the three workflow booleans; transitions INTO Won additionally require
+    a converted_premium amount.
+    """
+    status = serializers.ChoiceField(choices=SalesKPIEntry.STATUS_CHOICES)
+    sent_for_quote = serializers.BooleanField(required=False)
+    quote_received = serializers.BooleanField(required=False)
+    submitted_to_client = serializers.BooleanField(required=False)
+    converted_premium = serializers.DecimalField(
+        max_digits=15, decimal_places=2, required=False, min_value=0,
+    )
+
+    def validate_status(self, value):
+        entry = self.context['entry']
+        allowed = SalesKPIEntry.get_allowed_transitions(entry.status)
+        if value not in allowed:
+            current_label = dict(SalesKPIEntry.STATUS_CHOICES).get(entry.status)
+            allowed_labels = [dict(SalesKPIEntry.STATUS_CHOICES).get(s) for s in allowed]
+            raise serializers.ValidationError(
+                f"Cannot transition from '{current_label}' to "
+                f"'{dict(SalesKPIEntry.STATUS_CHOICES).get(value)}'. "
+                f"Allowed: {allowed_labels}"
+            )
+        return value
+
+    def validate(self, attrs):
+        status = attrs.get('status')
+        if status in SalesKPIEntry.TERMINAL_STATUSES:
+            for f in ('sent_for_quote', 'quote_received', 'submitted_to_client'):
+                if f not in attrs:
+                    raise serializers.ValidationError(
+                        {f: 'Required when closing the enquiry as Won or Lost.'}
+                    )
+            if status == SalesKPIEntry.STATUS_WON and 'converted_premium' not in attrs:
+                raise serializers.ValidationError(
+                    {'converted_premium': 'Required when marking the enquiry as Won.'}
+                )
+        return attrs
 
 
 class SalesMonthlyTargetSerializer(serializers.ModelSerializer):

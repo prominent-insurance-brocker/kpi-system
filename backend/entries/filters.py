@@ -57,3 +57,22 @@ class MotorEnquiryFilter(EntryFilter):
 
 # Backwards-compatible alias (kept short to make grepping easy if old code lingers).
 MotorNewEntryFilter = MotorEnquiryFilter
+
+
+class SalesKPIEntryFilter(EntryFilter):
+    """Per-ticket Sales KPI filter (TED-446).
+
+    Supports filtering by status, assignee, entry type, class_of_insurance,
+    plus a customer-name icontains search.
+    """
+    status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
+    assignee = django_filters.NumberFilter(field_name='assignee_id')
+    entry_type = django_filters.CharFilter(field_name='entry_type', lookup_expr='exact')
+    class_of_insurance = django_filters.NumberFilter(field_name='class_of_insurance_id')
+    customer_name = django_filters.CharFilter(field_name='customer_name', lookup_expr='icontains')
+
+    class Meta:
+        fields = [
+            'date_from', 'date_to', 'user_id',
+            'status', 'assignee', 'entry_type', 'class_of_insurance', 'customer_name',
+        ]

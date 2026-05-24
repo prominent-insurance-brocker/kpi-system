@@ -336,9 +336,9 @@ export interface MotorEnquiryEntry {
   // Motor variants use class_of_enquiry (comprehensive / tpl).
   class_of_enquiry?: string;
   class_of_enquiry_display?: string;
-  // general_new uses class_of_insurance with the 5-option general list instead.
-  class_of_insurance?: string;
-  class_of_insurance_display?: string;
+  // general_new uses class_of_insurance — FK to the admin-managed ClassOfInsurance lookup.
+  class_of_insurance?: number | null;
+  class_of_insurance_display?: string | null;
   // Insurance Company FK to the admin-managed lookup table.
   insurance_company?: number | null;
   insurance_company_name?: string | null;
@@ -513,8 +513,9 @@ export interface GeneralRenewalEntry {
   is_terminal: boolean;
   // Per-module dropdowns added 2026-05-24.
   potential_premium?: string | null;
-  class_of_insurance?: string;
-  class_of_insurance_display?: string;
+  // FK to the admin-managed ClassOfInsurance lookup (TED-446 migration 0035).
+  class_of_insurance?: number | null;
+  class_of_insurance_display?: string | null;
   insurance_company?: number | null;
   insurance_company_name?: string | null;
   added_by: number;
@@ -687,9 +688,12 @@ export interface SettingsLookup {
 
 export type AccidentType = SettingsLookup;
 export type InsuranceCompany = SettingsLookup;
+export type ClassOfInsurance = SettingsLookup;
+
+type LookupResource = 'accident-types' | 'insurance-companies' | 'class-of-insurance';
 
 async function _listLookup(
-  resource: 'accident-types' | 'insurance-companies',
+  resource: LookupResource,
   params: { is_active?: boolean } = {}
 ): Promise<ApiResponse<SettingsLookup[]>> {
   const qs = new URLSearchParams();
@@ -711,9 +715,12 @@ export const getAccidentTypes = (params?: { is_active?: boolean }) =>
 export const getInsuranceCompanies = (params?: { is_active?: boolean }) =>
   _listLookup('insurance-companies', params);
 
+export const getClassOfInsurance = (params?: { is_active?: boolean }) =>
+  _listLookup('class-of-insurance', params);
+
 // Paginated + searchable variants for SearchableSelect dropdowns.
 async function _listLookupPage(
-  resource: 'accident-types' | 'insurance-companies',
+  resource: LookupResource,
   params: { search?: string; page?: number; page_size?: number; is_active?: boolean } = {}
 ): Promise<ApiResponse<{ results: SettingsLookup[]; count: number; has_more: boolean }>> {
   const qs = new URLSearchParams();
@@ -743,6 +750,29 @@ export const getAccidentTypesPage = (
 export const getInsuranceCompaniesPage = (
   params: { search?: string; page?: number; page_size?: number; is_active?: boolean } = {}
 ) => _listLookupPage('insurance-companies', params);
+
+export const getClassOfInsurancePage = (
+  params: { search?: string; page?: number; page_size?: number; is_active?: boolean } = {}
+) => _listLookupPage('class-of-insurance', params);
+
+export async function createClassOfInsurance(
+  name: string,
+): Promise<ApiResponse<ClassOfInsurance>> {
+  return fetchApi<ClassOfInsurance>('/api/entries/settings/class-of-insurance/', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function updateClassOfInsurance(
+  id: number,
+  data: { name?: string; is_active?: boolean },
+): Promise<ApiResponse<ClassOfInsurance>> {
+  return fetchApi<ClassOfInsurance>(
+    `/api/entries/settings/class-of-insurance/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(data) },
+  );
+}
 
 export async function createAccidentType(
   name: string
@@ -814,6 +844,99 @@ export async function updateMotorClaimNextCallDate(
     method: 'PATCH',
     body: JSON.stringify({ next_call_date: next_call_date || null }),
   });
+}
+
+// ─── Sales KPI (per-ticket revamp, TED-446) ──────────────────────────────────
+
+export type SalesKPIStatus = 'lead' | 'in_progress' | 'won' | 'lost';
+export type SalesKPIEntryType = 'new' | 'renewal';
+
+export interface SalesKPIStatusTransition {
+  id: number;
+  from_status: SalesKPIStatus | '';
+  to_status: SalesKPIStatus;
+  changed_at: string;             // ISO
+  changed_by: number;
+  changed_by_name: string;
+}
+
+export interface SalesKPIEntry {
+  id: number;
+  pib_id: string;
+  date: string;                          // YYYY-MM-DD
+  customer_name: string;
+  entry_type: SalesKPIEntryType;
+  entry_type_display: string;
+  class_of_insurance: number;            // FK id
+  class_of_insurance_name: string;
+  assignee: number;                      // FK id (user)
+  assignee_name: string;
+  potential_premium: string | null;      // DecimalField → string
+  status: SalesKPIStatus;
+  status_display: string;
+  status_changed_at: string | null;
+  // TED-447 workflow flags, captured on transition out of in_progress.
+  sent_for_quote: boolean | null;
+  quote_received: boolean | null;
+  submitted_to_client: boolean | null;
+  // Set when status flips to 'won'.
+  converted_premium: string | null;
+  allowed_transitions: SalesKPIStatus[];
+  is_terminal: boolean;
+  // Optional initial remark (write-only on create; not returned on subsequent reads).
+  initial_remark?: string;
+  added_by: number;
+  added_by_name: string;
+  on_behalf_of: number | null;
+  on_behalf_of_name: string | null;
+  added_at: string;
+  updated_at: string;
+  is_editable: boolean;
+  // Index signature for compatibility with shared tracker components.
+  [key: string]: unknown;
+}
+
+export interface SalesKPIStats {
+  total: number;
+  lead: number;
+  in_progress: number;
+  won: number;
+  lost: number;
+  potential_premium_total: number;
+  converted_premium_total: number;
+}
+
+export async function getSalesKPIStats(params: {
+  date_from?: string;
+  date_to?: string;
+  user_id?: string;
+  assignee?: string;
+  status?: string;
+} = {}): Promise<ApiResponse<SalesKPIStats>> {
+  return fetchApi<SalesKPIStats>(
+    `/api/entries/sales-kpi/stats/?${buildQS(params as Record<string, string | undefined>)}`,
+  );
+}
+
+// Payload mirrors the backend SalesKPIStatusUpdateSerializer. The three
+// booleans are required for any transition into 'won' or 'lost' (TED-447).
+// `converted_premium` is required only for the 'won' transition.
+export interface SalesKPIStatusUpdatePayload {
+  status: SalesKPIStatus;
+  sent_for_quote?: boolean;
+  quote_received?: boolean;
+  submitted_to_client?: boolean;
+  converted_premium?: string | number;
+}
+
+export async function updateSalesKPIStatus(
+  id: number,
+  payload: SalesKPIStatusUpdatePayload,
+): Promise<ApiResponse<SalesKPIEntry>> {
+  return fetchApi<SalesKPIEntry>(
+    `/api/entries/sales-kpi/${id}/update-status/`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+  );
 }
 
 // AI Chat
@@ -900,6 +1023,7 @@ export const REMARKS_MODEL_NAME_BY_API_SLUG: Record<string, string> = {
   'motor-fleet-new': 'motorfleetnewentry',
   'motor-fleet-renewal': 'motorfleetrenewalentry',
   'motor-claim': 'motorclaimentry',
+  'sales-kpi': 'saleskpientry',
 };
 
 // Generic fetch helper for other API calls

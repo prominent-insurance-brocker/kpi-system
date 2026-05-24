@@ -33,15 +33,18 @@ import { firstAccessibleRoute } from '@/app/lib/navigation';
 import {
   getAccidentTypes,
   getInsuranceCompanies,
+  getClassOfInsurance,
   createAccidentType,
   createInsuranceCompany,
+  createClassOfInsurance,
   updateAccidentType,
   updateInsuranceCompany,
+  updateClassOfInsurance,
   type SettingsLookup,
   type ApiResponse,
 } from '@/app/lib/api';
 
-type LookupResource = 'accident-types' | 'insurance-companies';
+type LookupResource = 'accident-types' | 'insurance-companies' | 'class-of-insurance';
 
 interface LookupResourceConfig {
   list: (params?: { is_active?: boolean }) => Promise<ApiResponse<SettingsLookup[]>>;
@@ -68,6 +71,13 @@ const RESOURCES: Record<LookupResource, LookupResourceConfig> = {
     update: updateInsuranceCompany,
     singularLabel: 'Insurance Company',
     pluralLabel: 'Insurance Company',
+  },
+  'class-of-insurance': {
+    list: getClassOfInsurance,
+    create: createClassOfInsurance,
+    update: updateClassOfInsurance,
+    singularLabel: 'Class of Insurance',
+    pluralLabel: 'Class of Insurance',
   },
 };
 
@@ -110,6 +120,12 @@ export default function SettingsPage() {
           >
             Insurance Company
           </TabsTrigger>
+          <TabsTrigger
+            value="class-of-insurance"
+            className="rounded-md px-4 py-1.5 data-[state=active]:bg-white"
+          >
+            Class of Insurance
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="accident-types" className="mt-4">
@@ -117,6 +133,9 @@ export default function SettingsPage() {
         </TabsContent>
         <TabsContent value="insurance-companies" className="mt-4">
           <LookupTab resource="insurance-companies" />
+        </TabsContent>
+        <TabsContent value="class-of-insurance" className="mt-4">
+          <LookupTab resource="class-of-insurance" />
         </TabsContent>
       </Tabs>
     </div>
@@ -327,7 +346,11 @@ function LookupTab({ resource }: { resource: LookupResource }) {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder={`e.g. ${
-                  resource === 'accident-types' ? 'Hailstorm' : 'GoldStar Insurance'
+                  resource === 'accident-types'
+                    ? 'Hailstorm'
+                    : resource === 'insurance-companies'
+                      ? 'GoldStar Insurance'
+                      : 'Marine Cargo Insurance'
                 }`}
                 required
               />

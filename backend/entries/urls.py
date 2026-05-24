@@ -19,6 +19,7 @@ from .views import (
     MedicalClaimEntryViewSet,
     TypeOfAccidentViewSet,
     InsuranceCompanyViewSet,
+    ClassOfInsuranceViewSet,
     remarks_content_types,
 )
 
@@ -44,6 +45,7 @@ router.register(r'medical-claim', MedicalClaimEntryViewSet, basename='medical-cl
 # Settings lookup tables (managed via the Settings page).
 router.register(r'settings/accident-types', TypeOfAccidentViewSet, basename='accident-types')
 router.register(r'settings/insurance-companies', InsuranceCompanyViewSet, basename='insurance-companies')
+router.register(r'settings/class-of-insurance', ClassOfInsuranceViewSet, basename='class-of-insurance')
 # Cross-module per-entry comments. The router-driven /remarks/ resource lives
 # at the entries API root; the helper endpoint exposes the {model: ct_id} map.
 router.register(r'remarks', EntryRemarkViewSet, basename='remarks')

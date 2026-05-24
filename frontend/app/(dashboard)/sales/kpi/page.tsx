@@ -1,6 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+/**
+ * Sales KPI — per-ticket enquiry workflow (TED-446 + TED-447).
+ *
+ * Replaces the original per-day KPI counter page. Each row is a single sales
+ * enquiry ticket with customer_name + class_of_insurance + assignee +
+ * potential_premium and a status state machine
+ * (lead → in_progress → won/lost). Transitions out of `in_progress` go
+ * through SalesKPIStatusModal (TED-447) which captures workflow flags and
+ * Converted Premium for won.
+ *
+ * The Monthly Target side panel and Monthly Target progress card are
+ * preserved unchanged in shape — they still drive premium / clients_assigned
+ * targets from SalesMonthlyTarget. Card progress now reads:
+ *   - Premium actual = sum(converted_premium) for the month's won tickets.
+ *   - Clients actual = count of won tickets for the month.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,12 +37,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { DataTable, Tooltip } from '@/app/components/DataTable';
-import { fetchApi, getUsersForModule } from '@/app/lib/api';
-import { useAuth } from '@/app/context/AuthContext';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Plus,
-  Info,
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
@@ -34,35 +50,26 @@ import {
   X,
   Check,
 } from 'lucide-react';
-import { DateRangeFilter } from '@/components/ui/date-range-filter';
+import { toast } from 'sonner';
+
+import { DataTable } from '@/app/components/DataTable';
+import { FilterBar } from '@/app/components/FilterBar';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate } from '@/app/lib/date';
-import { Progress } from '@/components/ui/progress';
-import { toast } from 'sonner';
+import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
+import { AddedByCell, MONTH_NAMES } from '@/app/components/KpiModulePage';
+import { SalesKPIStatusModal } from '@/app/components/SalesKPIStatusModal';
 import {
-  AddedByCell,
-  PersonalDailyTracker,
-  TrackerView,
-  WeeklyView,
-  toLocalDateString,
-  startOfWeek,
-  addDays,
-  MONTH_NAMES,
-  type BaseModuleEntry,
-  type ModuleUser,
-  type WeeklyColumnSpec,
-} from '@/app/components/KpiModulePage';
-
-interface SalesKPIEntry extends BaseModuleEntry {
-  leads_to_ops_team: number;
-  quotes_from_ops_team: number;
-  quotes_to_client: number;
-  total_conversions: number;
-  new_clients_acquired: number;
-  existing_clients_closed: number;
-  gross_booked_premium: number;
-}
+  fetchApi,
+  getSalesKPIStats,
+  getUsersForModulePage,
+  getClassOfInsurancePage,
+  type SalesKPIEntry,
+  type SalesKPIStats,
+  type SalesKPIStatus,
+  type SalesKPIEntryType,
+} from '@/app/lib/api';
 
 interface SalesMonthlyTarget {
   id?: number;
@@ -72,6 +79,32 @@ interface SalesMonthlyTarget {
   premium_target: string | null;
   clients_assigned: number | null;
 }
+
+const STATUS_OPTIONS: Array<{ value: SalesKPIStatus; label: string }> = [
+  { value: 'lead', label: 'Lead' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'won', label: 'Won' },
+  { value: 'lost', label: 'Lost' },
+];
+
+const TYPE_OPTIONS: Array<{ value: SalesKPIEntryType; label: string }> = [
+  { value: 'new', label: 'New' },
+  { value: 'renewal', label: 'Renewal' },
+];
+
+const STATUS_LABEL: Record<SalesKPIStatus, string> = {
+  lead: 'Lead',
+  in_progress: 'In Progress',
+  won: 'Won',
+  lost: 'Lost',
+};
+
+const STATUS_BADGE_CLASSES: Record<SalesKPIStatus, string> = {
+  lead: 'bg-blue-100 text-blue-800',
+  in_progress: 'bg-amber-100 text-amber-800',
+  won: 'bg-green-100 text-green-800',
+  lost: 'bg-gray-200 text-gray-700',
+};
 
 function formatPremium(val: number | string | null | undefined): string {
   if (val == null || val === '') return '0.00';
@@ -83,104 +116,19 @@ function formatPremium(val: number | string | null | undefined): string {
   });
 }
 
-// ─── Weekly column config (driving the shared WeeklyView) ───────────────────
+function toLocalDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
-// Order mirrors the entry modal's field order: Gross booked premium →
-// Lead-to-Quote → Deals Acquired → Quote-to-Conversion.
-const weeklyColumns: WeeklyColumnSpec<SalesKPIEntry>[] = [
-  {
-    key: 'gross_booked_premium',
-    header: 'Gross booked premium',
-    render: (v) => formatPremium(v as number | string | null),
-  },
-  {
-    key: 'leads_to_ops_team',
-    header: 'Leads to ops team',
-    tooltip: 'Number of leads handed over to the operations team',
-  },
-  {
-    key: 'quotes_from_ops_team',
-    header: 'Quotes from ops team',
-    tooltip: 'Number of quotes received from the operations team',
-  },
-  {
-    key: 'new_clients_acquired',
-    header: 'New clients acquired',
-    tooltip: 'Number of new clients acquired',
-  },
-  {
-    key: 'existing_clients_closed',
-    header: 'Existing clients closed today',
-    tooltip: 'How many existing clients did I close today?',
-  },
-  {
-    key: 'quotes_to_client',
-    header: 'Quotes to client',
-    tooltip: 'Number of quotes submitted to the client',
-  },
-  {
-    key: 'total_conversions',
-    header: 'Total conversions',
-    tooltip: 'Total number of conversions',
-  },
-];
-
-// ─── Data View columns ───────────────────────────────────────────────────────
-
-// Order mirrors the entry modal's field order: Gross booked premium →
-// Lead-to-Quote → Deals Acquired → Quote-to-Conversion.
-const dataColumns = [
-  { key: 'date', header: 'Record date', render: (item: SalesKPIEntry) => formatDate(item.date) },
-  { key: 'added_by_name', header: 'Added by', render: (item: SalesKPIEntry) => <AddedByCell entry={item} /> },
-  {
-    key: 'added_at',
-    header: 'Added on',
-    render: (item: SalesKPIEntry) => formatDate(item.added_at.split('T')[0]),
-  },
-  {
-    key: 'gross_booked_premium',
-    header: 'Gross booked premium',
-    render: (item: SalesKPIEntry) => formatPremium(item.gross_booked_premium),
-  },
-  {
-    key: 'leads_to_ops_team',
-    header: 'Leads to ops team',
-    tooltip: 'Number of leads handed over to the operations team',
-  },
-  {
-    key: 'quotes_from_ops_team',
-    header: 'Quotes from ops team',
-    tooltip: 'Number of quotes received from the operations team',
-  },
-  {
-    key: 'new_clients_acquired',
-    header: 'New clients acquired',
-    tooltip: 'Number of new clients acquired',
-  },
-  {
-    key: 'existing_clients_closed',
-    header: 'Existing clients closed today',
-    tooltip: 'How many existing clients did I close today?',
-  },
-  {
-    key: 'quotes_to_client',
-    header: 'Quotes to client',
-    tooltip: 'Number of quotes submitted to the client',
-  },
-  {
-    key: 'total_conversions',
-    header: 'Total conversions',
-    tooltip: 'Total number of conversions',
-  },
-];
-
-// ─── Main Page ───────────────────────────────────────────────────────────────
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function SalesKPIPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { canSeeAllData, user, isHOD } = useAuth();
-  const isHodUser = isHOD();
+  const { canSeeAllData, user } = useAuth();
   const confirm = useConfirm();
 
   const isAdmin = canSeeAllData();
@@ -192,53 +140,27 @@ export default function SalesKPIPage() {
     return d;
   }, []);
 
-  const [activeView, setActiveView] = useState<'tracker' | 'weekly' | 'data'>('weekly');
+  // Tabs
+  const [activeView, setActiveView] = useState<'dashboard' | 'enquiries'>('enquiries');
 
-  // Calendar / tracker state
-  const [calYear, setCalYear] = useState(today.getFullYear());
-  const [calMonth, setCalMonth] = useState(today.getMonth());
-  const [trackerUserFilter, setTrackerUserFilter] = useState('all');
-
-  // Weekly state
-  const [weekStart, setWeekStart] = useState<Date>(startOfWeek(today));
-  const [weeklyUserFilter, setWeeklyUserFilter] = useState('all');
-
-  // Shared monthly data pool (used by Tracker + Weekly + Data)
-  const [monthEntries, setMonthEntries] = useState<SalesKPIEntry[]>([]);
-  const [moduleUsers, setModuleUsers] = useState<ModuleUser[]>([]);
-
-  // Data tab state (URL-synced filters)
-  const [entries, setEntries] = useState<SalesKPIEntry[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<SalesKPIEntry | null>(null);
-  const [modalInitialDate, setModalInitialDate] = useState('');
-  const [error, setError] = useState('');
+  const [modalError, setModalError] = useState('');
 
-  // Target state
-  const [currentTarget, setCurrentTarget] = useState<SalesMonthlyTarget | null>(null);
-  const [currentTargetLoaded, setCurrentTargetLoaded] = useState(false);
-  const [isTargetModalOpen, setIsTargetModalOpen] = useState(false);
+  const [statusModalEntry, setStatusModalEntry] = useState<SalesKPIEntry | null>(null);
+  const [statusModalNext, setStatusModalNext] = useState<SalesKPIStatus | null>(null);
 
-  // Monthly target card navigation
-  const [cardYear, setCardYear] = useState(today.getFullYear());
-  const [cardMonth, setCardMonth] = useState(today.getMonth() + 1); // 1-indexed
-  const [cardTarget, setCardTarget] = useState<SalesMonthlyTarget | null>(null);
-  const [cardEntries, setCardEntries] = useState<SalesKPIEntry[]>([]);
-
-  // Panel state
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [sheetYear, setSheetYear] = useState(today.getFullYear());
-  const [sheetTargets, setSheetTargets] = useState<SalesMonthlyTarget[]>([]);
-  const [sheetInlineValues, setSheetInlineValues] = useState<Record<string, string>>({});
-  const [sheetEditingKey, setSheetEditingKey] = useState<string | null>(null);
-
+  // Filters (URL-synced)
   const page = Number(searchParams.get('page')) || 1;
   const pageSize = Number(searchParams.get('pageSize')) || 20;
   const dateFrom = searchParams.get('dateFrom') || '';
   const dateTo = searchParams.get('dateTo') || '';
   const userId = searchParams.get('userId') || '';
+  const assigneeId = searchParams.get('assignee') || '';
+  const statusFilter = searchParams.get('status') || '';
+  const classFilter = searchParams.get('class_of_insurance') || '';
+  const typeFilter = searchParams.get('entry_type') || '';
 
   const updateFilters = (updates: Record<string, string | number>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -252,11 +174,68 @@ export default function SalesKPIPage() {
     router.push(`?${params.toString()}`);
   };
 
+  // Data
+  const [entries, setEntries] = useState<SalesKPIEntry[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<SalesKPIStats | null>(null);
+
+  // Monthly target card
+  const [currentTarget, setCurrentTarget] = useState<SalesMonthlyTarget | null>(null);
+  const [currentTargetLoaded, setCurrentTargetLoaded] = useState(false);
+  const [isTargetModalOpen, setIsTargetModalOpen] = useState(false);
+  const [cardYear, setCardYear] = useState(today.getFullYear());
+  const [cardMonth, setCardMonth] = useState(today.getMonth() + 1);
+  const [cardTarget, setCardTarget] = useState<SalesMonthlyTarget | null>(null);
+  const [cardEntries, setCardEntries] = useState<SalesKPIEntry[]>([]);
+
+  // Monthly Targets side panel
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [sheetYear, setSheetYear] = useState(today.getFullYear());
+  const [sheetTargets, setSheetTargets] = useState<SalesMonthlyTarget[]>([]);
+  const [sheetInlineValues, setSheetInlineValues] = useState<Record<string, string>>({});
+  const [sheetEditingKey, setSheetEditingKey] = useState<string | null>(null);
+
+  // ── Fetchers ──────────────────────────────────────────────────────────────
+
+  const fetchEntries = useCallback(async () => {
+    setIsLoading(true);
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('page_size', String(pageSize));
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    if (userId) params.set('user_id', userId);
+    if (assigneeId) params.set('assignee', assigneeId);
+    if (statusFilter) params.set('status', statusFilter);
+    if (classFilter) params.set('class_of_insurance', classFilter);
+    if (typeFilter) params.set('entry_type', typeFilter);
+    const result = await fetchApi<{ results: SalesKPIEntry[]; count: number }>(
+      `/api/entries/sales-kpi/?${params}`,
+    );
+    setEntries(result.data?.results ?? []);
+    setTotalCount(result.data?.count ?? 0);
+    setIsLoading(false);
+  }, [
+    page, pageSize, dateFrom, dateTo, userId, assigneeId,
+    statusFilter, classFilter, typeFilter,
+  ]);
+
+  const fetchStats = useCallback(async () => {
+    const result = await getSalesKPIStats({
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+      user_id: userId || undefined,
+      assignee: assigneeId || undefined,
+    });
+    if (result.data) setStats(result.data);
+  }, [dateFrom, dateTo, userId, assigneeId]);
+
   const fetchCurrentTarget = useCallback(async () => {
-    const year = today.getFullYear();
-    const month = today.getMonth() + 1;
+    const y = today.getFullYear();
+    const m = today.getMonth() + 1;
     const result = await fetchApi<{ results: SalesMonthlyTarget[] }>(
-      `/api/entries/sales-kpi/monthly-targets/?year=${year}&month=${month}`
+      `/api/entries/sales-kpi/monthly-targets/?year=${y}&month=${m}`,
     );
     setCurrentTarget(result.data?.results?.[0] ?? null);
     setCurrentTargetLoaded(true);
@@ -265,186 +244,47 @@ export default function SalesKPIPage() {
   const fetchCardData = useCallback(async () => {
     if (!currentUserId) return;
     const targetResult = await fetchApi<{ results: SalesMonthlyTarget[] }>(
-      `/api/entries/sales-kpi/monthly-targets/?year=${cardYear}&month=${cardMonth}`
+      `/api/entries/sales-kpi/monthly-targets/?year=${cardYear}&month=${cardMonth}`,
     );
     setCardTarget(targetResult.data?.results?.[0] ?? null);
 
-    // Monthly Target progress is always personal — scope to the logged-in user
-    // even when admins (who can see all data) are viewing the page.
     const firstDay = `${cardYear}-${String(cardMonth).padStart(2, '0')}-01`;
     const lastDay = toLocalDateString(new Date(cardYear, cardMonth, 0));
     const result = await fetchApi<{ results: SalesKPIEntry[] }>(
-      `/api/entries/sales-kpi/?date_from=${firstDay}&date_to=${lastDay}&user_id=${currentUserId}&page_size=1000`
+      `/api/entries/sales-kpi/?date_from=${firstDay}&date_to=${lastDay}&user_id=${currentUserId}&page_size=1000`,
     );
     setCardEntries(result.data?.results ?? []);
   }, [cardYear, cardMonth, currentUserId]);
 
-  const fetchEntries = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set('page', String(page));
-      params.set('page_size', String(pageSize));
-      if (dateFrom) params.set('date_from', dateFrom);
-      if (dateTo) params.set('date_to', dateTo);
-      if (userId) params.set('user_id', userId);
-
-      const result = await fetchApi<{ results: SalesKPIEntry[]; count: number }>(
-        `/api/entries/sales-kpi/?${params}`
-      );
-      setEntries(result.data?.results || []);
-      setTotalCount(result.data?.count || 0);
-    } catch (err) {
-      console.error('Failed to fetch entries:', err);
-    }
-    setIsLoading(false);
-  }, [page, pageSize, dateFrom, dateTo, userId]);
-
-  const fetchEntriesForMonths = useCallback(
-    async (months: Array<[number, number]>) => {
-      try {
-        const unique = Array.from(new Set(months.map(([y, m]) => `${y}-${m}`))).map((s) => {
-          const [y, m] = s.split('-').map(Number);
-          return [y, m] as [number, number];
-        });
-        const responses = await Promise.all(
-          unique.map(([year, month]) => {
-            const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-            const lastDay = toLocalDateString(new Date(year, month + 1, 0));
-            const params = new URLSearchParams({
-              date_from: firstDay,
-              date_to: lastDay,
-              page_size: '1000',
-            });
-            return fetchApi<{ results: SalesKPIEntry[] }>(`/api/entries/sales-kpi/?${params}`);
-          })
-        );
-        const merged = new Map<number, SalesKPIEntry>();
-        for (const res of responses) {
-          for (const entry of res.data?.results ?? []) {
-            merged.set(entry.id, entry);
-          }
-        }
-        setMonthEntries(Array.from(merged.values()));
-      } catch {
-        setMonthEntries([]);
-      }
-    },
-    []
-  );
-
-  const fetchMonthEntries = useCallback(
-    (year: number, month: number) => fetchEntriesForMonths([[year, month]]),
-    [fetchEntriesForMonths]
-  );
-
   const fetchSheetTargets = useCallback(async () => {
     const result = await fetchApi<{ results: SalesMonthlyTarget[] }>(
-      `/api/entries/sales-kpi/monthly-targets/?year=${sheetYear}`
+      `/api/entries/sales-kpi/monthly-targets/?year=${sheetYear}`,
     );
     setSheetTargets(result.data?.results ?? []);
   }, [sheetYear]);
 
-  // Load module users for admin (used by Tracker, Weekly, and Data user filters).
-  // Default the weekly user filter to the logged-in user so the admin lands on
-  // their own week rather than the alphabetically-first agent's.
-  useEffect(() => {
-    if (!isAdmin) return;
-    getUsersForModule('sales_kpi').then((result) => {
-      if (result.data) {
-        setModuleUsers(result.data);
-        if (currentUserId) {
-          setWeeklyUserFilter(String(currentUserId));
-        } else if (result.data.length > 0) {
-          setWeeklyUserFilter(String(result.data[0].id));
-        }
-      }
-    });
-  }, [isAdmin, currentUserId]);
-
-  useEffect(() => {
-    fetchCurrentTarget();
-  }, [fetchCurrentTarget]);
-
+  useEffect(() => { fetchCurrentTarget(); }, [fetchCurrentTarget]);
   useEffect(() => {
     if (currentTargetLoaded) fetchCardData();
   }, [cardYear, cardMonth, currentTargetLoaded, fetchCardData]);
-
-  // Single coordinated fetch: pulls every month any visible view needs
-  // (Daily Tracker month, plus the months the current week straddles) and
-  // merges the results so neither side overwrites the other.
-  useEffect(() => {
-    const weekEndDay = addDays(weekStart, 6);
-    fetchEntriesForMonths([
-      [calYear, calMonth],
-      [weekStart.getFullYear(), weekStart.getMonth()],
-      [weekEndDay.getFullYear(), weekEndDay.getMonth()],
-    ]);
-  }, [calYear, calMonth, weekStart, fetchEntriesForMonths]);
-
-  useEffect(() => {
-    if (activeView === 'data') fetchEntries();
-  }, [activeView, fetchEntries]);
-
+  useEffect(() => { fetchEntries(); }, [fetchEntries]);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => {
     if (isPanelOpen) fetchSheetTargets();
   }, [isPanelOpen, sheetYear, fetchSheetTargets]);
 
   const refreshAll = () => {
-    if (activeView === 'data') fetchEntries();
+    fetchEntries();
+    fetchStats();
     fetchCardData();
-    const weekEndDay = addDays(weekStart, 6);
-    fetchEntriesForMonths([
-      [calYear, calMonth],
-      [weekStart.getFullYear(), weekStart.getMonth()],
-      [weekEndDay.getFullYear(), weekEndDay.getMonth()],
-    ]);
   };
 
-  const handleSaveEntry = async (formData: Partial<SalesKPIEntry>) => {
-    setError('');
-    const endpoint = editingEntry
-      ? `/api/entries/sales-kpi/${editingEntry.id}/`
-      : `/api/entries/sales-kpi/`;
+  // ── Monthly target card aggregates ───────────────────────────────────────
 
-    const result = await fetchApi<SalesKPIEntry>(endpoint, {
-      method: editingEntry ? 'PATCH' : 'POST',
-      body: JSON.stringify(formData),
-    });
-
-    if (result.data) {
-      setIsModalOpen(false);
-      setEditingEntry(null);
-      setModalInitialDate('');
-      refreshAll();
-    } else {
-      setError(result.error || 'Failed to save entry');
-    }
-  };
-
-  const handleDeleteEntry = async (entry: SalesKPIEntry) => {
-    const ok = await confirm({
-      title: 'Delete entry?',
-      description: 'This action cannot be undone.',
-      confirmLabel: 'Delete',
-      danger: true,
-    });
-    if (!ok) return;
-    const result = await fetchApi<void>(`/api/entries/sales-kpi/${entry.id}/`, { method: 'DELETE' });
-    if (!result.error) {
-      toast.success('Entry deleted');
-      refreshAll();
-    } else {
-      toast.error(result.error || 'Failed to delete entry');
-    }
-  };
-
-  // Card actuals (monthly target progress)
-  const cardPremiumActual = cardEntries.reduce(
-    (sum, e) => sum + Number(e.gross_booked_premium),
-    0
-  );
-  const cardClientsActual = cardEntries.reduce((sum, e) => sum + e.existing_clients_closed, 0);
+  const cardPremiumActual = cardEntries
+    .filter((e) => e.status === 'won')
+    .reduce((sum, e) => sum + Number(e.converted_premium ?? 0), 0);
+  const cardClientsActual = cardEntries.filter((e) => e.status === 'won').length;
   const premiumTarget = cardTarget?.premium_target != null ? Number(cardTarget.premium_target) : null;
   const clientsTarget = cardTarget?.clients_assigned ?? null;
 
@@ -458,22 +298,148 @@ export default function SalesKPIPage() {
 
   const isCurrentMonthCard =
     cardYear === today.getFullYear() && cardMonth === today.getMonth() + 1;
-
   const noCurrentTarget = currentTargetLoaded && !currentTarget;
+  const targetForModal: SalesMonthlyTarget | null = isCurrentMonthCard ? currentTarget : cardTarget;
 
   useEffect(() => {
     if (noCurrentTarget) setIsTargetModalOpen(true);
   }, [noCurrentTarget]);
 
-  // Determine which target to edit in the modal (card month's target)
-  const targetForModal: SalesMonthlyTarget | null = isCurrentMonthCard
-    ? currentTarget
-    : cardTarget;
+  // ── Mutations ─────────────────────────────────────────────────────────────
 
-  // Sheet helpers
+  const openAddModal = () => {
+    if (noCurrentTarget) {
+      setIsTargetModalOpen(true);
+      return;
+    }
+    setEditingEntry(null);
+    setModalError('');
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (entry: SalesKPIEntry) => {
+    setEditingEntry(entry);
+    setModalError('');
+    setIsModalOpen(true);
+  };
+
+  const handleSaveEntry = async (payload: Record<string, unknown>) => {
+    setModalError('');
+    const isEdit = !!editingEntry;
+    const url = isEdit
+      ? `/api/entries/sales-kpi/${editingEntry!.id}/`
+      : `/api/entries/sales-kpi/`;
+    const body = isEdit
+      ? payload
+      : { date: toLocalDateString(today), ...payload };
+    const result = await fetchApi<SalesKPIEntry>(url, {
+      method: isEdit ? 'PATCH' : 'POST',
+      body: JSON.stringify(body),
+    });
+    if (result.data) {
+      setIsModalOpen(false);
+      setEditingEntry(null);
+      toast.success(isEdit ? 'Enquiry updated' : 'Enquiry added');
+      refreshAll();
+    } else {
+      setModalError(result.error || 'Failed to save enquiry');
+    }
+  };
+
+  const handleDeleteEntry = async (entry: SalesKPIEntry) => {
+    const ok = await confirm({
+      title: 'Delete enquiry?',
+      description: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    const result = await fetchApi<void>(`/api/entries/sales-kpi/${entry.id}/`, {
+      method: 'DELETE',
+    });
+    if (!result.error) {
+      toast.success('Enquiry deleted');
+      refreshAll();
+    } else {
+      toast.error(result.error || 'Failed to delete enquiry');
+    }
+  };
+
+  const handleStatusChange = (entry: SalesKPIEntry, next: SalesKPIStatus) => {
+    setStatusModalEntry(entry);
+    setStatusModalNext(next);
+  };
+
+  // ── Columns ───────────────────────────────────────────────────────────────
+
+  const columns = [
+    { key: 'pib_id', header: 'ID', render: (item: SalesKPIEntry) => item.pib_id },
+    { key: 'date', header: 'Date', render: (item: SalesKPIEntry) => formatDate(item.date) },
+    { key: 'customer_name', header: 'Customer Name' },
+    {
+      key: 'entry_type',
+      header: 'Type',
+      render: (item: SalesKPIEntry) => item.entry_type_display,
+    },
+    {
+      key: 'class_of_insurance',
+      header: 'Class of Insurance',
+      render: (item: SalesKPIEntry) => item.class_of_insurance_name || '—',
+    },
+    { key: 'assignee', header: 'Assignee', render: (item: SalesKPIEntry) => item.assignee_name },
+    {
+      key: 'potential_premium',
+      header: 'Potential Premium',
+      render: (item: SalesKPIEntry) => formatPremium(item.potential_premium),
+    },
+    {
+      key: 'converted_premium',
+      header: 'Converted Premium',
+      render: (item: SalesKPIEntry) =>
+        item.converted_premium != null ? formatPremium(item.converted_premium) : '—',
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (item: SalesKPIEntry) =>
+        item.is_terminal || item.allowed_transitions.length === 0 ? (
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE_CLASSES[item.status]}`}
+          >
+            {STATUS_LABEL[item.status]}
+          </span>
+        ) : (
+          <Select
+            value={item.status}
+            onValueChange={(v) => handleStatusChange(item, v as SalesKPIStatus)}
+          >
+            <SelectTrigger className="h-8 w-[140px] text-xs shadow-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={item.status} disabled>
+                {STATUS_LABEL[item.status]}
+              </SelectItem>
+              {item.allowed_transitions.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {STATUS_LABEL[s]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ),
+    },
+    {
+      key: 'added_by_name',
+      header: 'Added by',
+      render: (item: SalesKPIEntry) => <AddedByCell entry={item} />,
+    },
+  ];
+
+  // ── Side panel helpers (unchanged from prior page) ───────────────────────
+
   const getSheetTarget = (month: number) =>
     sheetTargets.find((t) => t.month === month) ?? null;
-
   const sheetInlineKey = (tab: string, month: number) => `${tab}-${month}`;
 
   const handleSheetInlineSave = async (tab: string, month: number) => {
@@ -487,7 +453,7 @@ export default function SalesKPIPage() {
       toast.error(
         tab === 'premium'
           ? 'Premium target must be greater than 0'
-          : 'Assigned clients must be greater than 0'
+          : 'Assigned clients must be greater than 0',
       );
       return;
     }
@@ -496,7 +462,6 @@ export default function SalesKPIPage() {
       tab === 'premium'
         ? { premium_target: Number(val) }
         : { clients_assigned: Number(val) };
-
     if (existing?.id) {
       await fetchApi(`/api/entries/sales-kpi/monthly-targets/${existing.id}/`, {
         method: 'PATCH',
@@ -511,62 +476,32 @@ export default function SalesKPIPage() {
     setSheetEditingKey(null);
     setSheetInlineValues((prev) => ({ ...prev, [key]: '' }));
     fetchSheetTargets();
-    // If the edited month is the current month, the "no current target" gate
-    // depends on `currentTarget` — refresh it.
     if (sheetYear === today.getFullYear() && month === today.getMonth() + 1) {
       fetchCurrentTarget();
     }
-    // If the edited month is what the Monthly Target card is showing on the
-    // left, refresh `cardTarget` so the progress bars and 1.5× marker pick up
-    // the new target immediately (otherwise the card stays stale).
     if (sheetYear === cardYear && month === cardMonth) {
       fetchCardData();
     }
   };
 
-  // Calendar navigation handlers
-  const prevMonth = () => {
-    if (calMonth === 0) {
-      setCalYear((y) => y - 1);
-      setCalMonth(11);
-    } else {
-      setCalMonth((m) => m - 1);
-    }
-  };
-  const nextMonth = () => {
-    if (calMonth === 11) {
-      setCalYear((y) => y + 1);
-      setCalMonth(0);
-    } else {
-      setCalMonth((m) => m + 1);
-    }
-  };
-  const goToday = () => {
-    setCalYear(today.getFullYear());
-    setCalMonth(today.getMonth());
-  };
+  // ── Filter pickers (class_of_insurance + assignee) ──────────────────────
 
-  const openAddModal = (date?: string) => {
-    if (noCurrentTarget) {
-      setIsTargetModalOpen(true);
-      return;
-    }
-    setEditingEntry(null);
-    setError('');
-    setModalInitialDate(date || toLocalDateString(today));
-    setIsModalOpen(true);
-  };
+  const classOfInsuranceFetchPage = useCallback(
+    async ({ search, page: p }: { search: string; page: number }) => {
+      const res = await getClassOfInsurancePage({ search, page: p });
+      return {
+        results: res.data?.results ?? [],
+        hasMore: res.data?.has_more ?? false,
+      };
+    },
+    [],
+  );
 
-  const openEditModal = (entry: SalesKPIEntry) => {
-    setEditingEntry(entry);
-    setError('');
-    setModalInitialDate('');
-    setIsModalOpen(true);
-  };
+  // ── Render ────────────────────────────────────────────────────────────────
 
-  const onWeeklyAdd = (dateStr: string) => {
-    openAddModal(dateStr);
-  };
+  const hasActiveFilters = !!(
+    dateFrom || dateTo || userId || assigneeId || statusFilter || classFilter || typeFilter
+  );
 
   return (
     <div className="p-6 flex gap-6 items-start">
@@ -575,301 +510,285 @@ export default function SalesKPIPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Sales KPI</h1>
-            <p className="text-muted-foreground">Manage sales KPI entries</p>
           </div>
-          <Button variant="outline" onClick={() => setIsPanelOpen((o) => !o)}>
-            <Pencil className="h-4 w-4 mr-2" />
-            Monthly Targets
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setIsPanelOpen((o) => !o)}>
+              <Pencil className="h-4 w-4 mr-2" /> Monthly Targets
+            </Button>
+            <Button
+              onClick={openAddModal}
+              disabled={noCurrentTarget}
+              title={noCurrentTarget ? 'Set monthly targets first' : undefined}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Add Enquiry
+            </Button>
+          </div>
         </div>
 
-        {/* Monthly Target + Daily Tracker row */}
-        <div className="flex gap-5 items-stretch flex-wrap">
-          {/* Monthly Target Card */}
-          <div className="border rounded-lg p-4 space-y-2 bg-white w-[362px] shrink-0 flex flex-col">
-            <h2 className="text-base font-semibold">Monthly Target</h2>
-            <div className="grid grid-cols-2 gap-6">
-              {/* Premium */}
-              <div className="space-y-1">
-                <div className="flex items-baseline justify-between">
-                  <span className="text-xl font-bold">{formatPremium(cardPremiumActual)}</span>
-                  <span className="text-sm text-muted-foreground">Premium</span>
-                </div>
-                <div className="relative">
-                  <div className={premiumTarget !== null && cardPremiumActual >= premiumTarget ? '[&_[data-slot=progress-indicator]]:bg-green-500' : '[&_[data-slot=progress-indicator]]:bg-red-400'}>
-                    <Progress value={premiumPct} className="h-2 bg-gray-100" />
-                  </div>
-                  {premiumTarget !== null && (
-                    <div
-                      className="absolute top-0 h-2 w-0.5 bg-gray-400 rounded-full"
-                      style={{ left: `${premiumMarkerPct}%` }}
-                    />
-                  )}
-                </div>
-                <div className="relative">
-                  <span className="text-xs text-muted-foreground">0</span>
-                  {premiumTarget !== null && (
-                    <div
-                      className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
-                      style={{ left: `${premiumMarkerPct}%` }}
-                    >
-                      <span className="text-blue-500 leading-none">▲</span>
-                      <span className="text-muted-foreground">{formatPremium(premiumTarget)}</span>
-                    </div>
-                  )}
-                </div>
+        {/* Monthly Target progress card */}
+        <div className="border rounded-lg p-4 space-y-2 bg-white w-[362px]">
+          <h2 className="text-base font-semibold">Monthly Target</h2>
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-1">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold">{formatPremium(cardPremiumActual)}</span>
+                <span className="text-sm text-muted-foreground">Premium</span>
               </div>
-              {/* Client Retention */}
-              <div className="space-y-1">
-                <div className="flex items-baseline justify-between">
-                  <span className="text-xl font-bold">{cardClientsActual.toLocaleString()}</span>
-                  <span className="text-sm text-muted-foreground">Client Retention</span>
+              <div className="relative">
+                <div
+                  className={
+                    premiumTarget !== null && cardPremiumActual >= premiumTarget
+                      ? '[&_[data-slot=progress-indicator]]:bg-green-500'
+                      : '[&_[data-slot=progress-indicator]]:bg-red-400'
+                  }
+                >
+                  <Progress value={premiumPct} className="h-2 bg-gray-100" />
                 </div>
-                <div className="relative">
-                  <div className={clientsTarget !== null && cardClientsActual >= clientsTarget ? '[&_[data-slot=progress-indicator]]:bg-green-500' : '[&_[data-slot=progress-indicator]]:bg-red-400'}>
-                    <Progress value={clientsPct} className="h-2 bg-gray-100" />
+                {premiumTarget !== null && (
+                  <div
+                    className="absolute top-0 h-2 w-0.5 bg-gray-400 rounded-full"
+                    style={{ left: `${premiumMarkerPct}%` }}
+                  />
+                )}
+              </div>
+              <div className="relative">
+                <span className="text-xs text-muted-foreground">0</span>
+                {premiumTarget !== null && (
+                  <div
+                    className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
+                    style={{ left: `${premiumMarkerPct}%` }}
+                  >
+                    <span className="text-blue-500 leading-none">▲</span>
+                    <span className="text-muted-foreground">{formatPremium(premiumTarget)}</span>
                   </div>
-                  {clientsTarget !== null && (
-                    <div
-                      className="absolute top-0 h-2 w-0.5 bg-gray-400 rounded-full"
-                      style={{ left: `${clientsMarkerPct}%` }}
-                    />
-                  )}
-                </div>
-                <div className="relative">
-                  <span className="text-xs text-muted-foreground">0</span>
-                  {clientsTarget !== null && (
-                    <div
-                      className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
-                      style={{ left: `${clientsMarkerPct}%` }}
-                    >
-                      <span className="text-blue-500 leading-none">▲</span>
-                      <span className="text-muted-foreground">{Math.round(clientsTarget).toLocaleString()}</span>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             </div>
-            {/* Month heading */}
-            <h3 className="text-xl font-semibold">{MONTH_NAMES[cardMonth - 1]}</h3>
-            {/* Navigation */}
-            <div className="flex items-center gap-2 mt-auto">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => {
-                    if (cardMonth === 1) { setCardMonth(12); setCardYear((y) => y - 1); }
-                    else { setCardMonth((m) => m - 1); }
-                  }}
-                  className="p-1 border border-[#E4E4E4] rounded hover:bg-accent"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    if (cardMonth === 12) { setCardMonth(1); setCardYear((y) => y + 1); }
-                    else { setCardMonth((m) => m + 1); }
-                  }}
-                  className="p-1 border border-[#E4E4E4] rounded hover:bg-accent"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
+            <div className="space-y-1">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold">{cardClientsActual.toLocaleString()}</span>
+                <span className="text-sm text-muted-foreground">Clients Won</span>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { setCardYear(today.getFullYear()); setCardMonth(today.getMonth() + 1); }}
-              >
-                <Calendar className="h-3 w-3 mr-1" />
-                Today
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="ml-auto"
-                onClick={() => setIsTargetModalOpen(true)}
-              >
-                <Pencil className="h-3 w-3 mr-1" />
-                Edit
-              </Button>
+              <div className="relative">
+                <div
+                  className={
+                    clientsTarget !== null && cardClientsActual >= clientsTarget
+                      ? '[&_[data-slot=progress-indicator]]:bg-green-500'
+                      : '[&_[data-slot=progress-indicator]]:bg-red-400'
+                  }
+                >
+                  <Progress value={clientsPct} className="h-2 bg-gray-100" />
+                </div>
+                {clientsTarget !== null && (
+                  <div
+                    className="absolute top-0 h-2 w-0.5 bg-gray-400 rounded-full"
+                    style={{ left: `${clientsMarkerPct}%` }}
+                  />
+                )}
+              </div>
+              <div className="relative">
+                <span className="text-xs text-muted-foreground">0</span>
+                {clientsTarget !== null && (
+                  <div
+                    className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
+                    style={{ left: `${clientsMarkerPct}%` }}
+                  >
+                    <span className="text-blue-500 leading-none">▲</span>
+                    <span className="text-muted-foreground">
+                      {Math.round(clientsTarget).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-
-          {/* Personal Daily Tracker — right of Monthly Target, same line */}
-          {!isHodUser && (
-            <div className="flex-1 min-w-[320px]">
-              <PersonalDailyTracker
-                calYear={calYear}
-                calMonth={calMonth}
-                today={today}
-                monthEntries={monthEntries}
-                currentUserId={currentUserId}
-                userFullName={user?.full_name || ''}
-                onPrevMonth={prevMonth}
-                onNextMonth={nextMonth}
-                onGoToday={goToday}
-              />
+          <h3 className="text-xl font-semibold">{MONTH_NAMES[cardMonth - 1]}</h3>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  if (cardMonth === 1) { setCardMonth(12); setCardYear((y) => y - 1); }
+                  else { setCardMonth((m) => m - 1); }
+                }}
+                className="p-1 border border-[#E4E4E4] rounded hover:bg-accent"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => {
+                  if (cardMonth === 12) { setCardMonth(1); setCardYear((y) => y + 1); }
+                  else { setCardMonth((m) => m + 1); }
+                }}
+                className="p-1 border border-[#E4E4E4] rounded hover:bg-accent"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
-          )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setCardYear(today.getFullYear()); setCardMonth(today.getMonth() + 1); }}
+            >
+              <Calendar className="h-3 w-3 mr-1" /> Today
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={() => setIsTargetModalOpen(true)}
+            >
+              <Pencil className="h-3 w-3 mr-1" /> Edit
+            </Button>
+          </div>
         </div>
 
         {/* Tabs */}
-        <Tabs
-          value={activeView}
-          onValueChange={(v) => setActiveView(v as 'tracker' | 'weekly' | 'data')}
-          className="gap-0"
-        >
-          <div className="sticky top-16 z-20 bg-white py-2">
-            <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0 w-fit">
-              {isAdmin && (
-                <TabsTrigger
-                  value="tracker"
-                  className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"
-                >
-                  Tracker View
-                </TabsTrigger>
-              )}
-              <TabsTrigger
-                value="weekly"
-                className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"
-              >
-                Weekly View
-              </TabsTrigger>
-              <TabsTrigger
-                value="data"
-                className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"
-              >
-                Data View
-              </TabsTrigger>
-            </TabsList>
-          </div>
+        <Tabs value={activeView} onValueChange={(v) => setActiveView(v as 'dashboard' | 'enquiries')}>
+          <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0 w-fit">
+            <TabsTrigger
+              value="dashboard"
+              className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280]"
+            >
+              Dashboard
+            </TabsTrigger>
+            <TabsTrigger
+              value="enquiries"
+              className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280]"
+            >
+              Enquiries
+            </TabsTrigger>
+          </TabsList>
 
-          {(isAdmin || isHodUser) && (
-            <TabsContent value="tracker" className="mt-4">
-              <TrackerView
-                calYear={calYear}
-                calMonth={calMonth}
-                monthEntries={monthEntries}
-                moduleUsers={moduleUsers}
-                trackerUserFilter={trackerUserFilter}
-                onTrackerUserFilterChange={setTrackerUserFilter}
-                onPrevMonth={prevMonth}
-                onNextMonth={nextMonth}
-                onGoToday={goToday}
-                excludeUserId={isHodUser ? currentUserId : undefined}
+          <TabsContent value="dashboard" className="mt-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              <StatCard title="Total Enquiries" value={stats?.total ?? 0} />
+              <StatCard title="Lead" value={stats?.lead ?? 0} accent="text-blue-600" />
+              <StatCard title="In Progress" value={stats?.in_progress ?? 0} accent="text-amber-600" />
+              <StatCard title="Won" value={stats?.won ?? 0} accent="text-green-600" />
+              <StatCard title="Lost" value={stats?.lost ?? 0} accent="text-gray-600" />
+            </div>
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <StatCard
+                title="Total Potential Premium"
+                value={formatPremium(stats?.potential_premium_total ?? 0)}
+                isCurrency
               />
-            </TabsContent>
-          )}
-
-          <TabsContent value="weekly" className="mt-4">
-            <WeeklyView
-              weekStart={weekStart}
-              monthEntries={monthEntries}
-              today={today}
-              weeklyColumns={weeklyColumns}
-              onPrevWeek={() => setWeekStart((d) => addDays(d, -7))}
-              onNextWeek={() => setWeekStart((d) => addDays(d, 7))}
-              onGoToCurrentWeek={() => setWeekStart(startOfWeek(today))}
-              onAddRecord={onWeeklyAdd}
-              onEdit={openEditModal}
-              onDelete={handleDeleteEntry}
-              moduleUsers={moduleUsers}
-              weeklyUserFilter={weeklyUserFilter}
-              onWeeklyUserFilterChange={setWeeklyUserFilter}
-              isAdmin={isAdmin}
-              currentUserId={currentUserId}
-            />
-          </TabsContent>
-
-          <TabsContent value="data" className="mt-4">
-            <div className="space-y-4">
-              {/* Filters + Add Entry */}
-              <div className="flex gap-4 items-end flex-wrap justify-between">
-                <div className="flex gap-4 items-end flex-wrap">
-                  <div className="flex flex-col gap-2">
-                    <Label>Date Range</Label>
-                    <DateRangeFilter
-                      dateFrom={dateFrom}
-                      dateTo={dateTo}
-                      onChange={(from, to) => updateFilters({ dateFrom: from, dateTo: to, page: 1 })}
-                    />
-                  </div>
-                  {isAdmin && (
-                    <div className="flex flex-col gap-2">
-                      <Label>User</Label>
-                      <Select
-                        value={userId || 'all'}
-                        onValueChange={(value) =>
-                          updateFilters({ userId: value === 'all' ? '' : value, page: 1 })
-                        }
-                      >
-                        <SelectTrigger className="w-[200px] shadow-none">
-                          <SelectValue placeholder="All Users" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Users</SelectItem>
-                          {moduleUsers.map((u) => (
-                            <SelectItem key={u.id} value={u.id.toString()}>
-                              {u.full_name || u.email}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                  {(dateFrom || dateTo || userId) && (
-                    <Button
-                      variant="outline"
-                      onClick={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', page: 1 })}
-                    >
-                      Clear Filters
-                    </Button>
-                  )}
-                </div>
-                {/* TODO: confirm with PM whether to keep configurable. Hidden per Bug 11.
-                <Button
-                  disabled={noCurrentTarget}
-                  title={noCurrentTarget ? 'Set monthly targets first' : undefined}
-                  onClick={() => openAddModal()}
-                >
-                  <Plus className="h-4 w-4 mr-2" /> Add Entry
-                </Button>
-                */}
-              </div>
-
-              <DataTable
-                columns={dataColumns}
-                data={entries}
-                totalCount={totalCount}
-                page={page}
-                pageSize={pageSize}
-                onPageChange={(p) => updateFilters({ page: p })}
-                onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })}
-                onEdit={openEditModal}
-                onDelete={handleDeleteEntry}
-                canEdit={(entry) => entry.is_editable}
-                canDelete={(entry) => entry.added_by === currentUserId}
-                isLoading={isLoading}
+              <StatCard
+                title="Converted Premium"
+                value={formatPremium(stats?.converted_premium_total ?? 0)}
+                accent="text-green-600"
+                isCurrency
               />
             </div>
           </TabsContent>
+
+          <TabsContent value="enquiries" className="mt-4 space-y-4">
+            <FilterBar
+              dateRange={{
+                from: dateFrom,
+                to: dateTo,
+                onChange: (from, to) =>
+                  updateFilters({ dateFrom: from, dateTo: to, page: 1 }),
+              }}
+              user={isAdmin ? {
+                value: userId,
+                onChange: (v) => updateFilters({ userId: v, page: 1 }),
+                moduleKey: 'sales_kpi',
+                placeholder: 'All Users',
+              } : undefined}
+              agent={{
+                value: assigneeId,
+                onChange: (v) => updateFilters({ assignee: v, page: 1 }),
+                moduleKey: 'sales_kpi',
+                label: 'Assignee',
+                placeholder: 'All Assignees',
+              }}
+              status={{
+                value: statusFilter,
+                onChange: (v) => updateFilters({ status: v, page: 1 }),
+                options: STATUS_OPTIONS,
+                placeholder: 'All Statuses',
+              }}
+              extraSearchableFilters={[
+                {
+                  label: 'Class of Insurance',
+                  value: classFilter,
+                  onChange: (v) => updateFilters({ class_of_insurance: v, page: 1 }),
+                  fetchPage: classOfInsuranceFetchPage,
+                },
+              ]}
+              hasActiveFilters={hasActiveFilters}
+              onClear={() =>
+                updateFilters({
+                  dateFrom: '', dateTo: '', userId: '', assignee: '',
+                  status: '', class_of_insurance: '', entry_type: '', page: 1,
+                })
+              }
+            />
+
+            <div className="flex items-end gap-3">
+              <div className="flex flex-col gap-2">
+                <Label>Type</Label>
+                <Select
+                  value={typeFilter || 'all'}
+                  onValueChange={(v) => updateFilters({ entry_type: v === 'all' ? '' : v, page: 1 })}
+                >
+                  <SelectTrigger className="w-[180px] shadow-none">
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    {TYPE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <DataTable
+              columns={columns}
+              data={entries}
+              totalCount={totalCount}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={(p) => updateFilters({ page: p })}
+              onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })}
+              onEdit={openEditModal}
+              onDelete={handleDeleteEntry}
+              canEdit={(entry) => entry.is_editable}
+              canDelete={(entry) => entry.added_by === currentUserId}
+              isLoading={isLoading}
+            />
+          </TabsContent>
         </Tabs>
 
-        {/* Entry Modal */}
+        {/* Add/Edit modal */}
         <EntryModal
           isOpen={isModalOpen}
           onClose={() => {
             setIsModalOpen(false);
             setEditingEntry(null);
-            setError('');
-            setModalInitialDate('');
+            setModalError('');
           }}
           onSave={handleSaveEntry}
           entry={editingEntry}
-          initialDate={modalInitialDate}
-          error={error}
+          error={modalError}
         />
 
-        {/* Set/Edit Targets Modal */}
+        {/* TED-447 status modal */}
+        <SalesKPIStatusModal
+          isOpen={!!statusModalEntry && !!statusModalNext}
+          onClose={() => {
+            setStatusModalEntry(null);
+            setStatusModalNext(null);
+          }}
+          entry={statusModalEntry}
+          nextStatus={statusModalNext}
+          onSaved={() => refreshAll()}
+        />
+
+        {/* Set/Edit Targets modal */}
         <TargetModal
           isOpen={isTargetModalOpen}
           onClose={() => setIsTargetModalOpen(false)}
@@ -884,7 +803,7 @@ export default function SalesKPIPage() {
         />
       </div>
 
-      {/* Monthly Targets Panel */}
+      {/* Monthly Targets side panel — unchanged shape from prior implementation. */}
       {isPanelOpen && (
         <div className="w-[340px] shrink-0 border rounded-lg overflow-hidden bg-white">
           <div className="flex items-start justify-between px-4 py-3 border-b">
@@ -926,13 +845,13 @@ export default function SalesKPIPage() {
               <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0 mb-2 w-fit">
                 <TabsTrigger
                   value="premium"
-                  className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"
+                  className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280]"
                 >
                   Premium
                 </TabsTrigger>
                 <TabsTrigger
                   value="clients"
-                  className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280] data-[state=inactive]:border-transparent"
+                  className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280]"
                 >
                   Clients Assigned
                 </TabsTrigger>
@@ -947,7 +866,6 @@ export default function SalesKPIPage() {
                       const isSet = val !== null && val !== undefined;
                       const key = sheetInlineKey(tab, m);
                       const isEditing = sheetEditingKey === key;
-
                       const enterEdit = () => {
                         setSheetEditingKey(key);
                         setSheetInlineValues((prev) => ({
@@ -963,13 +881,9 @@ export default function SalesKPIPage() {
                           return next;
                         });
                       };
-
                       if (isEditing) {
                         return (
-                          <div
-                            key={m}
-                            className="px-4 py-3 border-t border-b border-[#F1F1F1] bg-white"
-                          >
+                          <div key={m} className="px-4 py-3 border-t border-b border-[#F1F1F1] bg-white">
                             <h4 className="text-sm font-semibold text-[#09090B] mb-3">
                               {name} {sheetYear}
                             </h4>
@@ -1007,26 +921,16 @@ export default function SalesKPIPage() {
                               className="mt-2"
                             />
                             <div className="flex justify-end gap-2 mt-3">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={cancelEdit}
-                              >
+                              <Button type="button" variant="outline" size="sm" onClick={cancelEdit}>
                                 Cancel
                               </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={() => handleSheetInlineSave(tab, m)}
-                              >
+                              <Button type="button" size="sm" onClick={() => handleSheetInlineSave(tab, m)}>
                                 <Check className="h-4 w-4 mr-1" /> Save
                               </Button>
                             </div>
                           </div>
                         );
                       }
-
                       return (
                         <div
                           key={m}
@@ -1048,9 +952,7 @@ export default function SalesKPIPage() {
                             </div>
                           ) : (
                             <div className="flex items-center gap-3">
-                              <span className="text-sm italic text-muted-foreground">
-                                Not set
-                              </span>
+                              <span className="text-sm italic text-muted-foreground">Not set</span>
                               <button
                                 onClick={enterEdit}
                                 className="text-muted-foreground hover:text-[#09090B]"
@@ -1074,254 +976,233 @@ export default function SalesKPIPage() {
   );
 }
 
-// ── Entry Modal ──────────────────────────────────────────────────────────────
+// ─── Stat card ──────────────────────────────────────────────────────────────
+
+function StatCard({
+  title,
+  value,
+  accent,
+  isCurrency,
+}: {
+  title: string;
+  value: number | string;
+  accent?: string;
+  isCurrency?: boolean;
+}) {
+  return (
+    <Card className="shadow-none">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className={`text-2xl font-bold ${accent ?? ''}`}>
+          {isCurrency && typeof value !== 'number' ? `AED ${value}` : value}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Add / Edit Modal ──────────────────────────────────────────────────────
 
 function EntryModal({
   isOpen,
   onClose,
   onSave,
   entry,
-  initialDate,
   error,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: Partial<SalesKPIEntry>) => void;
+  onSave: (payload: Record<string, unknown>) => void;
   entry: SalesKPIEntry | null;
-  initialDate: string;
   error: string;
 }) {
-  const [formData, setFormData] = useState({
-    date: '',
-    leads_to_ops_team: '',
-    quotes_from_ops_team: '',
-    quotes_to_client: '',
-    total_conversions: '',
-    new_clients_acquired: '',
-    existing_clients_closed: '',
-    gross_booked_premium: '',
-  });
+  const isEdit = !!entry;
+
+  const [date, setDate] = useState<string>(entry?.date ?? '');
+  const [customerName, setCustomerName] = useState(entry?.customer_name ?? '');
+  const [entryType, setEntryType] = useState<SalesKPIEntryType>(entry?.entry_type ?? 'new');
+  const [classOfInsuranceId, setClassOfInsuranceId] = useState<number | null>(
+    typeof entry?.class_of_insurance === 'number' ? entry.class_of_insurance : null,
+  );
+  const [assigneeId, setAssigneeId] = useState<number | null>(
+    typeof entry?.assignee === 'number' ? entry.assignee : null,
+  );
+  const [potentialPremium, setPotentialPremium] = useState(
+    entry?.potential_premium != null ? String(entry.potential_premium) : '',
+  );
+  const [initialRemark, setInitialRemark] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (entry) {
-      setFormData({
-        date: entry.date,
-        leads_to_ops_team: String(entry.leads_to_ops_team),
-        quotes_from_ops_team: String(entry.quotes_from_ops_team),
-        quotes_to_client: String(entry.quotes_to_client),
-        total_conversions: String(entry.total_conversions),
-        new_clients_acquired: String(entry.new_clients_acquired),
-        existing_clients_closed: String(entry.existing_clients_closed),
-        gross_booked_premium: String(entry.gross_booked_premium),
-      });
-    } else {
-      setFormData({
-        date: initialDate || new Date().toISOString().split('T')[0],
-        leads_to_ops_team: '',
-        quotes_from_ops_team: '',
-        quotes_to_client: '',
-        total_conversions: '',
-        new_clients_acquired: '',
-        existing_clients_closed: '',
-        gross_booked_premium: '',
-      });
-    }
-  }, [entry, isOpen, initialDate]);
+    if (!isOpen) return;
+    setDate(entry?.date ?? toLocalDateString(new Date()));
+    setCustomerName(entry?.customer_name ?? '');
+    setEntryType(entry?.entry_type ?? 'new');
+    setClassOfInsuranceId(typeof entry?.class_of_insurance === 'number' ? entry.class_of_insurance : null);
+    setAssigneeId(typeof entry?.assignee === 'number' ? entry.assignee : null);
+    setPotentialPremium(entry?.potential_premium != null ? String(entry.potential_premium) : '');
+    setInitialRemark('');
+  }, [isOpen, entry]);
+
+  const assigneeFetchPage = useCallback(
+    async ({ search, page }: { search: string; page: number }) => {
+      const res = await getUsersForModulePage('sales_kpi', { search, page });
+      return {
+        results: res.data?.results ?? [],
+        hasMore: res.data?.has_more ?? false,
+      };
+    },
+    [],
+  );
+
+  const classFetchPage = useCallback(
+    async ({ search, page }: { search: string; page: number }) => {
+      const res = await getClassOfInsurancePage({ search, page });
+      return {
+        results: res.data?.results ?? [],
+        hasMore: res.data?.has_more ?? false,
+      };
+    },
+    [],
+  );
+
+  const canSubmit =
+    customerName.trim() !== '' &&
+    classOfInsuranceId !== null &&
+    assigneeId !== null &&
+    !isSubmitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canSubmit) return;
     setIsSubmitting(true);
-    await onSave({
-      date: formData.date,
-      leads_to_ops_team: Number(formData.leads_to_ops_team),
-      quotes_from_ops_team: Number(formData.quotes_from_ops_team),
-      quotes_to_client: Number(formData.quotes_to_client),
-      total_conversions: Number(formData.total_conversions),
-      new_clients_acquired: Number(formData.new_clients_acquired),
-      existing_clients_closed: Number(formData.existing_clients_closed),
-      gross_booked_premium: Number(formData.gross_booked_premium),
-    });
+    const payload: Record<string, unknown> = {
+      customer_name: customerName.trim(),
+      entry_type: entryType,
+      class_of_insurance: classOfInsuranceId,
+      assignee: assigneeId,
+      potential_premium: potentialPremium.trim() === '' ? null : potentialPremium.trim(),
+    };
+    if (isEdit) {
+      payload.date = date;
+    } else if (initialRemark.trim()) {
+      payload.initial_remark = initialRemark.trim();
+    }
+    await onSave(payload);
     setIsSubmitting(false);
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="p-0">
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="p-0 sm:max-w-md">
         <DialogHeader className="border-b border-[#E4E4E4] p-4">
-          <DialogTitle>{entry ? 'Edit Entry' : 'Add New Entry'}</DialogTitle>
+          <DialogTitle>{isEdit ? 'Edit Enquiry' : 'Add Enquiry'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 p-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
               {error}
             </div>
           )}
-          <FormDatePicker
-            label="Date"
-            value={formData.date}
-            onChange={(date) => setFormData({ ...formData, date })}
-            required
-          />
-          <div className="space-y-5">
-            {/* Gross booked premium — headline metric, full width, no section heading */}
+
+          {isEdit && (
+            <FormDatePicker
+              label="Date"
+              value={date}
+              onChange={(d) => setDate(d)}
+              required
+            />
+          )}
+
+          <div className="space-y-2">
+            <Label>Customer Name *</Label>
+            <Input
+              type="text"
+              placeholder="Enter customer name"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label className="flex items-center gap-1">
-                Gross booked premium
-                <Tooltip text="Total gross premium booked today">
-                  <Info className="h-3 w-3 text-[#71717A] cursor-help" />
-                </Tooltip>
-              </Label>
+              <Label>Type *</Label>
+              <Select
+                value={entryType}
+                onValueChange={(v) => setEntryType(v as SalesKPIEntryType)}
+              >
+                <SelectTrigger className="w-full shadow-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TYPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Potential Premium</Label>
               <Input
                 type="number"
-                min="0"
-                step="0.01"
-                placeholder="e.g. 5000"
-                value={formData.gross_booked_premium}
-                onChange={(e) =>
-                  setFormData({ ...formData, gross_booked_premium: e.target.value })
-                }
-                required
+                min={0}
+                step={0.01}
+                placeholder="0.00"
+                value={potentialPremium}
+                onChange={(e) => setPotentialPremium(e.target.value)}
               />
             </div>
-
-            {/* Lead to Quote */}
-            <div>
-              <h3 className="text-base font-semibold text-[#343434] mb-3">Lead to Quote Ratio</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    Leads to ops team
-                    <Tooltip text="Number of leads handed over to the operations team">
-                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
-                    </Tooltip>
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="Enter count"
-                    value={formData.leads_to_ops_team}
-                    onChange={(e) => setFormData({ ...formData, leads_to_ops_team: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    Quotes from ops team
-                    <Tooltip text="Number of quotes received from the operations team">
-                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
-                    </Tooltip>
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="Enter count"
-                    value={formData.quotes_from_ops_team}
-                    onChange={(e) =>
-                      setFormData({ ...formData, quotes_from_ops_team: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Deals Acquired (was Client Retention) */}
-            <div>
-              <h3 className="text-base font-semibold text-[#343434] mb-3">
-                Deals Acquired
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    New clients acquired
-                    <Tooltip text="Number of new clients acquired">
-                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
-                    </Tooltip>
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="Enter count"
-                    value={formData.new_clients_acquired}
-                    onChange={(e) =>
-                      setFormData({ ...formData, new_clients_acquired: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    Existing clients closed today
-                    <Tooltip text="How many existing clients did I close today?">
-                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
-                    </Tooltip>
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="Enter count"
-                    value={formData.existing_clients_closed}
-                    onChange={(e) =>
-                      setFormData({ ...formData, existing_clients_closed: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Quote to Conversion */}
-            <div>
-              <h3 className="text-base font-semibold text-[#343434] mb-3">
-                Quote to Conversion Ratio
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    Quotes to client
-                    <Tooltip text="Number of quotes submitted to the client">
-                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
-                    </Tooltip>
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="Enter count"
-                    value={formData.quotes_to_client}
-                    onChange={(e) =>
-                      setFormData({ ...formData, quotes_to_client: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    Total conversions
-                    <Tooltip text="Total number of conversions">
-                      <Info className="h-3 w-3 text-[#71717A] cursor-help" />
-                    </Tooltip>
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="Enter count"
-                    value={formData.total_conversions}
-                    onChange={(e) =>
-                      setFormData({ ...formData, total_conversions: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-              </div>
-            </div>
           </div>
+
+          <div className="space-y-2">
+            <Label>Class of Insurance *</Label>
+            <SearchableSelect
+              value={classOfInsuranceId ? String(classOfInsuranceId) : null}
+              onValueChange={(v) => setClassOfInsuranceId(v ? Number(v) : null)}
+              placeholder="Select class"
+              emptyLabel="No classes found"
+              selectedLabel={entry?.class_of_insurance_name ?? null}
+              getOptionValue={(c) => String(c.id)}
+              getOptionLabel={(c) => c.name}
+              fetchPage={classFetchPage}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Assignee *</Label>
+            <SearchableSelect
+              value={assigneeId ? String(assigneeId) : null}
+              onValueChange={(v) => setAssigneeId(v ? Number(v) : null)}
+              placeholder="Select assignee"
+              emptyLabel="No users found"
+              selectedLabel={entry?.assignee_name ?? null}
+              getOptionValue={(u) => String(u.id)}
+              getOptionLabel={(u) => u.full_name || u.email}
+              fetchPage={assigneeFetchPage}
+            />
+          </div>
+
+          {!isEdit && (
+            <div className="space-y-2">
+              <Label>Initial Remark</Label>
+              <Input
+                type="text"
+                placeholder="Optional"
+                value={initialRemark}
+                onChange={(e) => setInitialRemark(e.target.value)}
+              />
+            </div>
+          )}
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : entry ? 'Update' : 'Create'}
+            <Button type="submit" disabled={!canSubmit}>
+              {isSubmitting ? 'Saving…' : isEdit ? 'Update' : 'Create'}
             </Button>
           </DialogFooter>
         </form>
@@ -1330,7 +1211,7 @@ function EntryModal({
   );
 }
 
-// ── Target Modal ─────────────────────────────────────────────────────────────
+// ─── Target Modal (unchanged shape) ────────────────────────────────────────
 
 function TargetModal({
   isOpen,
@@ -1368,7 +1249,6 @@ function TargetModal({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
     if (premiumTarget !== '' && Number(premiumTarget) <= 0) {
       setError('Premium target must be greater than 0');
       return;
@@ -1377,13 +1257,10 @@ function TargetModal({
       setError('Assigned clients must be greater than 0');
       return;
     }
-
     setIsSubmitting(true);
-
     const body: Record<string, number | string> = {};
     if (premiumTarget !== '') body.premium_target = Number(premiumTarget);
     if (clientsAssigned !== '') body.clients_assigned = Number(clientsAssigned);
-
     let result;
     if (isNew) {
       result = await fetchApi('/api/entries/sales-kpi/monthly-targets/', {
@@ -1396,7 +1273,6 @@ function TargetModal({
         body: JSON.stringify(body),
       });
     }
-
     if (!result.error) {
       onSaved();
       onClose();
@@ -1434,8 +1310,6 @@ function TargetModal({
               </p>
             </div>
           )}
-
-          {/* Premium Target */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Label>Premium Target</Label>
@@ -1453,8 +1327,6 @@ function TargetModal({
             />
             <p className="text-xs text-muted-foreground">Total premium target for this month</p>
           </div>
-
-          {/* Assigned Clients */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Label>Assigned Clients</Label>
@@ -1473,7 +1345,6 @@ function TargetModal({
               Total existing clients assigned to you for this month.
             </p>
           </div>
-
           <DialogFooter>
             {!required && (
               <Button type="button" variant="outline" onClick={onClose}>
@@ -1481,7 +1352,7 @@ function TargetModal({
               </Button>
             )}
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : `✓ Save ${MONTH_NAMES[month - 1]} Targets`}
+              {isSubmitting ? 'Saving…' : `✓ Save ${MONTH_NAMES[month - 1]} Targets`}
             </Button>
           </DialogFooter>
         </form>

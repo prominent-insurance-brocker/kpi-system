@@ -133,9 +133,11 @@ class GeneralNewEntry(BaseEntry):
     potential_premium = models.DecimalField(
         max_digits=15, decimal_places=2, null=True, blank=True,
     )
-    class_of_insurance = models.CharField(
-        max_length=50, choices=GENERAL_CLASS_OF_INSURANCE_CHOICES,
-        blank=True, default='',
+    class_of_insurance = models.ForeignKey(
+        'ClassOfInsurance',
+        on_delete=models.PROTECT,
+        related_name='%(class)s_entries',
+        null=True, blank=True,
     )
     insurance_company = models.ForeignKey(
         'InsuranceCompany',
@@ -256,9 +258,11 @@ class GeneralRenewalEntry(BaseEntry):
     potential_premium = models.DecimalField(
         max_digits=15, decimal_places=2, null=True, blank=True,
     )
-    class_of_insurance = models.CharField(
-        max_length=50, choices=GENERAL_CLASS_OF_INSURANCE_CHOICES,
-        blank=True, default='',
+    class_of_insurance = models.ForeignKey(
+        'ClassOfInsurance',
+        on_delete=models.PROTECT,
+        related_name='%(class)s_entries',
+        null=True, blank=True,
     )
     insurance_company = models.ForeignKey(
         'InsuranceCompany',
@@ -902,6 +906,25 @@ class TypeOfAccident(models.Model):
         return self.name
 
 
+class ClassOfInsurance(models.Model):
+    """Admin-managed list of insurance classes referenced by Sales KPI
+    enquiries (and, post-migration 0035, by the General New / General Renewal
+    enquiry tables). Managed via the Settings page tab next to
+    TypeOfAccident / InsuranceCompany — same lookup-table shape."""
+    name = models.CharField(max_length=200, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Class of Insurance'
+        verbose_name_plural = 'Classes of Insurance'
+
+    def __str__(self):
+        return self.name
+
+
 class InsuranceCompany(models.Model):
     """Admin-managed list of insurance companies referenced by MotorClaimEntry."""
     name = models.CharField(max_length=200, unique=True)
@@ -1026,21 +1049,115 @@ class MotorClaimStatusTransition(models.Model):
 
 
 class SalesKPIEntry(BaseEntry):
-    """Sales KPI module entry."""
-    leads_to_ops_team = models.PositiveIntegerField()
-    quotes_from_ops_team = models.PositiveIntegerField()
-    quotes_to_client = models.PositiveIntegerField()
-    total_conversions = models.PositiveIntegerField()
-    new_clients_acquired = models.PositiveIntegerField()
-    existing_clients_closed = models.PositiveIntegerField(default=0)
-    gross_booked_premium = models.DecimalField(max_digits=15, decimal_places=2)
+    """Sales KPI ticket — per-enquiry workflow with status state machine.
+
+    Replaced the original per-day KPI aggregate model in migration 0036
+    (TED-446). Each row represents a single sales enquiry tracked through:
+        lead → in_progress → won / lost
+    The three "Sent for quote" / "Quote received" / "Submitted to client"
+    booleans are captured at the time of the Won/Lost transition via the
+    `update_status` endpoint (TED-447 workflow). `converted_premium` is set
+    only when the transition is to Won.
+    """
+    STATUS_LEAD = 'lead'
+    STATUS_IN_PROGRESS = 'in_progress'
+    STATUS_WON = 'won'
+    STATUS_LOST = 'lost'
+
+    STATUS_CHOICES = [
+        (STATUS_LEAD, 'Lead'),
+        (STATUS_IN_PROGRESS, 'In Progress'),
+        (STATUS_WON, 'Won'),
+        (STATUS_LOST, 'Lost'),
+    ]
+
+    TERMINAL_STATUSES = {STATUS_WON, STATUS_LOST}
+
+    TRANSITIONS = {
+        STATUS_LEAD: [STATUS_IN_PROGRESS, STATUS_WON, STATUS_LOST],
+        STATUS_IN_PROGRESS: [STATUS_WON, STATUS_LOST],
+        STATUS_WON: [],
+        STATUS_LOST: [],
+    }
+
+    ENTRY_TYPE_CHOICES = [
+        ('new', 'New'),
+        ('renewal', 'Renewal'),
+    ]
+
+    customer_name = models.CharField(max_length=200)
+    entry_type = models.CharField(max_length=20, choices=ENTRY_TYPE_CHOICES)
+    class_of_insurance = models.ForeignKey(
+        ClassOfInsurance,
+        on_delete=models.PROTECT,
+        related_name='sales_kpi_entries',
+    )
+    # Assignee — current rule: any user with the sales_kpi module permission.
+    # Sourcing may change later; the FK doesn't enforce module permission at
+    # the DB layer so we don't have to migrate when the rule shifts.
+    assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='sales_kpi_assigned_enquiries',
+    )
+    potential_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_LEAD,
+    )
+    status_changed_at = models.DateTimeField(null=True, blank=True)
+
+    # TED-447 workflow answers captured when the enquiry is closed (Won/Lost).
+    # Nullable while the enquiry is still Lead / In Progress.
+    sent_for_quote = models.BooleanField(null=True, blank=True)
+    quote_received = models.BooleanField(null=True, blank=True)
+    submitted_to_client = models.BooleanField(null=True, blank=True)
+    converted_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Sales KPI Entry'
         verbose_name_plural = 'Sales KPI Entries'
 
     def __str__(self):
-        return f"Sales KPI - {self.date} by {self.added_by}"
+        return f"Sales KPI Enquiry - {self.customer_name} ({self.status})"
+
+    @classmethod
+    def get_allowed_transitions(cls, current_status):
+        return cls.TRANSITIONS.get(current_status, [])
+
+    @property
+    def is_terminal(self):
+        return self.status in self.TERMINAL_STATUSES
+
+
+class SalesKPIStatusTransition(models.Model):
+    """Records each status change for a Sales KPI enquiry."""
+    entry = models.ForeignKey(
+        SalesKPIEntry,
+        on_delete=models.CASCADE,
+        related_name='status_transitions',
+    )
+    from_status = models.CharField(
+        max_length=20, choices=SalesKPIEntry.STATUS_CHOICES, blank=True,
+    )
+    to_status = models.CharField(
+        max_length=20, choices=SalesKPIEntry.STATUS_CHOICES,
+    )
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sales_kpi_status_changes',
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['changed_at']
+
+    def __str__(self):
+        return f"{self.entry_id}: {self.from_status} -> {self.to_status}"
 
 
 class SalesMonthlyTarget(models.Model):

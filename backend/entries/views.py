@@ -32,7 +32,9 @@ from .models import (
     MotorClaimStatusTransition,
     TypeOfAccident,
     InsuranceCompany,
+    ClassOfInsurance,
     SalesKPIEntry,
+    SalesKPIStatusTransition,
     SalesMonthlyTarget,
     MarineNewEntry,
     MarineRenewalEntry,
@@ -66,14 +68,19 @@ from .serializers import (
     MotorClaimStatusUpdateSerializer,
     TypeOfAccidentSerializer,
     InsuranceCompanySerializer,
+    ClassOfInsuranceSerializer,
     SalesKPIEntrySerializer,
+    SalesKPIStatusUpdateSerializer,
     SalesMonthlyTargetSerializer,
     MarineNewEntrySerializer,
     MarineRenewalEntrySerializer,
     MedicalClaimEntrySerializer,
     MedicalClaimStatusUpdateSerializer,
 )
-from .filters import EntryFilter, ClaimEntryFilter, MotorEnquiryFilter, MotorClaimEntryFilter
+from .filters import (
+    EntryFilter, ClaimEntryFilter, MotorEnquiryFilter, MotorClaimEntryFilter,
+    SalesKPIEntryFilter,
+)
 from roles.permissions import IsAdminUser, user_is_hod
 
 
@@ -891,6 +898,115 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
     queryset = SalesKPIEntry.objects.all()
     serializer_class = SalesKPIEntrySerializer
     module_key = 'sales_kpi'
+    filterset_class = SalesKPIEntryFilter
+
+    def get_queryset(self):
+        return (
+            super().get_queryset()
+            .select_related('assignee', 'class_of_insurance')
+            .prefetch_related('status_transitions')
+        )
+
+    def perform_create(self, serializer):
+        # Sales KPI tickets always start in 'lead' and log the seed transition
+        # so the audit log mirrors the motor/general renewal pattern.
+        instance = serializer.save(
+            added_by=self.request.user,
+            status=SalesKPIEntry.STATUS_LEAD,
+        )
+        SalesKPIStatusTransition.objects.create(
+            entry=instance,
+            from_status='',
+            to_status=instance.status,
+            changed_by=self.request.user,
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        """TED-447 workflow. Bypasses 30-min window + ownership; accepts the
+        three yes/no answers when closing the enquiry (Won/Lost) and the
+        converted_premium for Won. Lead -> In Progress requires no payload
+        beyond status; the frontend's generic confirmation popup gates it."""
+        entry = self.get_object()
+
+        if entry.is_terminal:
+            return Response(
+                {'error': 'Cannot change status of a won or lost enquiry.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = SalesKPIStatusUpdateSerializer(
+            data=request.data,
+            context={'entry': entry},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        old_status = entry.status
+        new_status = serializer.validated_data['status']
+
+        entry.status = new_status
+        update_fields = ['status', 'updated_at']
+
+        if new_status in SalesKPIEntry.TERMINAL_STATUSES:
+            entry.sent_for_quote = serializer.validated_data['sent_for_quote']
+            entry.quote_received = serializer.validated_data['quote_received']
+            entry.submitted_to_client = serializer.validated_data['submitted_to_client']
+            entry.status_changed_at = timezone.now()
+            update_fields.extend([
+                'sent_for_quote', 'quote_received', 'submitted_to_client',
+                'status_changed_at',
+            ])
+            if new_status == SalesKPIEntry.STATUS_WON:
+                entry.converted_premium = serializer.validated_data['converted_premium']
+                update_fields.append('converted_premium')
+
+        entry.save(update_fields=update_fields)
+
+        SalesKPIStatusTransition.objects.create(
+            entry=entry,
+            from_status=old_status,
+            to_status=new_status,
+            changed_by=request.user,
+        )
+
+        return Response(
+            SalesKPIEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Dashboard counts + premium aggregates, RBAC + date filtered."""
+        queryset = self.get_queryset()
+        date_params = {
+            k: v for k, v in request.query_params.items()
+            if k in ('date_from', 'date_to')
+        }
+        filterset = self.filterset_class(date_params, queryset=queryset)
+        queryset = filterset.qs
+
+        counts = dict(queryset.values_list('status').annotate(n=Count('id')))
+        lead = counts.get('lead', 0)
+        in_progress = counts.get('in_progress', 0)
+        won = counts.get('won', 0)
+        lost = counts.get('lost', 0)
+        total = lead + in_progress + won + lost
+
+        def _sum(qs, field):
+            r = qs.aggregate(s=Sum(field))['s']
+            return float(r) if r is not None else 0.0
+
+        potential_total = _sum(queryset, 'potential_premium')
+        converted_premium_total = _sum(queryset.filter(status='won'), 'converted_premium')
+
+        return Response({
+            'total': total,
+            'lead': lead,
+            'in_progress': in_progress,
+            'won': won,
+            'lost': lost,
+            'potential_premium_total': round(potential_total, 2),
+            'converted_premium_total': round(converted_premium_total, 2),
+        })
 
 
 class SalesMonthlyTargetViewSet(viewsets.ModelViewSet):
@@ -1284,16 +1400,22 @@ class InsuranceCompanyViewSet(_LookupViewSet):
     serializer_class = InsuranceCompanySerializer
 
 
+class ClassOfInsuranceViewSet(_LookupViewSet):
+    queryset = ClassOfInsurance.objects.all()
+    serializer_class = ClassOfInsuranceSerializer
+
+
 # ─── Cross-module per-entry comments ──────────────────────────────────────────
 
-# Lowercase model names of the seven entry types that support remarks. Matches
-# Django ContentType.model values. Sales KPI / Marine / Medical Claim are
-# intentionally excluded — they don't currently expose a remarks workflow.
+# Lowercase model names of the entry types that support remarks. Matches
+# Django ContentType.model values. Marine / Medical Claim are intentionally
+# excluded — they don't currently expose a remarks workflow.
 ALLOWED_REMARK_MODELS = {
     'generalnewentry', 'generalrenewalentry',
     'motornewentry', 'motorrenewalentry',
     'motorfleetnewentry', 'motorfleetrenewalentry',
     'motorclaimentry',
+    'saleskpientry',
 }
 
 

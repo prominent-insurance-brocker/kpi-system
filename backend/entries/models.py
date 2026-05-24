@@ -8,6 +8,23 @@ from django.utils import timezone
 from datetime import timedelta
 
 
+# Fixed-choice dropdowns shared across the general / motor enquiry modules.
+# Kept as CharField choices (not a lookup table) because the list is short
+# and stable; flip to FKs later if admins need to manage them themselves.
+GENERAL_CLASS_OF_INSURANCE_CHOICES = [
+    ('property_all_risk', 'Property All Risk Insurance'),
+    ('marine_cargo', 'Marine Cargo Insurance'),
+    ('trade_credit', 'Trade Credit Insurance'),
+    ('professional_indemnity', 'Professional Indemnity Insurance'),
+    ('public_liability', 'Public Liability Insurance'),
+]
+
+MOTOR_CLASS_OF_ENQUIRY_CHOICES = [
+    ('comprehensive', 'Comprehensive'),
+    ('tpl', 'TPL'),
+]
+
+
 class PIBSequence(models.Model):
     """Per-module counter that hands out PIB ids. Each entry module has its
     own row keyed by `module` (the concrete model's lowercase class name —
@@ -113,6 +130,19 @@ class GeneralNewEntry(BaseEntry):
     revisions = models.PositiveIntegerField(default=0)
     quotes_compared = models.PositiveIntegerField(default=0)
     status_changed_at = models.DateTimeField(null=True, blank=True)
+    potential_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
+    class_of_insurance = models.CharField(
+        max_length=50, choices=GENERAL_CLASS_OF_INSURANCE_CHOICES,
+        blank=True, default='',
+    )
+    insurance_company = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='general_new_entries',
+        null=True, blank=True,
+    )
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'General New Entry'
@@ -223,6 +253,19 @@ class GeneralRenewalEntry(BaseEntry):
     revisions = models.PositiveIntegerField(default=0)
     quotes_compared = models.PositiveIntegerField(default=0)
     status_changed_at = models.DateTimeField(null=True, blank=True)
+    potential_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
+    class_of_insurance = models.CharField(
+        max_length=50, choices=GENERAL_CLASS_OF_INSURANCE_CHOICES,
+        blank=True, default='',
+    )
+    insurance_company = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='general_renewal_entries',
+        null=True, blank=True,
+    )
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'General Renewal Entry'
@@ -356,6 +399,19 @@ class MotorNewEntry(BaseEntry):
     revisions = models.PositiveIntegerField(default=0)
     quotes_compared = models.PositiveIntegerField(default=0)
     status_changed_at = models.DateTimeField(null=True, blank=True)
+    potential_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
+    class_of_enquiry = models.CharField(
+        max_length=20, choices=MOTOR_CLASS_OF_ENQUIRY_CHOICES,
+        blank=True, default='',
+    )
+    insurance_company = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='motor_new_entries',
+        null=True, blank=True,
+    )
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Motor New Entry'
@@ -466,6 +522,19 @@ class MotorRenewalEntry(BaseEntry):
     revisions = models.PositiveIntegerField(default=0)
     quotes_compared = models.PositiveIntegerField(default=0)
     status_changed_at = models.DateTimeField(null=True, blank=True)
+    potential_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
+    class_of_enquiry = models.CharField(
+        max_length=20, choices=MOTOR_CLASS_OF_ENQUIRY_CHOICES,
+        blank=True, default='',
+    )
+    insurance_company = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='motor_renewal_entries',
+        null=True, blank=True,
+    )
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Motor Renewal Entry'

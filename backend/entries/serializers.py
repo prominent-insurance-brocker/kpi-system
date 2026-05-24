@@ -89,6 +89,12 @@ class GeneralNewEntrySerializer(BaseEntrySerializer):
     accuracy_pct = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
+    class_of_insurance_display = serializers.CharField(
+        source='get_class_of_insurance_display', read_only=True,
+    )
+    insurance_company_name = serializers.CharField(
+        source='insurance_company.name', read_only=True, default=None,
+    )
     # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new entry.
     initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
@@ -100,6 +106,9 @@ class GeneralNewEntrySerializer(BaseEntrySerializer):
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
+            'potential_premium',
+            'class_of_insurance', 'class_of_insurance_display',
+            'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
             'added_at', 'updated_at', 'is_editable',
@@ -109,6 +118,7 @@ class GeneralNewEntrySerializer(BaseEntrySerializer):
             'status', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
+            'class_of_insurance_display', 'insurance_company_name',
             'added_at', 'updated_at',
         ]
 
@@ -160,6 +170,12 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
     accuracy_pct = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
+    class_of_insurance_display = serializers.CharField(
+        source='get_class_of_insurance_display', read_only=True,
+    )
+    insurance_company_name = serializers.CharField(
+        source='insurance_company.name', read_only=True, default=None,
+    )
     # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new entry.
     initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
@@ -171,6 +187,9 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
+            'potential_premium',
+            'class_of_insurance', 'class_of_insurance_display',
+            'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
             'added_at', 'updated_at', 'is_editable',
@@ -180,6 +199,7 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
             'status', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
+            'class_of_insurance_display', 'insurance_company_name',
             'added_at', 'updated_at',
         ]
 
@@ -245,6 +265,12 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
     accuracy_pct = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
+    class_of_enquiry_display = serializers.CharField(
+        source='get_class_of_enquiry_display', read_only=True,
+    )
+    insurance_company_name = serializers.CharField(
+        source='insurance_company.name', read_only=True, default=None,
+    )
     # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new entry.
     initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
@@ -256,6 +282,9 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
+            'potential_premium',
+            'class_of_enquiry', 'class_of_enquiry_display',
+            'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
             'added_at', 'updated_at', 'is_editable',
@@ -265,6 +294,7 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
             'status', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
+            'class_of_enquiry_display', 'insurance_company_name',
             'added_at', 'updated_at',
         ]
 
@@ -314,6 +344,12 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
     accuracy_pct = serializers.SerializerMethodField()
     allowed_transitions = serializers.SerializerMethodField()
     is_terminal = serializers.SerializerMethodField()
+    class_of_enquiry_display = serializers.CharField(
+        source='get_class_of_enquiry_display', read_only=True,
+    )
+    insurance_company_name = serializers.CharField(
+        source='insurance_company.name', read_only=True, default=None,
+    )
     # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new entry.
     initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
@@ -325,6 +361,9 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
+            'potential_premium',
+            'class_of_enquiry', 'class_of_enquiry_display',
+            'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
             'added_at', 'updated_at', 'is_editable',
@@ -334,6 +373,7 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
             'status', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
+            'class_of_enquiry_display', 'insurance_company_name',
             'added_at', 'updated_at',
         ]
 

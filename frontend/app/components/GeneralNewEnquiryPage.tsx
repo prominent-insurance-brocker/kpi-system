@@ -72,6 +72,7 @@ import {
   fetchApi,
   getUsersForModule,
   getUsersForModulePage,
+  getInsuranceCompaniesPage,
   getMotorEnquiryStats,
   updateMotorEnquiryStatus,
   updateMotorEnquiryRevisions,
@@ -537,6 +538,9 @@ export function GeneralNewEnquiryPage() {
     agent: number;
     remarks: string;
     quotes_compared: number;
+    potential_premium: string | null;
+    class_of_insurance: string;
+    insurance_company: number | null;
   }) => {
     setModalError('');
     const isEdit = !!editingEntry;
@@ -1329,6 +1333,9 @@ function EnquiryForm({
     agent: number;
     remarks: string;
     quotes_compared: number;
+    potential_premium: string | null;
+    class_of_insurance: string;
+    insurance_company: number | null;
   }) => void;
   onClose: () => void;
   error: string;
@@ -1338,6 +1345,13 @@ function EnquiryForm({
   const [remarks, setRemarks] = useState('');
   const [quotesCompared, setQuotesCompared] = useState<string>(
     entry?.quotes_compared != null ? String(entry.quotes_compared) : '0'
+  );
+  const [potentialPremium, setPotentialPremium] = useState<string>(
+    entry?.potential_premium != null ? String(entry.potential_premium) : ''
+  );
+  const [classOfInsurance, setClassOfInsurance] = useState<string>(entry?.class_of_insurance ?? '');
+  const [insurerId, setInsurerId] = useState<number | null>(
+    typeof entry?.insurance_company === 'number' ? entry.insurance_company : null
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -1352,11 +1366,25 @@ function EnquiryForm({
     []
   );
 
+  const insurerFetchPage = useCallback(
+    async ({ search, page }: { search: string; page: number }) => {
+      const res = await getInsuranceCompaniesPage({ search, page });
+      return {
+        results: res.data?.results ?? [],
+        hasMore: res.data?.has_more ?? false,
+      };
+    },
+    []
+  );
+
   useEffect(() => {
     setClientName(entry?.client_name ?? '');
     setAgentId(entry?.agent ?? null);
     setRemarks('');
     setQuotesCompared(entry?.quotes_compared != null ? String(entry.quotes_compared) : '0');
+    setPotentialPremium(entry?.potential_premium != null ? String(entry.potential_premium) : '');
+    setClassOfInsurance(entry?.class_of_insurance ?? '');
+    setInsurerId(typeof entry?.insurance_company === 'number' ? entry.insurance_company : null);
   }, [entry]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1368,6 +1396,9 @@ function EnquiryForm({
       agent: agentId,
       remarks,
       quotes_compared: Math.max(0, Number(quotesCompared || 0)),
+      potential_premium: potentialPremium.trim() === '' ? null : potentialPremium.trim(),
+      class_of_insurance: classOfInsurance,
+      insurance_company: insurerId,
     });
     setIsSubmitting(false);
   };
@@ -1402,6 +1433,54 @@ function EnquiryForm({
           getOptionValue={(u) => String(u.id)}
           getOptionLabel={(u) => u.full_name || u.email}
           fetchPage={agentFetchPage}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label>Potential Premium</Label>
+          <Input
+            type="number"
+            min={0}
+            step={0.01}
+            placeholder="0.00"
+            value={potentialPremium}
+            onChange={(e) => setPotentialPremium(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Class of Insurance</Label>
+          <Select
+            value={classOfInsurance || '__none__'}
+            onValueChange={(v) => setClassOfInsurance(v === '__none__' ? '' : v)}
+          >
+            <SelectTrigger className="w-full shadow-none">
+              <SelectValue placeholder="Select class" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">—</SelectItem>
+              <SelectItem value="property_all_risk">Property All Risk Insurance</SelectItem>
+              <SelectItem value="marine_cargo">Marine Cargo Insurance</SelectItem>
+              <SelectItem value="trade_credit">Trade Credit Insurance</SelectItem>
+              <SelectItem value="professional_indemnity">Professional Indemnity Insurance</SelectItem>
+              <SelectItem value="public_liability">Public Liability Insurance</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Insurance Company</Label>
+        <SearchableSelect
+          value={insurerId ? String(insurerId) : null}
+          onValueChange={(v) => setInsurerId(v ? Number(v) : null)}
+          placeholder="Select insurance company"
+          emptyLabel="No insurance companies found"
+          clearLabel="None"
+          selectedLabel={entry?.insurance_company_name ?? null}
+          getOptionValue={(c) => String(c.id)}
+          getOptionLabel={(c) => c.name}
+          fetchPage={insurerFetchPage}
         />
       </div>
 

@@ -68,6 +68,7 @@ import {
   fetchApi,
   getUsersForModule,
   getUsersForModulePage,
+  getInsuranceCompaniesPage,
   getMotorEnquiryStats,
   updateMotorEnquiryStatus,
   updateMotorEnquiryRevisions,
@@ -546,6 +547,9 @@ export function MotorEnquiryPage({
     chassis_no: string;
     remarks: string;
     quotes_compared: number;
+    potential_premium: string | null;
+    class_of_enquiry: string;
+    insurance_company: number | null;
   }) => {
     setModalError('');
     const isEdit = !!editingEntry;
@@ -1345,6 +1349,9 @@ function EnquiryForm({
     chassis_no: string;
     remarks: string;
     quotes_compared: number;
+    potential_premium: string | null;
+    class_of_enquiry: string;
+    insurance_company: number | null;
   }) => void;
   onClose: () => void;
   error: string;
@@ -1355,6 +1362,13 @@ function EnquiryForm({
   const [remarks, setRemarks] = useState('');
   const [quotesCompared, setQuotesCompared] = useState<string>(
     entry?.quotes_compared != null ? String(entry.quotes_compared) : '0'
+  );
+  const [potentialPremium, setPotentialPremium] = useState<string>(
+    entry?.potential_premium != null ? String(entry.potential_premium) : ''
+  );
+  const [classOfEnquiry, setClassOfEnquiry] = useState<string>(entry?.class_of_enquiry ?? '');
+  const [insurerId, setInsurerId] = useState<number | null>(
+    typeof entry?.insurance_company === 'number' ? entry.insurance_company : null
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -1369,12 +1383,26 @@ function EnquiryForm({
     []
   );
 
+  const insurerFetchPage = useCallback(
+    async ({ search, page }: { search: string; page: number }) => {
+      const res = await getInsuranceCompaniesPage({ search, page });
+      return {
+        results: res.data?.results ?? [],
+        hasMore: res.data?.has_more ?? false,
+      };
+    },
+    []
+  );
+
   useEffect(() => {
     setClientName(entry?.client_name ?? '');
     setAgentId(entry?.agent ?? null);
     setChassisNo(entry?.chassis_no ?? '');
     setRemarks('');
     setQuotesCompared(entry?.quotes_compared != null ? String(entry.quotes_compared) : '0');
+    setPotentialPremium(entry?.potential_premium != null ? String(entry.potential_premium) : '');
+    setClassOfEnquiry(entry?.class_of_enquiry ?? '');
+    setInsurerId(typeof entry?.insurance_company === 'number' ? entry.insurance_company : null);
   }, [entry]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1387,6 +1415,9 @@ function EnquiryForm({
       chassis_no: chassisNo,
       remarks,
       quotes_compared: Math.max(0, Number(quotesCompared || 0)),
+      potential_premium: potentialPremium.trim() === '' ? null : potentialPremium.trim(),
+      class_of_enquiry: classOfEnquiry,
+      insurance_company: insurerId,
     });
     setIsSubmitting(false);
   };
@@ -1432,6 +1463,51 @@ function EnquiryForm({
           value={chassisNo}
           onChange={(e) => setChassisNo(e.target.value)}
           required
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label>Potential Premium</Label>
+          <Input
+            type="number"
+            min={0}
+            step={0.01}
+            placeholder="0.00"
+            value={potentialPremium}
+            onChange={(e) => setPotentialPremium(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Class of Enquiry</Label>
+          <Select
+            value={classOfEnquiry || '__none__'}
+            onValueChange={(v) => setClassOfEnquiry(v === '__none__' ? '' : v)}
+          >
+            <SelectTrigger className="w-full shadow-none">
+              <SelectValue placeholder="Select class" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">—</SelectItem>
+              <SelectItem value="comprehensive">Comprehensive</SelectItem>
+              <SelectItem value="tpl">TPL</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Insurance Company</Label>
+        <SearchableSelect
+          value={insurerId ? String(insurerId) : null}
+          onValueChange={(v) => setInsurerId(v ? Number(v) : null)}
+          placeholder="Select insurance company"
+          emptyLabel="No insurance companies found"
+          clearLabel="None"
+          selectedLabel={entry?.insurance_company_name ?? null}
+          getOptionValue={(c) => String(c.id)}
+          getOptionLabel={(c) => c.name}
+          fetchPage={insurerFetchPage}
         />
       </div>
 

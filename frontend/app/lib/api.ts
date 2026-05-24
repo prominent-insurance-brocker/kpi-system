@@ -331,6 +331,17 @@ export interface MotorEnquiryEntry {
   accuracy_pct: number | null;       // 100 × 0.9^revisions when terminal; null otherwise
   allowed_transitions: string[];     // possible next statuses
   is_terminal: boolean;
+  // Per-module dropdowns added 2026-05-24. DecimalField → string; choice key + display.
+  potential_premium?: string | null;
+  // Motor variants use class_of_enquiry (comprehensive / tpl).
+  class_of_enquiry?: string;
+  class_of_enquiry_display?: string;
+  // general_new uses class_of_insurance with the 5-option general list instead.
+  class_of_insurance?: string;
+  class_of_insurance_display?: string;
+  // Insurance Company FK to the admin-managed lookup table.
+  insurance_company?: number | null;
+  insurance_company_name?: string | null;
   added_by: number;
   added_by_name: string;
   on_behalf_of: number | null;
@@ -494,6 +505,12 @@ export interface GeneralRenewalEntry {
   accuracy_pct: number | null;
   allowed_transitions: string[];
   is_terminal: boolean;
+  // Per-module dropdowns added 2026-05-24.
+  potential_premium?: string | null;
+  class_of_insurance?: string;
+  class_of_insurance_display?: string;
+  insurance_company?: number | null;
+  insurance_company_name?: string | null;
   added_by: number;
   added_by_name: string;
   on_behalf_of: number | null;

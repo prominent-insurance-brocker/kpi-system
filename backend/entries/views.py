@@ -910,6 +910,7 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
     def perform_create(self, serializer):
         # Sales KPI tickets always start in 'lead' and log the seed transition
         # so the audit log mirrors the motor/general renewal pattern.
+        initial_remark = serializer.validated_data.pop('initial_remark', '').strip()
         instance = serializer.save(
             added_by=self.request.user,
             status=SalesKPIEntry.STATUS_LEAD,
@@ -920,6 +921,7 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
             to_status=instance.status,
             changed_by=self.request.user,
         )
+        _seed_initial_remark(initial_remark, instance, self.request.user)
 
     @action(detail=True, methods=['patch'], url_path='update-status')
     def update_status(self, request, pk=None):

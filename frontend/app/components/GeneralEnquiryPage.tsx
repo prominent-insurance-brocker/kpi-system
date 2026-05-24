@@ -571,11 +571,23 @@ export function GeneralEnquiryPage() {
         ),
     },
     {
+      key: 'class_of_insurance',
+      header: 'Class of Insurance',
+      render: (item: GeneralRenewalEntry) =>
+        (item.class_of_insurance_display as string | undefined) || '—',
+    },
+    {
       key: 'added_by_name',
       header: 'Added by',
       render: (item: GeneralRenewalEntry) => <AddedByCell entry={item} />,
     },
     { key: 'agent_name', header: 'Agent Name' },
+    {
+      key: 'insurance_company',
+      header: 'Insurance Company',
+      render: (item: GeneralRenewalEntry) =>
+        (item.insurance_company_name as string | undefined) || '—',
+    },
     {
       key: 'revisions',
       header: 'Revisions',
@@ -623,6 +635,16 @@ export function GeneralEnquiryPage() {
       key: 'quotes_compared',
       header: 'No. of Quotes Compared',
       render: (item: GeneralRenewalEntry) => item.quotes_compared,
+    },
+    {
+      key: 'potential_premium',
+      header: 'Potential Premium',
+      render: (item: GeneralRenewalEntry) => {
+        const raw = item.potential_premium as string | null | undefined;
+        if (raw == null || raw === '') return '—';
+        const n = Number(raw);
+        return Number.isFinite(n) ? n.toLocaleString() : raw;
+      },
     },
     {
       key: 'added_at',

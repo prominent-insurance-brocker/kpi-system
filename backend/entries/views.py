@@ -3,6 +3,7 @@ from decimal import Decimal
 from rest_framework import viewsets, status, filters, serializers as drf_serializers
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Avg, Count, Q, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
@@ -325,6 +326,7 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
         update_fields = ['status', 'updated_at']
@@ -332,6 +334,13 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
         if new_revisions is not None:
             entry.revisions = new_revisions
             update_fields.append('revisions')
+
+        # TED-440: persist the converted-premium amount captured by the
+        # StatusTransitionModal. Only meaningful on the success transition;
+        # ignored for Lost even if the client sent a value.
+        if new_converted_premium is not None and new_status != 'lost':
+            entry.converted_premium = new_converted_premium
+            update_fields.append('converted_premium')
 
         if new_status in GeneralNewEntry.TERMINAL_STATUSES:
             entry.status_changed_at = timezone.now()
@@ -425,6 +434,7 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
         update_fields = ['status', 'updated_at']
@@ -432,6 +442,13 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
         if new_revisions is not None:
             entry.revisions = new_revisions
             update_fields.append('revisions')
+
+        # TED-440: persist the converted-premium amount captured by the
+        # StatusTransitionModal. Only meaningful on the success transition;
+        # ignored for Lost even if the client sent a value.
+        if new_converted_premium is not None and new_status != 'lost':
+            entry.converted_premium = new_converted_premium
+            update_fields.append('converted_premium')
 
         if new_status in GeneralRenewalEntry.TERMINAL_STATUSES:
             entry.status_changed_at = timezone.now()
@@ -541,7 +558,16 @@ def _build_enquiry_stats(queryset, success_status='converted'):
         # DecimalField → Decimal; the frontend expects a string-or-number JSON value.
         return float(result) if result is not None else 0.0
 
-    converted_premium = _sum_potential(queryset.filter(status=success_status))
+    # TED-440 dashboard card: prefer the actual converted_premium captured on
+    # close; fall back to potential_premium for entries closed before this
+    # field existed so historical aggregates don't regress to zero.
+    def _sum_converted(qs):
+        result = qs.aggregate(
+            s=Sum(Coalesce('converted_premium', 'potential_premium')),
+        )['s']
+        return float(result) if result is not None else 0.0
+
+    converted_premium = _sum_converted(queryset.filter(status=success_status))
     lost_premium = _sum_potential(queryset.filter(status='lost'))
     total_potential_premium = _sum_potential(queryset)
 
@@ -605,6 +631,7 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
         update_fields = ['status', 'updated_at']
@@ -612,6 +639,13 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
         if new_revisions is not None:
             entry.revisions = new_revisions
             update_fields.append('revisions')
+
+        # TED-440: persist the converted-premium amount captured by the
+        # StatusTransitionModal. Only meaningful on the success transition;
+        # ignored for Lost even if the client sent a value.
+        if new_converted_premium is not None and new_status != 'lost':
+            entry.converted_premium = new_converted_premium
+            update_fields.append('converted_premium')
 
         if new_status in MotorNewEntry.TERMINAL_STATUSES:
             entry.status_changed_at = timezone.now()
@@ -707,6 +741,7 @@ class MotorRenewalEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
         update_fields = ['status', 'updated_at']
@@ -714,6 +749,13 @@ class MotorRenewalEntryViewSet(BaseEntryViewSet):
         if new_revisions is not None:
             entry.revisions = new_revisions
             update_fields.append('revisions')
+
+        # TED-440: persist the converted-premium amount captured by the
+        # StatusTransitionModal. Only meaningful on the success transition;
+        # ignored for Lost even if the client sent a value.
+        if new_converted_premium is not None and new_status != 'lost':
+            entry.converted_premium = new_converted_premium
+            update_fields.append('converted_premium')
 
         if new_status in MotorRenewalEntry.TERMINAL_STATUSES:
             entry.status_changed_at = timezone.now()
@@ -1102,6 +1144,7 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
         update_fields = ['status', 'updated_at']
@@ -1109,6 +1152,13 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
         if new_revisions is not None:
             entry.revisions = new_revisions
             update_fields.append('revisions')
+
+        # TED-440: persist the converted-premium amount captured by the
+        # StatusTransitionModal. Only meaningful on the success transition;
+        # ignored for Lost even if the client sent a value.
+        if new_converted_premium is not None and new_status != 'lost':
+            entry.converted_premium = new_converted_premium
+            update_fields.append('converted_premium')
 
         if new_status in MotorFleetNewEntry.TERMINAL_STATUSES:
             entry.status_changed_at = timezone.now()
@@ -1204,6 +1254,7 @@ class MotorFleetRenewalEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
         update_fields = ['status', 'updated_at']
@@ -1211,6 +1262,13 @@ class MotorFleetRenewalEntryViewSet(BaseEntryViewSet):
         if new_revisions is not None:
             entry.revisions = new_revisions
             update_fields.append('revisions')
+
+        # TED-440: persist the converted-premium amount captured by the
+        # StatusTransitionModal. Only meaningful on the success transition;
+        # ignored for Lost even if the client sent a value.
+        if new_converted_premium is not None and new_status != 'lost':
+            entry.converted_premium = new_converted_premium
+            update_fields.append('converted_premium')
 
         if new_status in MotorFleetRenewalEntry.TERMINAL_STATUSES:
             entry.status_changed_at = timezone.now()

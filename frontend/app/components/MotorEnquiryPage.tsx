@@ -52,6 +52,7 @@ import { Progress } from '@/components/ui/progress';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
+import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   AddedByCell,
@@ -618,11 +619,13 @@ export function MotorEnquiryPage({
   const applyStatusChange = async (
     entry: MotorEnquiryEntry,
     newStatus: SuccessStatus | 'lost',
-    revisions?: number
+    revisions?: number,
+    convertedPremium?: string,
   ) => {
     const result = await updateMotorEnquiryStatus(apiSlug, entry.id, {
       status: newStatus,
       ...(revisions != null ? { revisions } : {}),
+      ...(convertedPremium ? { converted_premium: convertedPremium } : {}),
     });
     if (result.data) {
       toast.success(`Marked as ${statusLabelFor(newStatus)}`);
@@ -1130,15 +1133,21 @@ export function MotorEnquiryPage({
         </DialogContent>
       </Dialog>
 
-      {/* ── Status transition verification modal ───────────────────────────── */}
+      {/* ── Status transition verification modal (TED-440) ───────────── */}
       {pendingStatus && (
-        <StatusTransitionModal
+        <EnquiryStatusModal
           entry={pendingStatus.entry}
           newStatus={pendingStatus.newStatus}
           newStatusLabel={statusLabelFor(pendingStatus.newStatus)}
+          needsConvertedPremium={pendingStatus.newStatus !== 'lost'}
           onCancel={() => setPendingStatus(null)}
-          onConfirm={(revisions) =>
-            applyStatusChange(pendingStatus.entry, pendingStatus.newStatus, revisions)
+          onConfirm={({ revisions, converted_premium }) =>
+            applyStatusChange(
+              pendingStatus.entry,
+              pendingStatus.newStatus,
+              revisions,
+              converted_premium,
+            )
           }
         />
       )}
@@ -1592,108 +1601,6 @@ function EnquiryForm({
         </Button>
       </DialogFooter>
     </form>
-  );
-}
-
-// ─── Status transition verification modal ────────────────────────────────────
-
-function StatusTransitionModal({
-  entry,
-  newStatus,
-  newStatusLabel,
-  onCancel,
-  onConfirm,
-}: {
-  entry: MotorEnquiryEntry;
-  newStatus: SuccessStatus | 'lost';
-  newStatusLabel: string;
-  onCancel: () => void;
-  onConfirm: (revisions?: number) => void;
-}) {
-  // Two-stage modal:
-  //   stage='ask'  → revisions=0 branch question
-  //   stage='enter'→ collecting revision count
-  //   stage='verify' → revisions>0 confirmation
-  void newStatus; // currently only used for typing the caller's discriminated union
-  const initialStage: 'ask' | 'verify' = entry.revisions > 0 ? 'verify' : 'ask';
-  const [stage, setStage] = useState<'ask' | 'enter' | 'verify'>(initialStage);
-  const [enteredCount, setEnteredCount] = useState(0);
-  const statusLabel = newStatusLabel;
-
-  return (
-    <Dialog open onOpenChange={(open) => { if (!open) onCancel(); }}>
-      <DialogContent className="p-0">
-        <DialogHeader className="border-b border-[#E4E4E4] p-4">
-          <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-[#F59E0B]" />
-            Confirm Before Closing
-          </DialogTitle>
-        </DialogHeader>
-
-        {stage === 'ask' && (
-          <div className="p-5 space-y-4">
-            <p className="text-sm text-[#374151]">
-              Before closing as <strong>{statusLabel}</strong> — did you make any revisions
-              for this enquiry?
-            </p>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onConfirm(0)}>
-                No, proceed
-              </Button>
-              <Button type="button" onClick={() => setStage('enter')}>
-                Yes, enter count
-              </Button>
-            </DialogFooter>
-          </div>
-        )}
-
-        {stage === 'enter' && (
-          <div className="p-5 space-y-4">
-            <p className="text-sm text-[#374151]">
-              How many revisions were made for this enquiry?
-            </p>
-            <Input
-              type="number"
-              min={0}
-              value={enteredCount}
-              onChange={(e) => setEnteredCount(Math.max(0, Number(e.target.value || 0)))}
-              autoFocus
-            />
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setStage('ask')}>
-                Back
-              </Button>
-              <Button type="button" onClick={() => onConfirm(enteredCount)}>
-                Confirm &amp; Save
-              </Button>
-            </DialogFooter>
-          </div>
-        )}
-
-        {stage === 'verify' && (
-          <div className="p-5 space-y-4">
-            <p className="text-sm text-[#374151]">
-              You are marking this enquiry as <strong>{statusLabel}</strong>.
-            </p>
-            <div className="border border-[#E4E4E4] rounded-lg p-4 flex items-center justify-between">
-              <span className="text-sm text-[#71717A]">Revision count recorded</span>
-              <span className="text-2xl font-bold text-[#09090B]">{entry.revisions}</span>
-            </div>
-            <p className="text-xs text-[#71717A]">
-              Please verify this count is correct before saving.
-            </p>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={onCancel}>
-                Cancel
-              </Button>
-              <Button type="button" onClick={() => onConfirm(entry.revisions)}>
-                Confirm &amp; Save
-              </Button>
-            </DialogFooter>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
   );
 }
 

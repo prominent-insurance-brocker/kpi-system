@@ -333,6 +333,8 @@ export interface MotorEnquiryEntry {
   is_terminal: boolean;
   // Per-module dropdowns added 2026-05-24. DecimalField → string; choice key + display.
   potential_premium?: string | null;
+  // TED-440: actual converted premium captured at status-transition time.
+  converted_premium?: string | null;
   // Motor variants use class_of_enquiry (comprehensive / tpl).
   class_of_enquiry?: string;
   class_of_enquiry_display?: string;
@@ -423,7 +425,13 @@ export async function getMotorEnquiryStats(
 export async function updateMotorEnquiryStatus(
   module: MotorEnquiryModule,
   id: number,
-  payload: { status: 'converted' | 'retained' | 'lost'; revisions?: number }
+  // TED-440: converted_premium is captured by the StatusTransitionModal when
+  // the enquiry closes as Converted / Retained. Backend ignores it for Lost.
+  payload: {
+    status: 'converted' | 'retained' | 'lost';
+    revisions?: number;
+    converted_premium?: string | number;
+  }
 ): Promise<ApiResponse<MotorEnquiryEntry>> {
   return fetchApi<MotorEnquiryEntry>(`/api/entries/${module}/${id}/update-status/`, {
     method: 'PATCH',
@@ -513,6 +521,8 @@ export interface GeneralRenewalEntry {
   is_terminal: boolean;
   // Per-module dropdowns added 2026-05-24.
   potential_premium?: string | null;
+  // TED-440: actual converted (here: retained) premium captured at status-transition time.
+  converted_premium?: string | null;
   // FK to the admin-managed ClassOfInsurance lookup (TED-446 migration 0035).
   class_of_insurance?: number | null;
   class_of_insurance_display?: string | null;
@@ -567,7 +577,12 @@ export async function getGeneralRenewalStats(
 
 export async function updateGeneralRenewalStatus(
   id: number,
-  payload: { status: 'retained' | 'lost'; revisions?: number }
+  // TED-440: converted_premium captured by the StatusTransitionModal.
+  payload: {
+    status: 'retained' | 'lost';
+    revisions?: number;
+    converted_premium?: string | number;
+  }
 ): Promise<ApiResponse<GeneralRenewalEntry>> {
   return fetchApi<GeneralRenewalEntry>(
     `/api/entries/general-renewal/${id}/update-status/`,

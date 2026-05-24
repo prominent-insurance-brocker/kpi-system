@@ -133,6 +133,11 @@ class GeneralNewEntry(BaseEntry):
     potential_premium = models.DecimalField(
         max_digits=15, decimal_places=2, null=True, blank=True,
     )
+    # Captured at the moment the enquiry closes as Converted via the
+    # update-status flow (TED-440). NULL when not yet closed or closed as Lost.
+    converted_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
     class_of_insurance = models.ForeignKey(
         'ClassOfInsurance',
         on_delete=models.PROTECT,
@@ -256,6 +261,11 @@ class GeneralRenewalEntry(BaseEntry):
     quotes_compared = models.PositiveIntegerField(default=0)
     status_changed_at = models.DateTimeField(null=True, blank=True)
     potential_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
+    # Captured at the moment the enquiry closes as Retained via the
+    # update-status flow (TED-440). NULL when not yet closed or closed as Lost.
+    converted_premium = models.DecimalField(
         max_digits=15, decimal_places=2, null=True, blank=True,
     )
     class_of_insurance = models.ForeignKey(
@@ -406,6 +416,11 @@ class MotorNewEntry(BaseEntry):
     potential_premium = models.DecimalField(
         max_digits=15, decimal_places=2, null=True, blank=True,
     )
+    # Captured at the moment the enquiry closes as Converted via the
+    # update-status flow (TED-440). NULL when not yet closed or closed as Lost.
+    converted_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
     class_of_enquiry = models.CharField(
         max_length=20, choices=MOTOR_CLASS_OF_ENQUIRY_CHOICES,
         blank=True, default='',
@@ -527,6 +542,11 @@ class MotorRenewalEntry(BaseEntry):
     quotes_compared = models.PositiveIntegerField(default=0)
     status_changed_at = models.DateTimeField(null=True, blank=True)
     potential_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
+    # Captured at the moment the enquiry closes as Retained via the
+    # update-status flow (TED-440). NULL when not yet closed or closed as Lost.
+    converted_premium = models.DecimalField(
         max_digits=15, decimal_places=2, null=True, blank=True,
     )
     class_of_enquiry = models.CharField(
@@ -679,6 +699,11 @@ class MotorFleetNewEntry(BaseEntry):
     revisions = models.PositiveIntegerField(default=0)
     quotes_compared = models.PositiveIntegerField(default=0)
     status_changed_at = models.DateTimeField(null=True, blank=True)
+    # Captured at the moment the enquiry closes as Converted via the
+    # update-status flow (TED-440). NULL when not yet closed or closed as Lost.
+    converted_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Motor Fleet New Entry'
@@ -789,6 +814,11 @@ class MotorFleetRenewalEntry(BaseEntry):
     revisions = models.PositiveIntegerField(default=0)
     quotes_compared = models.PositiveIntegerField(default=0)
     status_changed_at = models.DateTimeField(null=True, blank=True)
+    # Captured at the moment the enquiry closes as Retained via the
+    # update-status flow (TED-440). NULL when not yet closed or closed as Lost.
+    converted_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Motor Fleet Renewal Entry'

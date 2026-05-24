@@ -108,7 +108,7 @@ class GeneralNewEntrySerializer(BaseEntrySerializer):
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
-            'potential_premium',
+            'potential_premium', 'converted_premium',
             'class_of_insurance', 'class_of_insurance_display',
             'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',
@@ -121,6 +121,7 @@ class GeneralNewEntrySerializer(BaseEntrySerializer):
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'class_of_insurance_display', 'insurance_company_name',
+            'converted_premium',
             'added_at', 'updated_at',
         ]
 
@@ -143,6 +144,12 @@ class GeneralNewEntrySerializer(BaseEntrySerializer):
 class GeneralNewStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=GeneralNewEntry.STATUS_CHOICES)
     revisions = serializers.IntegerField(min_value=0, required=False)
+    # TED-440: captured when transitioning to the success status (Converted /
+    # Retained). The frontend's StatusTransitionModal collects it; ignored by
+    # the viewset on Lost transitions even if present.
+    converted_premium = serializers.DecimalField(
+        max_digits=15, decimal_places=2, required=False, min_value=0,
+    )
 
     def validate_status(self, value):
         entry = self.context['entry']
@@ -189,7 +196,7 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
-            'potential_premium',
+            'potential_premium', 'converted_premium',
             'class_of_insurance', 'class_of_insurance_display',
             'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',
@@ -202,6 +209,7 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'class_of_insurance_display', 'insurance_company_name',
+            'converted_premium',
             'added_at', 'updated_at',
         ]
 
@@ -224,6 +232,12 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
 class GeneralRenewalStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=GeneralRenewalEntry.STATUS_CHOICES)
     revisions = serializers.IntegerField(min_value=0, required=False)
+    # TED-440: captured when transitioning to the success status (Converted /
+    # Retained). The frontend's StatusTransitionModal collects it; ignored by
+    # the viewset on Lost transitions even if present.
+    converted_premium = serializers.DecimalField(
+        max_digits=15, decimal_places=2, required=False, min_value=0,
+    )
 
     def validate_status(self, value):
         entry = self.context['entry']
@@ -284,7 +298,7 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
-            'potential_premium',
+            'potential_premium', 'converted_premium',
             'class_of_enquiry', 'class_of_enquiry_display',
             'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',
@@ -297,6 +311,7 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'class_of_enquiry_display', 'insurance_company_name',
+            'converted_premium',
             'added_at', 'updated_at',
         ]
 
@@ -319,6 +334,12 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
 class MotorNewStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=MotorNewEntry.STATUS_CHOICES)
     revisions = serializers.IntegerField(min_value=0, required=False)
+    # TED-440: captured when transitioning to the success status (Converted /
+    # Retained). The frontend's StatusTransitionModal collects it; ignored by
+    # the viewset on Lost transitions even if present.
+    converted_premium = serializers.DecimalField(
+        max_digits=15, decimal_places=2, required=False, min_value=0,
+    )
 
     def validate_status(self, value):
         entry = self.context['entry']
@@ -363,7 +384,7 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
-            'potential_premium',
+            'potential_premium', 'converted_premium',
             'class_of_enquiry', 'class_of_enquiry_display',
             'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',
@@ -376,6 +397,7 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'class_of_enquiry_display', 'insurance_company_name',
+            'converted_premium',
             'added_at', 'updated_at',
         ]
 
@@ -398,6 +420,12 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
 class MotorRenewalStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=MotorRenewalEntry.STATUS_CHOICES)
     revisions = serializers.IntegerField(min_value=0, required=False)
+    # TED-440: captured when transitioning to the success status (Converted /
+    # Retained). The frontend's StatusTransitionModal collects it; ignored by
+    # the viewset on Lost transitions even if present.
+    converted_premium = serializers.DecimalField(
+        max_digits=15, decimal_places=2, required=False, min_value=0,
+    )
 
     def validate_status(self, value):
         entry = self.context['entry']
@@ -679,6 +707,7 @@ class MotorFleetNewEntrySerializer(BaseEntrySerializer):
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
+            'converted_premium',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
             'added_at', 'updated_at', 'is_editable',
@@ -688,6 +717,7 @@ class MotorFleetNewEntrySerializer(BaseEntrySerializer):
             'status', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
+            'converted_premium',
             'added_at', 'updated_at',
         ]
 
@@ -710,6 +740,12 @@ class MotorFleetNewEntrySerializer(BaseEntrySerializer):
 class MotorFleetNewStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=MotorFleetNewEntry.STATUS_CHOICES)
     revisions = serializers.IntegerField(min_value=0, required=False)
+    # TED-440: captured when transitioning to the success status (Converted /
+    # Retained). The frontend's StatusTransitionModal collects it; ignored by
+    # the viewset on Lost transitions even if present.
+    converted_premium = serializers.DecimalField(
+        max_digits=15, decimal_places=2, required=False, min_value=0,
+    )
 
     def validate_status(self, value):
         entry = self.context['entry']
@@ -748,6 +784,7 @@ class MotorFleetRenewalEntrySerializer(BaseEntrySerializer):
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
+            'converted_premium',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
             'added_at', 'updated_at', 'is_editable',
@@ -757,6 +794,7 @@ class MotorFleetRenewalEntrySerializer(BaseEntrySerializer):
             'status', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
+            'converted_premium',
             'added_at', 'updated_at',
         ]
 
@@ -779,6 +817,12 @@ class MotorFleetRenewalEntrySerializer(BaseEntrySerializer):
 class MotorFleetRenewalStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=MotorFleetRenewalEntry.STATUS_CHOICES)
     revisions = serializers.IntegerField(min_value=0, required=False)
+    # TED-440: captured when transitioning to the success status (Converted /
+    # Retained). The frontend's StatusTransitionModal collects it; ignored by
+    # the viewset on Lost transitions even if present.
+    converted_premium = serializers.DecimalField(
+        max_digits=15, decimal_places=2, required=False, min_value=0,
+    )
 
     def validate_status(self, value):
         entry = self.context['entry']

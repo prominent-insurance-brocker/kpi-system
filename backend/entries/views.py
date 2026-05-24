@@ -527,6 +527,17 @@ def _build_enquiry_stats(queryset, success_status='converted'):
         avg_tat_seconds = sum(deltas) / len(deltas)
         avg_accuracy = sum(accuracies) / len(accuracies)
 
+    # Premium aggregates (added 2026-05-24). potential_premium is nullable;
+    # Sum() returns None when no matching rows have a value, so coerce.
+    def _sum_potential(qs):
+        result = qs.aggregate(s=Sum('potential_premium'))['s']
+        # DecimalField → Decimal; the frontend expects a string-or-number JSON value.
+        return float(result) if result is not None else 0.0
+
+    converted_premium = _sum_potential(queryset.filter(status=success_status))
+    lost_premium = _sum_potential(queryset.filter(status='lost'))
+    total_potential_premium = _sum_potential(queryset)
+
     return {
         'total': total,
         'revised': revised,
@@ -535,6 +546,11 @@ def _build_enquiry_stats(queryset, success_status='converted'):
         'lost': lost,
         'avg_tat_minutes': round(avg_tat_seconds / 60, 2) if avg_tat_seconds is not None else None,
         'avg_accuracy': round(avg_accuracy, 2) if avg_accuracy is not None else None,
+        # New premium aggregates: drive the Converted Premium / Lost Potential
+        # Premium / Converted-vs-Potential Premium cards.
+        'converted_premium': round(converted_premium, 2),
+        'lost_premium': round(lost_premium, 2),
+        'total_potential_premium': round(total_potential_premium, 2),
     }
 
 

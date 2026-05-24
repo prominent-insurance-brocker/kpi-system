@@ -365,6 +365,12 @@ export interface MotorEnquiryStats {
   lost: number;
   avg_tat_minutes: number | null;
   avg_accuracy: number | null;
+  // Premium aggregates (sums of `potential_premium`). converted_premium is
+  // the success-status total — populated for whichever of converted/retained
+  // applies to the module.
+  converted_premium: number;
+  lost_premium: number;
+  total_potential_premium: number;
 }
 
 export interface MotorRenewalMonthlyTarget {
@@ -530,6 +536,10 @@ export interface GeneralRenewalStats {
   lost: number;
   avg_tat_minutes: number | null;
   avg_accuracy: number | null;
+  // Premium aggregates (sums of `potential_premium`).
+  converted_premium: number;
+  lost_premium: number;
+  total_potential_premium: number;
 }
 
 export interface GeneralRenewalMonthlyTarget {

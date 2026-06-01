@@ -58,11 +58,18 @@ import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate } from '@/app/lib/date';
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
-import { AddedByCell, MONTH_NAMES } from '@/app/components/KpiModulePage';
+import {
+  AddedByCell,
+  MONTH_NAMES,
+  PersonalDailyTracker,
+  TrackerView,
+  type ModuleUser,
+} from '@/app/components/KpiModulePage';
 import { SalesKPIStatusModal } from '@/app/components/SalesKPIStatusModal';
 import {
   fetchApi,
   getSalesKPIStats,
+  getUsersForModule,
   getUsersForModulePage,
   getClassOfInsurancePage,
   type SalesKPIEntry,
@@ -142,7 +149,19 @@ export default function SalesKPIPage() {
   }, []);
 
   // Tabs
-  const [activeView, setActiveView] = useState<'dashboard' | 'enquiries'>('enquiries');
+  const [activeView, setActiveView] = useState<'dashboard' | 'tracker' | 'enquiries'>(
+    'enquiries',
+  );
+
+  // Tracker tab state — independent calendars so paging the tracker doesn't
+  // move the Monthly Target card (cardYear/cardMonth) and vice-versa.
+  const [monthEntries, setMonthEntries] = useState<SalesKPIEntry[]>([]);
+  const [moduleUsers, setModuleUsers] = useState<ModuleUser[]>([]);
+  const [trackerUserFilter, setTrackerUserFilter] = useState('all');
+  const [personalCalYear, setPersonalCalYear] = useState(today.getFullYear());
+  const [personalCalMonth, setPersonalCalMonth] = useState(today.getMonth());
+  const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());
+  const [teamCalMonth, setTeamCalMonth] = useState(today.getMonth());
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -264,6 +283,46 @@ export default function SalesKPIPage() {
     setSheetTargets(result.data?.results ?? []);
   }, [sheetYear]);
 
+  // Wide-window fetch for the Tracker tab — pulls every entry visible to the
+  // user (the backend already scopes by data_visibility) for the months the
+  // personal + team calendars currently show. De-duped by id since the two
+  // calendars may overlap.
+  const fetchMonthEntries = useCallback(async () => {
+    const months: Array<[number, number]> = [
+      [personalCalYear, personalCalMonth],
+      [teamCalYear, teamCalMonth],
+    ];
+    const unique = Array.from(new Set(months.map(([y, m]) => `${y}-${m}`))).map((s) => {
+      const [y, m] = s.split('-').map(Number);
+      return [y, m] as [number, number];
+    });
+    try {
+      const responses = await Promise.all(
+        unique.map(([year, month]) => {
+          const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+          const lastDay = toLocalDateString(new Date(year, month + 1, 0));
+          const qs = new URLSearchParams({
+            date_from: firstDay,
+            date_to: lastDay,
+            page_size: '1000',
+          });
+          return fetchApi<{ results: SalesKPIEntry[] }>(
+            `/api/entries/sales-kpi/?${qs}`,
+          );
+        }),
+      );
+      const merged = new Map<number, SalesKPIEntry>();
+      for (const res of responses) {
+        for (const entry of res.data?.results ?? []) {
+          merged.set(entry.id, entry);
+        }
+      }
+      setMonthEntries(Array.from(merged.values()));
+    } catch {
+      setMonthEntries([]);
+    }
+  }, [personalCalYear, personalCalMonth, teamCalYear, teamCalMonth]);
+
   useEffect(() => { fetchCurrentTarget(); }, [fetchCurrentTarget]);
   useEffect(() => {
     if (currentTargetLoaded) fetchCardData();
@@ -273,11 +332,24 @@ export default function SalesKPIPage() {
   useEffect(() => {
     if (isPanelOpen) fetchSheetTargets();
   }, [isPanelOpen, sheetYear, fetchSheetTargets]);
+  // Load the team-view user list once. The TrackerView's filter dropdown and
+  // the per-user row labels both read from this.
+  useEffect(() => {
+    getUsersForModule('sales_kpi').then((r) => {
+      if (r.data) setModuleUsers(r.data);
+    });
+  }, []);
+  // Refetch the tracker month window whenever the tab is active or either
+  // calendar is paged.
+  useEffect(() => {
+    if (activeView === 'tracker') fetchMonthEntries();
+  }, [activeView, fetchMonthEntries]);
 
   const refreshAll = () => {
     fetchEntries();
     fetchStats();
     fetchCardData();
+    if (activeView === 'tracker') fetchMonthEntries();
   };
 
   // ── Monthly target card aggregates ───────────────────────────────────────
@@ -647,13 +719,24 @@ export default function SalesKPIPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs value={activeView} onValueChange={(v) => setActiveView(v as 'dashboard' | 'enquiries')}>
+        <Tabs
+          value={activeView}
+          onValueChange={(v) =>
+            setActiveView(v as 'dashboard' | 'tracker' | 'enquiries')
+          }
+        >
           <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0 w-fit">
             <TabsTrigger
               value="dashboard"
               className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280]"
             >
               Dashboard
+            </TabsTrigger>
+            <TabsTrigger
+              value="tracker"
+              className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280]"
+            >
+              Tracker
             </TabsTrigger>
             <TabsTrigger
               value="enquiries"
@@ -684,6 +767,71 @@ export default function SalesKPIPage() {
                 isCurrency
               />
             </div>
+          </TabsContent>
+
+          {/* ─── Tracker tab ─────────────────────────────────────────── */}
+          <TabsContent value="tracker" className="mt-4 space-y-4">
+            {!isHodUser && (
+              <PersonalDailyTracker<SalesKPIEntry>
+                calYear={personalCalYear}
+                calMonth={personalCalMonth}
+                today={today}
+                monthEntries={monthEntries}
+                currentUserId={currentUserId}
+                userFullName={user?.full_name || ''}
+                onPrevMonth={() => {
+                  if (personalCalMonth === 0) {
+                    setPersonalCalMonth(11);
+                    setPersonalCalYear((y) => y - 1);
+                  } else {
+                    setPersonalCalMonth((m) => m - 1);
+                  }
+                }}
+                onNextMonth={() => {
+                  if (personalCalMonth === 11) {
+                    setPersonalCalMonth(0);
+                    setPersonalCalYear((y) => y + 1);
+                  } else {
+                    setPersonalCalMonth((m) => m + 1);
+                  }
+                }}
+                onGoToday={() => {
+                  setPersonalCalYear(today.getFullYear());
+                  setPersonalCalMonth(today.getMonth());
+                }}
+              />
+            )}
+            {(isAdmin || isHodUser) && (
+              <TrackerView<SalesKPIEntry>
+                calYear={teamCalYear}
+                calMonth={teamCalMonth}
+                monthEntries={monthEntries}
+                moduleUsers={moduleUsers}
+                trackerUserFilter={trackerUserFilter}
+                onTrackerUserFilterChange={setTrackerUserFilter}
+                excludeUserId={isHodUser ? currentUserId : undefined}
+                onPrevMonth={() => {
+                  if (teamCalMonth === 0) {
+                    setTeamCalMonth(11);
+                    setTeamCalYear((y) => y - 1);
+                  } else {
+                    setTeamCalMonth((m) => m - 1);
+                  }
+                }}
+                onNextMonth={() => {
+                  if (teamCalMonth === 11) {
+                    setTeamCalMonth(0);
+                    setTeamCalYear((y) => y + 1);
+                  } else {
+                    setTeamCalMonth((m) => m + 1);
+                  }
+                }}
+                onGoToday={() => {
+                  setTeamCalYear(today.getFullYear());
+                  setTeamCalMonth(today.getMonth());
+                }}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="enquiries" className="mt-4 space-y-4">

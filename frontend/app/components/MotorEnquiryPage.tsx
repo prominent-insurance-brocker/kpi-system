@@ -517,10 +517,11 @@ export function MotorEnquiryPage({
   }, [fetchTargetCard]);
 
   // True once the /current/ call resolves and finds no target for this month.
-  // Blocks all data-entry mutations on the page until cleared. HOD users see
-  // aggregated team data and can't set targets, so the gate is skipped for them.
+  // Blocks all data-entry mutations on the page until cleared. HOD users and
+  // super admins (is_staff) see aggregated team data and don't carry personal
+  // monthly targets, so the gate is skipped for both.
   const noCurrentTarget =
-    isRenewal && !isHodUser && currentTargetLoaded && !currentTarget;
+    isRenewal && !isHodUser && !user?.is_staff && currentTargetLoaded && !currentTarget;
   const isCurrentMonthCard =
     targetCardYear === today.getFullYear() &&
     targetCardMonth === today.getMonth() + 1;

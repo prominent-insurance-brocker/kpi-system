@@ -128,10 +128,11 @@ function toLocalDateString(d: Date): string {
 export default function SalesKPIPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { canSeeAllData, user } = useAuth();
+  const { canSeeAllData, user, isHOD } = useAuth();
   const confirm = useConfirm();
 
   const isAdmin = canSeeAllData();
+  const isHodUser = isHOD();
   const currentUserId = user?.id;
 
   const today = useMemo(() => {
@@ -298,7 +299,10 @@ export default function SalesKPIPage() {
 
   const isCurrentMonthCard =
     cardYear === today.getFullYear() && cardMonth === today.getMonth() + 1;
-  const noCurrentTarget = currentTargetLoaded && !currentTarget;
+  // HODs and super admins (is_staff) don't carry personal monthly targets,
+  // so the "Set this month's target" gate is skipped for both.
+  const noCurrentTarget =
+    !isHodUser && !user?.is_staff && currentTargetLoaded && !currentTarget;
   const targetForModal: SalesMonthlyTarget | null = isCurrentMonthCard ? currentTarget : cardTarget;
 
   useEffect(() => {

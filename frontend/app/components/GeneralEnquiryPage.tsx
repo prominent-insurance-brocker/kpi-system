@@ -424,7 +424,10 @@ export function GeneralEnquiryPage() {
   // No current-month target → block mutations + auto-open the modal.
   // HOD users see aggregated team data and don't have personal targets — skip
   // the gate for them.
-  const noCurrentTarget = !isHodUser && currentTargetLoaded && !currentTarget;
+  // HODs and super admins (is_staff) don't carry personal monthly targets,
+  // so the "Set this month's target" gate is skipped for both.
+  const noCurrentTarget =
+    !isHodUser && !user?.is_staff && currentTargetLoaded && !currentTarget;
   const isCurrentMonthCard =
     targetCardYear === today.getFullYear() &&
     targetCardMonth === today.getMonth() + 1;

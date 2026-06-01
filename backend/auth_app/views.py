@@ -57,6 +57,7 @@ If you didn't request this, please ignore this email.""",
 class RequestMagicLinkView(APIView):
     """Request a magic link for passwordless authentication."""
     permission_classes = [AllowAny]
+    throttle_scope = 'magic_link'
 
     def post(self, request):
         email = request.data.get('email', '').lower().strip()
@@ -241,6 +242,7 @@ class LogoutView(APIView):
 class RefreshTokenView(APIView):
     """Refresh the access token using the refresh token cookie."""
     permission_classes = [AllowAny]
+    throttle_scope = 'auth_refresh'
 
     def post(self, request):
         refresh_token = request.COOKIES.get('refresh_token')

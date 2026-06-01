@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 class AskView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'ai_chat'
 
     def post(self, request):
         question = request.data.get('question', '').strip()

@@ -170,6 +170,27 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'backend.pagination.StandardPagination',
     'PAGE_SIZE': 20,
+    # Standard DRF throttling. UserRateThrottle keys on the authenticated user;
+    # AnonRateThrottle on the client IP. ScopedRateThrottle reads `throttle_scope`
+    # off the view — used for sensitive endpoints (magic-link, refresh, AI chat).
+    #
+    # Backed by Django's default cache. No CACHES setting is configured, so the
+    # default is LocMemCache — per-process. Fine for dev (single runserver), but
+    # in prod (Dokploy → gunicorn with N workers) counters are NOT shared across
+    # workers, so the effective rate becomes (rate × N). Point CACHES at Redis
+    # / Memcached before deploy.
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '30/min',
+        'user': '300/min',
+        'magic_link': '5/min',
+        'auth_refresh': '60/min',
+        'ai_chat': '20/min',
+    },
 }
 
 

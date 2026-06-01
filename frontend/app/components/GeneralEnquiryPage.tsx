@@ -654,6 +654,16 @@ export function GeneralEnquiryPage() {
       },
     },
     {
+      key: 'converted_premium',
+      header: 'Converted Premium',
+      render: (item: GeneralRenewalEntry) => {
+        const raw = item.converted_premium as string | null | undefined;
+        if (raw == null || raw === '') return '—';
+        const n = Number(raw);
+        return Number.isFinite(n) ? n.toLocaleString() : raw;
+      },
+    },
+    {
       key: 'added_at',
       header: 'Added on',
       render: (item: GeneralRenewalEntry) => formatDate(item.added_at.split('T')[0]),

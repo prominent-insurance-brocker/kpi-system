@@ -730,7 +730,7 @@ export default function SalesKPIPage() {
             <div className="space-y-1">
               <div className="flex items-baseline justify-between">
                 <span className="text-xl font-bold">{cardClientsActual.toLocaleString()}</span>
-                <span className="text-sm text-muted-foreground">Clients Won</span>
+                <span className="text-sm text-muted-foreground">Client Retention</span>
               </div>
               <div className="relative">
                 <div

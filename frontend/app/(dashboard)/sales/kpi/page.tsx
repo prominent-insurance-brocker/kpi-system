@@ -153,6 +153,12 @@ export default function SalesKPIPage() {
     'enquiries',
   );
 
+  // Dashboard-tab filters — kept independent of the URL-synced Enquiries
+  // filters so the two tabs don't fight each other.
+  const [dashFrom, setDashFrom] = useState('');
+  const [dashTo, setDashTo] = useState('');
+  const [dashUserId, setDashUserId] = useState('');
+
   // Tracker tab state — independent calendars so paging the tracker doesn't
   // move the Monthly Target card (cardYear/cardMonth) and vice-versa.
   const [monthEntries, setMonthEntries] = useState<SalesKPIEntry[]>([]);
@@ -242,14 +248,15 @@ export default function SalesKPIPage() {
   ]);
 
   const fetchStats = useCallback(async () => {
+    // Dashboard cards are scoped by the dashboard-tab FilterBar (date range +
+    // user), independent of the Enquiries-tab URL-synced filters.
     const result = await getSalesKPIStats({
-      date_from: dateFrom || undefined,
-      date_to: dateTo || undefined,
-      user_id: userId || undefined,
-      assignee: assigneeId || undefined,
+      date_from: dashFrom || undefined,
+      date_to: dashTo || undefined,
+      user_id: dashUserId || undefined,
     });
     if (result.data) setStats(result.data);
-  }, [dateFrom, dateTo, userId, assigneeId]);
+  }, [dashFrom, dashTo, dashUserId]);
 
   const fetchCurrentTarget = useCallback(async () => {
     const y = today.getFullYear();
@@ -585,7 +592,7 @@ export default function SalesKPIPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Sales KPI</h1>
+            <h1 className="text-2xl font-bold">Deals</h1>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setIsPanelOpen((o) => !o)}>
@@ -746,7 +753,27 @@ export default function SalesKPIPage() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="dashboard" className="mt-4">
+          <TabsContent value="dashboard" className="mt-4 space-y-4">
+            <FilterBar
+              dateRange={{
+                from: dashFrom,
+                to: dashTo,
+                onChange: (from, to) => { setDashFrom(from); setDashTo(to); },
+              }}
+              user={
+                isAdmin
+                  ? {
+                      value: dashUserId,
+                      onChange: (v) => setDashUserId(v),
+                      moduleKey: 'sales_kpi',
+                      selectedLabel:
+                        moduleUsers.find((u) => String(u.id) === dashUserId)?.full_name ?? null,
+                    }
+                  : undefined
+              }
+              hasActiveFilters={!!(dashFrom || dashTo || dashUserId)}
+              onClear={() => { setDashFrom(''); setDashTo(''); setDashUserId(''); }}
+            />
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
               <StatCard title="Total Enquiries" value={stats?.total ?? 0} />
               <StatCard title="Lead" value={stats?.lead ?? 0} accent="text-blue-600" />
@@ -754,7 +781,7 @@ export default function SalesKPIPage() {
               <StatCard title="Won" value={stats?.won ?? 0} accent="text-green-600" />
               <StatCard title="Lost" value={stats?.lost ?? 0} accent="text-gray-600" />
             </div>
-            <div className="grid grid-cols-2 gap-4 mt-4">
+            <div className="grid grid-cols-2 gap-4">
               <StatCard
                 title="Total Potential Premium"
                 value={formatPremium(stats?.potential_premium_total ?? 0)}

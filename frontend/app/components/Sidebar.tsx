@@ -43,7 +43,7 @@ const navigation: NavItem[] = [
     name: 'Sales',
     icon: TrendingUp,
     children: [
-      { name: 'Sales KPI', href: '/sales/kpi', moduleKey: 'sales_kpi' },
+      { name: 'Deals', href: '/sales/kpi', moduleKey: 'sales_kpi' },
     ],
   },
   {

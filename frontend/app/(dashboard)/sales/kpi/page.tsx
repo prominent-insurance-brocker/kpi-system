@@ -409,7 +409,11 @@ export default function SalesKPIPage() {
   const cardPremiumActual = cardEntries
     .filter((e) => e.status === 'won')
     .reduce((sum, e) => sum + Number(e.converted_premium ?? 0), 0);
-  const cardClientsActual = cardEntries.filter((e) => e.status === 'won').length;
+  // Client Retention counts only Renewal-type tickets that closed as Won —
+  // a New deal is acquisition, not retention.
+  const cardClientsActual = cardEntries.filter(
+    (e) => e.status === 'won' && e.entry_type === 'renewal',
+  ).length;
   const premiumTarget = cardTarget?.premium_target != null ? Number(cardTarget.premium_target) : null;
   const clientsTarget = cardTarget?.clients_assigned ?? null;
 

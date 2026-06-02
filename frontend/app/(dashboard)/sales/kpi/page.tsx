@@ -284,14 +284,36 @@ export default function SalesKPIPage() {
     setCurrentTargetLoaded(true);
   }, [today]);
 
-  // HOD + super admin see team-aggregated targets on the side panel and the
-  // Monthly Target progress card. Everyone else sees their own.
-  const isTeamView = isHodUser || !!user?.is_staff;
+  // TED-464 view selector. Drives both the Monthly Target progress card and
+  // the actuals derivation below. Values:
+  //   'team' → aggregated across all users (HOD + admin default)
+  //   'my'   → the viewer's own data (admin only — HOD has no personal data)
+  //   '<id>' → a specific user's data (admin/HOD individual toggle)
+  // Regular users never see the dropdown and stay on a personal-only path.
+  const isAggregator = isHodUser || !!user?.is_staff;
+  const [cardView, setCardView] = useState<string>(() =>
+    isHodUser ? 'team' : user?.is_staff ? 'team' : 'my',
+  );
+
+  // Resolve the view selection into a concrete user_id (or empty for team).
+  const cardViewUserId =
+    cardView === 'team'
+      ? ''
+      : cardView === 'my'
+        ? (currentUserId ? String(currentUserId) : '')
+        : cardView;
 
   const fetchCardData = useCallback(async () => {
     if (!currentUserId) return;
+    // Targets endpoint: aggregator + user_id → that user's row; aggregator
+    // without user_id → team-summed; regular user → own (server enforces).
+    const targetQs = new URLSearchParams({
+      year: String(cardYear),
+      month: String(cardMonth),
+    });
+    if (cardViewUserId) targetQs.set('user_id', cardViewUserId);
     const targetResult = await fetchApi<{ results: SalesMonthlyTarget[] }>(
-      `/api/entries/sales-kpi/monthly-targets/?year=${cardYear}&month=${cardMonth}`,
+      `/api/entries/sales-kpi/monthly-targets/?${targetQs}`,
     );
     setCardTarget(targetResult.data?.results?.[0] ?? null);
 
@@ -299,12 +321,12 @@ export default function SalesKPIPage() {
     const lastDay = toLocalDateString(new Date(cardYear, cardMonth, 0));
     // Match the target scope: team-aggregated rows pair with team-wide
     // actuals, personal targets pair with personal actuals.
-    const userFilter = isTeamView ? '' : `&user_id=${currentUserId}`;
+    const userFilter = cardViewUserId ? `&user_id=${cardViewUserId}` : '';
     const result = await fetchApi<{ results: SalesKPIEntry[] }>(
       `/api/entries/sales-kpi/?date_from=${firstDay}&date_to=${lastDay}${userFilter}&page_size=1000`,
     );
     setCardEntries(result.data?.results ?? []);
-  }, [cardYear, cardMonth, currentUserId, isTeamView]);
+  }, [cardYear, cardMonth, currentUserId, cardViewUserId]);
 
   const fetchSheetTargets = useCallback(async () => {
     const result = await fetchApi<{ results: SalesMonthlyTarget[] }>(
@@ -648,7 +670,27 @@ export default function SalesKPIPage() {
 
         {/* Monthly Target progress card */}
         <div className="border rounded-lg p-4 space-y-2 bg-white w-[362px]">
-          <h2 className="text-base font-semibold">Monthly Target</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Monthly Target</h2>
+            {isAggregator && (
+              <Select value={cardView} onValueChange={setCardView}>
+                <SelectTrigger className="h-7 w-[140px] text-xs shadow-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {user?.is_staff && <SelectItem value="my">My Deals</SelectItem>}
+                  <SelectItem value="team">Team Deals</SelectItem>
+                  {moduleUsers
+                    .filter((u) => u.id !== currentUserId)
+                    .map((u) => (
+                      <SelectItem key={u.id} value={String(u.id)}>
+                        {u.full_name || u.email}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-1">
               <div className="flex items-baseline justify-between">
@@ -1043,12 +1085,12 @@ export default function SalesKPIPage() {
                 <span
                   className={
                     'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ' +
-                    (isTeamView
+                    (isAggregator
                       ? 'bg-indigo-100 text-indigo-700'
                       : 'bg-emerald-100 text-emerald-700')
                   }
                 >
-                  {isTeamView ? 'Team Target' : 'My Target'}
+                  {isAggregator ? 'Team Target' : 'My Target'}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">

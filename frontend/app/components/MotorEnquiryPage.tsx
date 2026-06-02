@@ -317,6 +317,18 @@ export function MotorEnquiryPage({
   const [isTargetModalOpen, setIsTargetModalOpen] = useState(false);
   const [currentTargetLoaded, setCurrentTargetLoaded] = useState(false);
   const [currentTarget, setCurrentTarget] = useState<MotorRenewalMonthlyTarget | null>(null);
+  // TED-464 card view selector (renewal modules only, aggregator viewers only).
+  // 'team' → aggregated; 'my' → admin's own data; '<id>' → a specific user.
+  const isAggregator = isHodUser || !!user?.is_staff;
+  const [cardView, setCardView] = useState<string>(() =>
+    isAggregator ? 'team' : 'my',
+  );
+  const cardViewUserId =
+    cardView === 'team'
+      ? ''
+      : cardView === 'my'
+        ? (currentUserId != null ? String(currentUserId) : '')
+        : cardView;
 
   // Right-side "Monthly Targets" panel — same UX as Sales KPI's panel.
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -462,12 +474,17 @@ export function MotorEnquiryPage({
 
   const fetchTargetCard = useCallback(async () => {
     if (!isRenewal) return;
-    // Fetch the target row for the displayed month + count of retained
-    // enquiries in that same month for the logged-in user.
+    // TED-464: viewing scope is driven by `cardViewUserId`.
+    //   '' → aggregated team target + team-wide retained count
+    //   '<id>' → that user's target + that user's retained count
+    // Regular users always pass their own id (the server enforces it anyway).
+    const effectiveUserId =
+      cardViewUserId || (currentUserId != null ? String(currentUserId) : '');
     const [targetResult, statsResult] = await Promise.all([
       getMotorRenewalMonthlyTargets(renewalModule, {
         year: targetCardYear,
         month: targetCardMonth,
+        user_id: cardViewUserId || undefined,
       }),
       (async () => {
         const firstDay = `${targetCardYear}-${String(targetCardMonth).padStart(2, '0')}-01`;
@@ -477,13 +494,20 @@ export function MotorEnquiryPage({
           date_to: lastDay,
           status: 'retained',
         });
-        if (currentUserId != null) qs.set('user_id', String(currentUserId));
+        // Team view ('' for aggregator) skips the user filter so the count
+        // covers the whole team.
+        if (cardView !== 'team' && effectiveUserId) {
+          qs.set('user_id', effectiveUserId);
+        }
         return fetchApi<{ count: number }>(`/api/entries/${apiSlug}/?${qs}`);
       })(),
     ]);
     setTargetCard(targetResult.data?.[0] ?? null);
     setTargetActuals(statsResult.data?.count ?? 0);
-  }, [isRenewal, renewalModule, apiSlug, targetCardYear, targetCardMonth, currentUserId]);
+  }, [
+    isRenewal, renewalModule, apiSlug, targetCardYear, targetCardMonth,
+    currentUserId, cardView, cardViewUserId,
+  ]);
 
   // ── Initial loads ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -818,6 +842,12 @@ export function MotorEnquiryPage({
           target={targetCard}
           actuals={targetActuals}
           isReadOnly={isHodUser}
+          showViewSelector={isAggregator}
+          showMyDealsOption={!!user?.is_staff}
+          cardView={cardView}
+          onCardViewChange={setCardView}
+          moduleUsers={moduleUsers}
+          currentUserId={currentUserId}
           onPrev={() => {
             if (targetCardMonth === 1) {
               setTargetCardMonth(12);
@@ -1641,6 +1671,13 @@ function ClientRetentionTargetCard({
   onToday,
   onEdit,
   isReadOnly = false,
+  // TED-464 dropdown — rendered when `showViewSelector` is true.
+  showViewSelector = false,
+  showMyDealsOption = false,
+  cardView,
+  onCardViewChange,
+  moduleUsers,
+  currentUserId,
 }: {
   year: number;
   month: number;             // 1-indexed
@@ -1653,6 +1690,13 @@ function ClientRetentionTargetCard({
   // When true, hides the Edit control. Used for HOD oversight rendering where
   // the card shows team-aggregated numbers and isn't editable.
   isReadOnly?: boolean;
+  // TED-464: aggregator viewers (HOD/admin) get a My/Team/Individual switcher.
+  showViewSelector?: boolean;
+  showMyDealsOption?: boolean;        // admin only — HOD has no personal data
+  cardView?: string;
+  onCardViewChange?: (v: string) => void;
+  moduleUsers?: ModuleUser[];
+  currentUserId?: number;
 }) {
   const clientsTarget = target?.clients_assigned ?? null;
   const clientsMax = clientsTarget ? clientsTarget * TARGET_MULTIPLIER : 0;
@@ -1661,7 +1705,27 @@ function ClientRetentionTargetCard({
 
   return (
     <div className="border rounded-lg p-4 space-y-2 bg-white w-[362px] shrink-0 flex flex-col">
-      <h2 className="text-base font-semibold">Monthly Target</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-base font-semibold">Monthly Target</h2>
+        {showViewSelector && cardView && onCardViewChange && (
+          <Select value={cardView} onValueChange={onCardViewChange}>
+            <SelectTrigger className="h-7 w-[140px] text-xs shadow-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {showMyDealsOption && <SelectItem value="my">My Deals</SelectItem>}
+              <SelectItem value="team">Team Deals</SelectItem>
+              {(moduleUsers ?? [])
+                .filter((u) => u.id !== currentUserId)
+                .map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>
+                    {u.full_name || u.email}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
       <div className="space-y-1">
         <div>
           <div className="flex items-baseline justify-between">

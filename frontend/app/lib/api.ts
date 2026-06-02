@@ -465,11 +465,16 @@ export async function getCurrentMotorRenewalMonthlyTarget(
 
 export async function getMotorRenewalMonthlyTargets(
   module: MotorRenewalModule,
-  params: { year: number; month?: number }
+  // TED-464: `user_id` scopes an aggregator viewer (HOD/admin) to a single
+  // user's per-user rows instead of the default team-summed response.
+  params: { year: number; month?: number; user_id?: number | string }
 ): Promise<ApiResponse<MotorRenewalMonthlyTarget[]>> {
   const qs = new URLSearchParams();
   qs.set('year', String(params.year));
   if (params.month != null) qs.set('month', String(params.month));
+  if (params.user_id != null && params.user_id !== '') {
+    qs.set('user_id', String(params.user_id));
+  }
   const result = await fetchApi<{ results: MotorRenewalMonthlyTarget[] } | MotorRenewalMonthlyTarget[]>(
     `/api/entries/${module}/monthly-targets/?${qs}`
   );
@@ -611,10 +616,16 @@ export async function getCurrentGeneralRenewalMonthlyTarget(): Promise<
 export async function getGeneralRenewalMonthlyTargets(params: {
   year: number;
   month?: number;
+  // TED-464: `user_id` scopes an aggregator viewer (HOD/admin) to a single
+  // user's per-user rows instead of the default team-summed response.
+  user_id?: number | string;
 }): Promise<ApiResponse<GeneralRenewalMonthlyTarget[]>> {
   const qs = new URLSearchParams();
   qs.set('year', String(params.year));
   if (params.month != null) qs.set('month', String(params.month));
+  if (params.user_id != null && params.user_id !== '') {
+    qs.set('user_id', String(params.user_id));
+  }
   const result = await fetchApi<{ results: GeneralRenewalMonthlyTarget[] } | GeneralRenewalMonthlyTarget[]>(
     `/api/entries/general-renewal/monthly-targets/?${qs}`
   );

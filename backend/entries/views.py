@@ -88,26 +88,32 @@ from roles.permissions import IsAdminUser, user_is_hod
 _WRITE_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
 
 
+def _user_can_aggregate(user):
+    """HOD + super admin both get the team / individual switcher (TED-464).
+
+    Regular users always see only their own targets.
+    """
+    return bool(user and (user.is_staff or user_is_hod(user)))
+
+
 class HodAwareMonthlyTargetMixin:
-    """Shared HOD behavior for monthly-target viewsets.
+    """Shared HOD / admin behavior for monthly-target viewsets.
 
     Used by General Renewal, Motor Renewal, Motor Fleet Renewal, and Sales KPI
     targets.
 
-    Non-HOD callers: identical to the original per-user-scoped behavior.
-    HOD callers:
-      * All writes (POST/PUT/PATCH/DELETE) return 403 via check_permissions.
-      * `list` returns one row per (year, month) with the `aggregate_fields`
-        summed across all users, plus `aggregated: True` and `id: None` so the
-        frontend can render read-only.
-      * `current` returns a single summed row for the current month, or `null`
-        if no targets exist at all.
+    Aggregators (HOD or super admin) can pass a `user_id` query param to scope
+    the response to that specific user's per-user rows (TED-464 individual
+    toggle). When omitted, the response is team-summed across all users.
+
+    Writes (POST/PATCH/DELETE) always save under `request.user` and are
+    blocked entirely for HOD via check_permissions.
 
     Subclasses must set:
       * `model_class` — concrete *MonthlyTarget Django model
       * `serializer_class` — concrete *MonthlyTargetSerializer
       * `aggregate_fields` (optional) — list of numeric field names to sum for
-        HOD aggregation. Defaults to `['clients_assigned']`; Sales KPI also
+        team aggregation. Defaults to `['clients_assigned']`; Sales KPI also
         carries `premium_target`.
     """
     model_class = None
@@ -119,8 +125,14 @@ class HodAwareMonthlyTargetMixin:
             raise PermissionDenied('HOD users cannot modify monthly targets.')
 
     def get_queryset(self):
-        if user_is_hod(self.request.user):
-            qs = self.model_class.objects.all()
+        # Aggregator viewers (HOD / admin) can either drill into one user
+        # (`?user_id=N`) or fall through to the team-aggregated `list`.
+        if _user_can_aggregate(self.request.user):
+            user_id = self.request.query_params.get('user_id')
+            if user_id:
+                qs = self.model_class.objects.filter(user_id=user_id)
+            else:
+                qs = self.model_class.objects.all()
         else:
             qs = self.model_class.objects.filter(user=self.request.user)
         year = self.request.query_params.get('year')
@@ -132,7 +144,9 @@ class HodAwareMonthlyTargetMixin:
         return qs
 
     def list(self, request, *args, **kwargs):
-        if not user_is_hod(request.user):
+        # Per-user views (regular user, or aggregator scoped to one user_id)
+        # fall through to the standard serializer-driven response.
+        if not _user_can_aggregate(request.user) or request.query_params.get('user_id'):
             return super().list(request, *args, **kwargs)
         qs = self.filter_queryset(self.get_queryset())
         annotations = {f: Sum(f) for f in self.aggregate_fields}
@@ -163,7 +177,20 @@ class HodAwareMonthlyTargetMixin:
     def current(self, request):
         today = timezone.now().date()
         Model = self.model_class
-        if user_is_hod(request.user):
+
+        if _user_can_aggregate(request.user):
+            user_id = request.query_params.get('user_id')
+            if user_id:
+                # Drill into a specific user (TED-464 individual toggle).
+                # Returns the real per-user row if it exists; null otherwise.
+                try:
+                    target = Model.objects.get(
+                        user_id=user_id, year=today.year, month=today.month,
+                    )
+                    return Response(self.get_serializer(target).data)
+                except Model.DoesNotExist:
+                    return Response(None)
+            # Default for aggregators: team-summed across all users.
             agg = (
                 Model.objects
                 .filter(year=today.year, month=today.month)
@@ -185,6 +212,7 @@ class HodAwareMonthlyTargetMixin:
                 'updated_at': None,
                 'aggregated': True,
             })
+
         try:
             target = Model.objects.get(
                 user=request.user, year=today.year, month=today.month,

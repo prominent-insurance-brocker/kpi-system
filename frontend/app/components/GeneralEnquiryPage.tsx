@@ -237,6 +237,17 @@ export function GeneralEnquiryPage() {
   const [isTargetModalOpen, setIsTargetModalOpen] = useState(false);
   const [currentTargetLoaded, setCurrentTargetLoaded] = useState(false);
   const [currentTarget, setCurrentTarget] = useState<GeneralRenewalMonthlyTarget | null>(null);
+  // TED-464 card view selector (aggregator viewers only).
+  const isAggregator = isHodUser || !!user?.is_staff;
+  const [cardView, setCardView] = useState<string>(() =>
+    isAggregator ? 'team' : 'my',
+  );
+  const cardViewUserId =
+    cardView === 'team'
+      ? ''
+      : cardView === 'my'
+        ? (currentUserId != null ? String(currentUserId) : '')
+        : cardView;
 
   // Right-side "Monthly Targets" panel
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -332,10 +343,16 @@ export function GeneralEnquiryPage() {
   }, [sheetYear]);
 
   const fetchTargetCard = useCallback(async () => {
+    // TED-464 view scoping:
+    //   cardViewUserId '' (team) → aggregated target + team-wide actuals
+    //   cardViewUserId '<id>'    → that user's target + that user's actuals
+    const effectiveUserId =
+      cardViewUserId || (currentUserId != null ? String(currentUserId) : '');
     const [targetResult, statsResult] = await Promise.all([
       getGeneralRenewalMonthlyTargets({
         year: targetCardYear,
         month: targetCardMonth,
+        user_id: cardViewUserId || undefined,
       }),
       (async () => {
         const firstDay = `${targetCardYear}-${String(targetCardMonth).padStart(2, '0')}-01`;
@@ -345,13 +362,15 @@ export function GeneralEnquiryPage() {
           date_to: lastDay,
           status: 'retained',
         });
-        if (currentUserId != null) qs.set('user_id', String(currentUserId));
+        if (cardView !== 'team' && effectiveUserId) {
+          qs.set('user_id', effectiveUserId);
+        }
         return fetchApi<{ count: number }>(`/api/entries/${API_SLUG}/?${qs}`);
       })(),
     ]);
     setTargetCard(targetResult.data?.[0] ?? null);
     setTargetActuals(statsResult.data?.count ?? 0);
-  }, [targetCardYear, targetCardMonth, currentUserId]);
+  }, [targetCardYear, targetCardMonth, currentUserId, cardView, cardViewUserId]);
 
   const handleSheetInlineSave = async (month: number) => {
     const raw = sheetInlineValues[month];
@@ -712,6 +731,12 @@ export function GeneralEnquiryPage() {
           month={targetCardMonth}
           target={targetCard}
           actuals={targetActuals}
+          showViewSelector={isAggregator}
+          showMyDealsOption={!!user?.is_staff}
+          cardView={cardView}
+          onCardViewChange={setCardView}
+          moduleUsers={moduleUsers}
+          currentUserId={currentUserId}
           onPrev={() => {
             if (targetCardMonth === 1) {
               setTargetCardMonth(12);
@@ -1526,6 +1551,13 @@ function ClientRetentionTargetCard({
   onToday,
   onEdit,
   isReadOnly = false,
+  // TED-464 dropdown — rendered when `showViewSelector` is true.
+  showViewSelector = false,
+  showMyDealsOption = false,
+  cardView,
+  onCardViewChange,
+  moduleUsers,
+  currentUserId,
 }: {
   year: number;
   month: number;             // 1-indexed
@@ -1537,6 +1569,12 @@ function ClientRetentionTargetCard({
   onEdit: () => void;
   // When true, hides the Edit control. Used for HOD oversight rendering.
   isReadOnly?: boolean;
+  showViewSelector?: boolean;
+  showMyDealsOption?: boolean;
+  cardView?: string;
+  onCardViewChange?: (v: string) => void;
+  moduleUsers?: ModuleUser[];
+  currentUserId?: number;
 }) {
   const clientsTarget = target?.clients_assigned ?? null;
   const clientsMax = clientsTarget ? clientsTarget * TARGET_MULTIPLIER : 0;
@@ -1545,7 +1583,27 @@ function ClientRetentionTargetCard({
 
   return (
     <div className="border rounded-lg p-4 space-y-2 bg-white w-[362px] shrink-0 flex flex-col">
-      <h2 className="text-base font-semibold">Monthly Target</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-base font-semibold">Monthly Target</h2>
+        {showViewSelector && cardView && onCardViewChange && (
+          <Select value={cardView} onValueChange={onCardViewChange}>
+            <SelectTrigger className="h-7 w-[140px] text-xs shadow-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {showMyDealsOption && <SelectItem value="my">My Deals</SelectItem>}
+              <SelectItem value="team">Team Deals</SelectItem>
+              {(moduleUsers ?? [])
+                .filter((u) => u.id !== currentUserId)
+                .map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>
+                    {u.full_name || u.email}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
       <div className="space-y-1">
         <div>
           <div className="flex items-baseline justify-between">

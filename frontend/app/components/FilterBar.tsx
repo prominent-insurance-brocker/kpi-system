@@ -276,6 +276,17 @@ export interface FilterBarProps {
       hasMore: boolean;
     }>;
   }>;
+  // Generic non-searchable selects. Rendered inline alongside the other
+  // filters so secondary dropdowns (e.g. Sales KPI "Type") don't wrap to a
+  // new row of their own. First option is treated as the "any/all" reset.
+  extraSelects?: Array<{
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    options: FilterBarOption[];
+    placeholder?: string;
+    width?: string;
+  }>;
   onClear?: () => void;
   hasActiveFilters?: boolean;
 }
@@ -289,6 +300,7 @@ export function FilterBar({
   status,
   presetDateRange,
   extraSearchableFilters,
+  extraSelects,
   onClear,
   hasActiveFilters,
 }: FilterBarProps) {
@@ -494,6 +506,26 @@ export function FilterBar({
               emptyLabel={`No ${f.label.toLowerCase()} found`}
             />
           </div>
+        </div>
+      ))}
+      {extraSelects?.map((f) => (
+        <div key={f.label} className="flex flex-col gap-2">
+          <Label>{f.label}</Label>
+          <Select
+            value={f.value || (f.options[0]?.value ?? '')}
+            onValueChange={(v) => f.onChange(v === (f.options[0]?.value ?? '') ? '' : v)}
+          >
+            <SelectTrigger className={(f.width ?? 'w-[180px]') + ' shadow-none'}>
+              <SelectValue placeholder={f.placeholder ?? `All ${f.label}`} />
+            </SelectTrigger>
+            <SelectContent>
+              {f.options.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       ))}
       {hasActiveFilters && onClear && (

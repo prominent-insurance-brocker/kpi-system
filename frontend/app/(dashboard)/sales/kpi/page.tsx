@@ -674,7 +674,7 @@ export default function SalesKPIPage() {
             <h2 className="text-base font-semibold">Monthly Target</h2>
             {isAggregator && (
               <Select value={cardView} onValueChange={setCardView}>
-                <SelectTrigger className="h-7 w-[140px] text-xs shadow-none">
+                <SelectTrigger className="w-[140px] shadow-none">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -976,6 +976,19 @@ export default function SalesKPIPage() {
                   fetchPage: classOfInsuranceFetchPage,
                 },
               ]}
+              extraSelects={[
+                {
+                  label: 'Type',
+                  value: typeFilter,
+                  onChange: (v) => updateFilters({ entry_type: v, page: 1 }),
+                  // First option is the "clear" — selecting it clears the URL param.
+                  options: [
+                    { value: 'all', label: 'All' },
+                    ...TYPE_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label })),
+                  ],
+                  placeholder: 'All Types',
+                },
+              ]}
               hasActiveFilters={hasActiveFilters}
               onClear={() =>
                 updateFilters({
@@ -984,26 +997,6 @@ export default function SalesKPIPage() {
                 })
               }
             />
-
-            <div className="flex items-end gap-3">
-              <div className="flex flex-col gap-2">
-                <Label>Type</Label>
-                <Select
-                  value={typeFilter || 'all'}
-                  onValueChange={(v) => updateFilters({ entry_type: v === 'all' ? '' : v, page: 1 })}
-                >
-                  <SelectTrigger className="w-[180px] shadow-none">
-                    <SelectValue placeholder="All Types" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    {TYPE_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
 
             <div className="flex gap-4">
               <div className="flex-1 min-w-0">

@@ -1587,7 +1587,7 @@ function ClientRetentionTargetCard({
         <h2 className="text-base font-semibold">Monthly Target</h2>
         {showViewSelector && cardView && onCardViewChange && (
           <Select value={cardView} onValueChange={onCardViewChange}>
-            <SelectTrigger className="h-7 w-[140px] text-xs shadow-none">
+            <SelectTrigger className="w-[140px] shadow-none">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

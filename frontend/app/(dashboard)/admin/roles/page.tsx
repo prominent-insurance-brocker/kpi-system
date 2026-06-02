@@ -423,15 +423,10 @@ function RoleForm({
       <div className="space-y-2 ">
         <Label>Data Visibility</Label>
         <RadioGroup
-          value={formData.is_hod ? 'hod' : formData.data_visibility}
-          onValueChange={(value: 'all' | 'own' | 'hod') => {
-            if (value === 'hod') {
-              // HOD always sees all team data — store data_visibility='all' alongside is_hod=true.
-              setFormData({ ...formData, data_visibility: 'all', is_hod: true });
-            } else {
-              setFormData({ ...formData, data_visibility: value, is_hod: false });
-            }
-          }}
+          value={formData.data_visibility}
+          onValueChange={(value: 'all' | 'own') =>
+            setFormData({ ...formData, data_visibility: value })
+          }
           className="flex flex-col gap-4 mt-4 bg-[#F9F9F9] p-3 rounded-lg border border-[#E4E4E4]"
         >
           <div className="flex items-center space-x-2">
@@ -446,10 +441,30 @@ function RoleForm({
               See all data uploaded by everyone
             </Label>
           </div>
+        </RadioGroup>
+      </div>
+
+      {/* HOD lives here rather than in Data Visibility — it's an oversight
+          layer on top of the role, not a data-scope choice. Enabling it forces
+          data_visibility='all' since HOD always sees team data. */}
+      <div className="space-y-2">
+        <Label>Additional Options</Label>
+        <div className="mt-4 bg-[#F9F9F9] p-3 rounded-lg border border-[#E4E4E4]">
           <div className="flex items-start space-x-2">
-            <RadioGroupItem value="hod" id="hod" className="mt-0.5" />
+            <Checkbox
+              id="is-hod"
+              checked={formData.is_hod}
+              onCheckedChange={(checked) =>
+                setFormData({
+                  ...formData,
+                  is_hod: checked === true,
+                  data_visibility: checked === true ? 'all' : formData.data_visibility,
+                })
+              }
+              className="mt-0.5"
+            />
             <div className="flex flex-col">
-              <Label htmlFor="hod" className="font-normal cursor-pointer">
+              <Label htmlFor="is-hod" className="font-normal cursor-pointer">
                 HOD (Head of Department)
               </Label>
               <span className="text-xs text-muted-foreground">
@@ -457,7 +472,7 @@ function RoleForm({
               </span>
             </div>
           </div>
-        </RadioGroup>
+        </div>
       </div>
 
       <div>

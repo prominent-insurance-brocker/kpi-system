@@ -89,24 +89,29 @@ _WRITE_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
 
 
 class HodAwareMonthlyTargetMixin:
-    """Shared HOD behavior for renewal monthly-target viewsets.
+    """Shared HOD behavior for monthly-target viewsets.
 
-    Used by General Renewal, Motor Renewal, and Motor Fleet Renewal targets.
+    Used by General Renewal, Motor Renewal, Motor Fleet Renewal, and Sales KPI
+    targets.
 
     Non-HOD callers: identical to the original per-user-scoped behavior.
     HOD callers:
       * All writes (POST/PUT/PATCH/DELETE) return 403 via check_permissions.
-      * `list` returns one row per (year, month) with `clients_assigned`
-        summed across all users, plus `aggregated: True` and `id: None` so
-        the frontend can render read-only.
+      * `list` returns one row per (year, month) with the `aggregate_fields`
+        summed across all users, plus `aggregated: True` and `id: None` so the
+        frontend can render read-only.
       * `current` returns a single summed row for the current month, or `null`
         if no targets exist at all.
 
     Subclasses must set:
       * `model_class` — concrete *MonthlyTarget Django model
       * `serializer_class` — concrete *MonthlyTargetSerializer
+      * `aggregate_fields` (optional) — list of numeric field names to sum for
+        HOD aggregation. Defaults to `['clients_assigned']`; Sales KPI also
+        carries `premium_target`.
     """
     model_class = None
+    aggregate_fields: list[str] = ['clients_assigned']
 
     def check_permissions(self, request):
         super().check_permissions(request)
@@ -130,9 +135,10 @@ class HodAwareMonthlyTargetMixin:
         if not user_is_hod(request.user):
             return super().list(request, *args, **kwargs)
         qs = self.filter_queryset(self.get_queryset())
+        annotations = {f: Sum(f) for f in self.aggregate_fields}
         rows = (
             qs.values('year', 'month')
-            .annotate(clients_assigned=Sum('clients_assigned'))
+            .annotate(**annotations)
             .order_by('year', 'month')
         )
         return Response([
@@ -142,7 +148,7 @@ class HodAwareMonthlyTargetMixin:
                 'year': r['year'],
                 'month': r['month'],
                 'calculated_date': f"{r['year']:04d}-{r['month']:02d}-01",
-                'clients_assigned': r['clients_assigned'] or 0,
+                **{f: r[f] or 0 for f in self.aggregate_fields},
                 'created_at': None,
                 'updated_at': None,
                 'aggregated': True,
@@ -158,12 +164,15 @@ class HodAwareMonthlyTargetMixin:
         today = timezone.now().date()
         Model = self.model_class
         if user_is_hod(request.user):
-            total = (
+            agg = (
                 Model.objects
                 .filter(year=today.year, month=today.month)
-                .aggregate(total=Sum('clients_assigned'))['total']
+                .aggregate(**{f: Sum(f) for f in self.aggregate_fields})
             )
-            if total is None:
+            # If every aggregated field is None there are no rows at all for
+            # the month — return null so the frontend's "no current target"
+            # gate can trip as usual.
+            if all(agg[f] is None for f in self.aggregate_fields):
                 return Response(None)
             return Response({
                 'id': None,
@@ -171,7 +180,7 @@ class HodAwareMonthlyTargetMixin:
                 'year': today.year,
                 'month': today.month,
                 'calculated_date': today.replace(day=1).isoformat(),
-                'clients_assigned': total,
+                **{f: agg[f] or 0 for f in self.aggregate_fields},
                 'created_at': None,
                 'updated_at': None,
                 'aggregated': True,
@@ -1053,39 +1062,19 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
         })
 
 
-class SalesMonthlyTargetViewSet(viewsets.ModelViewSet):
+class SalesMonthlyTargetViewSet(HodAwareMonthlyTargetMixin, viewsets.ModelViewSet):
+    """Per-user Sales KPI target.
+
+    Non-HOD: each user only sees/edits their own targets; admins included.
+    HOD: writes blocked; reads return team-summed `premium_target` and
+    `clients_assigned` per (year, month) — see HodAwareMonthlyTargetMixin.
+    """
+    model_class = SalesMonthlyTarget
     serializer_class = SalesMonthlyTargetSerializer
     permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        # Monthly targets are PER-USER. Admins are users too — they have their
-        # own targets and must not see/edit other users' targets here. The
-        # data_visibility='all' rule applies to entries, not personal targets.
-        queryset = SalesMonthlyTarget.objects.filter(user=self.request.user)
-        year = self.request.query_params.get('year')
-        month = self.request.query_params.get('month')
-        if year:
-            queryset = queryset.filter(year=year)
-        if month:
-            queryset = queryset.filter(month=month)
-        return queryset
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-    @action(detail=False, methods=['get'], url_path='current')
-    def current(self, request):
-        from django.utils import timezone
-        today = timezone.now().date()
-        try:
-            target = SalesMonthlyTarget.objects.get(
-                user=request.user,
-                year=today.year,
-                month=today.month,
-            )
-            return Response(SalesMonthlyTargetSerializer(target).data)
-        except SalesMonthlyTarget.DoesNotExist:
-            return Response(None)
+    # Sales KPI tracks both premium and client targets; the other renewal
+    # modules only have clients_assigned (mixin default).
+    aggregate_fields = ['clients_assigned', 'premium_target']
 
 
 class MotorRenewalMonthlyTargetViewSet(HodAwareMonthlyTargetMixin, viewsets.ModelViewSet):

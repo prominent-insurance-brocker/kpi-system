@@ -268,6 +268,10 @@ export default function SalesKPIPage() {
     setCurrentTargetLoaded(true);
   }, [today]);
 
+  // HOD + super admin see team-aggregated targets on the side panel and the
+  // Monthly Target progress card. Everyone else sees their own.
+  const isTeamView = isHodUser || !!user?.is_staff;
+
   const fetchCardData = useCallback(async () => {
     if (!currentUserId) return;
     const targetResult = await fetchApi<{ results: SalesMonthlyTarget[] }>(
@@ -277,11 +281,14 @@ export default function SalesKPIPage() {
 
     const firstDay = `${cardYear}-${String(cardMonth).padStart(2, '0')}-01`;
     const lastDay = toLocalDateString(new Date(cardYear, cardMonth, 0));
+    // Match the target scope: team-aggregated rows pair with team-wide
+    // actuals, personal targets pair with personal actuals.
+    const userFilter = isTeamView ? '' : `&user_id=${currentUserId}`;
     const result = await fetchApi<{ results: SalesKPIEntry[] }>(
-      `/api/entries/sales-kpi/?date_from=${firstDay}&date_to=${lastDay}&user_id=${currentUserId}&page_size=1000`,
+      `/api/entries/sales-kpi/?date_from=${firstDay}&date_to=${lastDay}${userFilter}&page_size=1000`,
     );
     setCardEntries(result.data?.results ?? []);
-  }, [cardYear, cardMonth, currentUserId]);
+  }, [cardYear, cardMonth, currentUserId, isTeamView]);
 
   const fetchSheetTargets = useCallback(async () => {
     const result = await fetchApi<{ results: SalesMonthlyTarget[] }>(
@@ -987,7 +994,19 @@ export default function SalesKPIPage() {
         <div className="w-[340px] shrink-0 border rounded-lg overflow-hidden bg-white">
           <div className="flex items-start justify-between px-4 py-3 border-b">
             <div>
-              <h3 className="font-semibold text-base text-[#09090B]">Monthly Targets</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-base text-[#09090B]">Monthly Targets</h3>
+                <span
+                  className={
+                    'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ' +
+                    (isTeamView
+                      ? 'bg-indigo-100 text-indigo-700'
+                      : 'bg-emerald-100 text-emerald-700')
+                  }
+                >
+                  {isTeamView ? 'Team Target' : 'My Target'}
+                </span>
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Calendar year monthly KPI targets
               </p>

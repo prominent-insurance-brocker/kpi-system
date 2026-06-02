@@ -1197,7 +1197,19 @@ export function MotorEnquiryPage({
         <div className="w-[340px] shrink-0 border rounded-lg overflow-hidden bg-white">
           <div className="flex items-start justify-between px-4 py-3 border-b">
             <div>
-              <h3 className="font-semibold text-base text-[#09090B]">Monthly Targets</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-base text-[#09090B]">Monthly Targets</h3>
+                <span
+                  className={
+                    'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ' +
+                    (isHodUser || user?.is_staff
+                      ? 'bg-indigo-100 text-indigo-700'
+                      : 'bg-emerald-100 text-emerald-700')
+                  }
+                >
+                  {isHodUser || user?.is_staff ? 'Team Target' : 'My Target'}
+                </span>
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Calendar year client retention targets
               </p>

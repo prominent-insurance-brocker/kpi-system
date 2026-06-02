@@ -22,6 +22,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -49,11 +50,13 @@ import {
   Calendar,
   X,
   Check,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
+import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate } from '@/app/lib/date';
 import { useAuth } from '@/app/context/AuthContext';
@@ -72,6 +75,8 @@ import {
   getUsersForModule,
   getUsersForModulePage,
   getClassOfInsurancePage,
+  getRemarksContentTypes,
+  REMARKS_MODEL_NAME_BY_API_SLUG,
   type SalesKPIEntry,
   type SalesKPIStats,
   type SalesKPIStatus,
@@ -176,6 +181,17 @@ export default function SalesKPIPage() {
 
   const [statusModalEntry, setStatusModalEntry] = useState<SalesKPIEntry | null>(null);
   const [statusModalNext, setStatusModalNext] = useState<SalesKPIStatus | null>(null);
+
+  // Remarks side panel (same UX as the other modules — opens on the Notes
+  // button in each row). saleskpientry is registered in ALLOWED_REMARK_MODELS.
+  const [panelEntry, setPanelEntry] = useState<SalesKPIEntry | null>(null);
+  const [ctMap, setCtMap] = useState<Record<string, number>>({});
+  useEffect(() => {
+    getRemarksContentTypes().then((res) => {
+      if (res.data) setCtMap(res.data);
+    });
+  }, []);
+  const remarksContentTypeId = ctMap[REMARKS_MODEL_NAME_BY_API_SLUG['sales-kpi']] ?? null;
 
   // Filters (URL-synced)
   const page = Number(searchParams.get('page')) || 1;
@@ -449,6 +465,7 @@ export default function SalesKPIPage() {
     });
     if (!result.error) {
       toast.success('Enquiry deleted');
+      if (panelEntry?.id === entry.id) setPanelEntry(null);
       refreshAll();
     } else {
       toast.error(result.error || 'Failed to delete enquiry');
@@ -523,6 +540,20 @@ export default function SalesKPIPage() {
       key: 'added_by_name',
       header: 'Added by',
       render: (item: SalesKPIEntry) => <AddedByCell entry={item} />,
+    },
+    {
+      key: 'notes',
+      header: 'Notes',
+      render: (item: SalesKPIEntry) => (
+        <button
+          type="button"
+          onClick={() => setPanelEntry(item)}
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-[#F3F3F3]"
+          aria-label="View remarks"
+        >
+          <FileText className="h-4 w-4 text-[#71717A]" />
+        </button>
+      ),
     },
   ];
 
@@ -932,20 +963,33 @@ export default function SalesKPIPage() {
               </div>
             </div>
 
-            <DataTable
-              columns={columns}
-              data={entries}
-              totalCount={totalCount}
-              page={page}
-              pageSize={pageSize}
-              onPageChange={(p) => updateFilters({ page: p })}
-              onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })}
-              onEdit={openEditModal}
-              onDelete={handleDeleteEntry}
-              canEdit={(entry) => entry.is_editable}
-              canDelete={(entry) => entry.added_by === currentUserId}
-              isLoading={isLoading}
-            />
+            <div className="flex gap-4">
+              <div className="flex-1 min-w-0">
+                <DataTable
+                  columns={columns}
+                  data={entries}
+                  totalCount={totalCount}
+                  page={page}
+                  pageSize={pageSize}
+                  onPageChange={(p) => updateFilters({ page: p })}
+                  onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })}
+                  onEdit={openEditModal}
+                  onDelete={handleDeleteEntry}
+                  canEdit={(entry) => entry.is_editable}
+                  canDelete={(entry) => entry.added_by === currentUserId}
+                  isLoading={isLoading}
+                />
+              </div>
+              <RemarksPanel
+                contentTypeId={remarksContentTypeId}
+                objectId={panelEntry?.id ?? null}
+                entryLabel={panelEntry ? `Deals — ${panelEntry.pib_id}` : ''}
+                open={!!panelEntry}
+                onOpenChange={(open) => {
+                  if (!open) setPanelEntry(null);
+                }}
+              />
+            </div>
           </TabsContent>
         </Tabs>
 
@@ -1385,12 +1429,12 @@ function EntryModal({
 
           {!isEdit && (
             <div className="space-y-2">
-              <Label>Initial Remark</Label>
-              <Input
-                type="text"
+              <Label>Remark</Label>
+              <Textarea
                 placeholder="Optional"
                 value={initialRemark}
                 onChange={(e) => setInitialRemark(e.target.value)}
+                rows={3}
               />
             </div>
           )}

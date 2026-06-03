@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
 from .models import (
@@ -577,6 +579,13 @@ class SalesKPIEntrySerializer(BaseEntrySerializer):
     # Write-only: seed the first EntryRemark on create.
     initial_remark = serializers.CharField(
         write_only=True, required=False, allow_blank=True, default='',
+    )
+    # TED-492: Sales requires a Potential Premium. The DB column stays
+    # nullable (other modules share the same field shape and don't need this
+    # constraint), but the API enforces required + positive on this module.
+    potential_premium = serializers.DecimalField(
+        max_digits=15, decimal_places=2, required=True, allow_null=False,
+        min_value=Decimal('0.01'),
     )
 
     class Meta:

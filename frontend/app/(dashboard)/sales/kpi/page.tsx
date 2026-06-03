@@ -1424,10 +1424,17 @@ function EntryModal({
     [],
   );
 
+  // TED-492: Potential Premium is required and must be greater than zero.
+  const potentialPremiumValue = Number(potentialPremium);
+  const hasValidPotentialPremium =
+    potentialPremium.trim() !== '' &&
+    Number.isFinite(potentialPremiumValue) &&
+    potentialPremiumValue > 0;
   const canSubmit =
     customerName.trim() !== '' &&
     classOfInsuranceId !== null &&
     assigneeId !== null &&
+    hasValidPotentialPremium &&
     !isSubmitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1439,7 +1446,7 @@ function EntryModal({
       entry_type: entryType,
       class_of_insurance: classOfInsuranceId,
       assignee: assigneeId,
-      potential_premium: potentialPremium.trim() === '' ? null : potentialPremium.trim(),
+      potential_premium: potentialPremium.trim(),
     };
     if (isEdit) {
       payload.date = date;
@@ -1501,14 +1508,15 @@ function EntryModal({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Potential Premium</Label>
+              <Label>Potential Premium *</Label>
               <Input
                 type="number"
-                min={0}
+                min="0.01"
                 step={0.01}
                 placeholder="0.00"
                 value={potentialPremium}
                 onChange={(e) => setPotentialPremium(e.target.value)}
+                required
               />
             </div>
           </div>

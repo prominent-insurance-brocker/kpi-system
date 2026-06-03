@@ -51,7 +51,11 @@ class Command(BaseCommand):
         expiry_minutes = expiry_hours * 60
         dry_run = options['dry_run']
 
-        active_users = CustomUser.objects.filter(is_active=True)
+        # TED-477: respect the per-user `daily_email_enabled` opt-out. Admins
+        # can toggle this from the Users table without deactivating the user.
+        active_users = CustomUser.objects.filter(
+            is_active=True, daily_email_enabled=True,
+        )
         total = active_users.count()
 
         self.stdout.write(

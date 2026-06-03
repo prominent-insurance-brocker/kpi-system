@@ -39,7 +39,8 @@ class UserAdminSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = [
             'id', 'email', 'full_name',
-            'is_staff', 'is_active', 'role_id', 'role_name',
+            'is_staff', 'is_active', 'daily_email_enabled',
+            'role_id', 'role_name',
             'date_joined', 'last_login'
         ]
         read_only_fields = ['id', 'date_joined', 'last_login']
@@ -57,5 +58,6 @@ class UserAdminSerializer(serializers.ModelSerializer):
             role=role,
             is_staff=validated_data.get('is_staff', False),
             is_active=validated_data.get('is_active', True),
+            daily_email_enabled=validated_data.get('daily_email_enabled', True),
         )
         return user

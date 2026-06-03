@@ -154,6 +154,21 @@ export default function UsersPage() {
     }
   };
 
+  // TED-477: inline toggle in the table — PATCH just the daily_email_enabled
+  // flag and re-fetch so the row reflects the saved state.
+  const handleToggleDailyEmail = async (user: UserAdmin) => {
+    const next = !user.daily_email_enabled;
+    const result = await updateUser(user.id, { daily_email_enabled: next });
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(
+      next ? 'Daily email enabled' : 'Daily email disabled',
+    );
+    fetchUsers();
+  };
+
   const columns = [
     {
       key: 'name',
@@ -193,6 +208,30 @@ export default function UsersPage() {
       key: 'last_login',
       header: 'Last Login',
       render: (user: UserAdmin) => user.last_login ? formatDateTime(user.last_login) : 'Never',
+    },
+    {
+      key: 'daily_email_enabled',
+      header: 'Daily Email',
+      render: (user: UserAdmin) => (
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id={`daily-email-${user.id}`}
+            checked={user.daily_email_enabled}
+            onCheckedChange={() => handleToggleDailyEmail(user)}
+            aria-label={
+              user.daily_email_enabled
+                ? 'Disable daily email reminder'
+                : 'Enable daily email reminder'
+            }
+          />
+          <Label
+            htmlFor={`daily-email-${user.id}`}
+            className="text-xs text-muted-foreground cursor-pointer"
+          >
+            {user.daily_email_enabled ? 'On' : 'Off'}
+          </Label>
+        </div>
+      ),
     },
     {
       key: 'actions',
@@ -341,6 +380,8 @@ function UserForm({
     role_id: u?.role_id ?? (null as number | null),
     is_staff: u?.is_staff ?? false,
     is_active: u?.is_active ?? true,
+    // TED-477: opt the user IN to the daily login reminder by default.
+    daily_email_enabled: u?.daily_email_enabled ?? true,
   });
 
   // Lazy initializer reads the user prop on FIRST render so Radix Select
@@ -435,6 +476,16 @@ function UserForm({
           />
           <Label htmlFor="is_active">Active</Label>
         </div>
+      </div>
+      <div className="flex items-center space-x-2">
+        <Checkbox
+          id="daily_email_enabled"
+          checked={formData.daily_email_enabled}
+          onCheckedChange={(checked) =>
+            setFormData({ ...formData, daily_email_enabled: !!checked })
+          }
+        />
+        <Label htmlFor="daily_email_enabled">Daily email reminder</Label>
       </div>
       </div>
       <DialogFooter className='p-4 border-t border-[#E4E4E4] shrink-0'>

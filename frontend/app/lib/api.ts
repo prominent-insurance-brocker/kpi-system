@@ -103,6 +103,8 @@ export interface UserAdmin {
   full_name: string;
   is_staff: boolean;
   is_active: boolean;
+  // TED-477: per-user opt-out for the daily login-reminder email.
+  daily_email_enabled: boolean;
   role_id: number | null;
   role_name: string | null;
   date_joined: string;

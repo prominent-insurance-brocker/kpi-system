@@ -32,6 +32,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     full_name = models.CharField(max_length=100, blank=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    # TED-477: per-user opt-out for the send_daily_magic_links cron. Admins
+    # can flip this in the Users table without deactivating the account.
+    daily_email_enabled = models.BooleanField(default=True)
     date_joined = models.DateTimeField(auto_now_add=True)
     role = models.ForeignKey(
         'roles.Role',

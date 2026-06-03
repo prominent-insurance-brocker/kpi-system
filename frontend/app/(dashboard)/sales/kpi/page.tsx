@@ -279,12 +279,17 @@ export default function SalesKPIPage() {
   const fetchCurrentTarget = useCallback(async () => {
     const y = today.getFullYear();
     const m = today.getMonth() + 1;
+    // Pass the viewer's own id so aggregator viewers (HOD/admin) read their
+    // OWN current-month target, not the team aggregate. Backend ignores the
+    // param for non-aggregator viewers (it always filters by request.user).
+    const qs = new URLSearchParams({ year: String(y), month: String(m) });
+    if (currentUserId != null) qs.set('user_id', String(currentUserId));
     const result = await fetchApi<{ results: SalesMonthlyTarget[] }>(
-      `/api/entries/sales-kpi/monthly-targets/?year=${y}&month=${m}`,
+      `/api/entries/sales-kpi/monthly-targets/?${qs}`,
     );
     setCurrentTarget(result.data?.results?.[0] ?? null);
     setCurrentTargetLoaded(true);
-  }, [today]);
+  }, [today, currentUserId]);
 
   // TED-464 view selector. Drives both the Monthly Target progress card and
   // the actuals derivation below. Values:
@@ -446,10 +451,18 @@ export default function SalesKPIPage() {
 
   const isCurrentMonthCard =
     cardYear === today.getFullYear() && cardMonth === today.getMonth() + 1;
-  // HODs and super admins (is_staff) don't carry personal monthly targets,
-  // so the "Set this month's target" gate is skipped for both.
+  // No current-month target → auto-open the target-setup popup. HOD users are
+  // oversight-only and can't author targets, so they're excluded entirely.
   const noCurrentTarget =
-    !isHodUser && !user?.is_staff && currentTargetLoaded && !currentTarget;
+    !isHodUser && currentTargetLoaded && !currentTarget;
+  // The popup is only HARD-required (locked closed, blocks Add) for regular
+  // users. Admins see the same popup but can dismiss it and add entries
+  // without a personal target, since they typically work against team data.
+  const targetIsRequired = noCurrentTarget && !user?.is_staff;
+  // currentTarget is now scoped to the viewer's own user_id, so admins see
+  // their OWN current-month row instead of the team aggregate. For other
+  // months, fall back to cardTarget which is properly scoped via
+  // cardViewUserId since the Edit affordance is only reachable on 'my'.
   const targetForModal: SalesMonthlyTarget | null = isCurrentMonthCard ? currentTarget : cardTarget;
 
   useEffect(() => {
@@ -459,7 +472,9 @@ export default function SalesKPIPage() {
   // ── Mutations ─────────────────────────────────────────────────────────────
 
   const openAddModal = () => {
-    if (noCurrentTarget) {
+    // Only force the target-setup detour when the gate is hard-required.
+    // Admins can add entries without setting a personal target.
+    if (targetIsRequired) {
       setIsTargetModalOpen(true);
       return;
     }
@@ -686,8 +701,8 @@ export default function SalesKPIPage() {
             </Button>
             <Button
               onClick={openAddModal}
-              disabled={noCurrentTarget}
-              title={noCurrentTarget ? 'Set monthly targets first' : undefined}
+              disabled={targetIsRequired}
+              title={targetIsRequired ? 'Set monthly targets first' : undefined}
             >
               <Plus className="h-4 w-4 mr-2" /> New Deal
             </Button>
@@ -1088,7 +1103,7 @@ export default function SalesKPIPage() {
           year={isCurrentMonthCard ? today.getFullYear() : cardYear}
           month={isCurrentMonthCard ? today.getMonth() + 1 : cardMonth}
           existing={targetForModal}
-          required={noCurrentTarget}
+          required={targetIsRequired}
           onSaved={() => {
             fetchCurrentTarget();
             fetchCardData();

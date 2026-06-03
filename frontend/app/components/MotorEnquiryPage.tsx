@@ -429,10 +429,15 @@ export function MotorEnquiryPage({
 
   const fetchCurrentTarget = useCallback(async () => {
     if (!isRenewal) return;
-    const result = await getCurrentMotorRenewalMonthlyTarget(renewalModule);
+    // Pass the viewer's own id so aggregator viewers (HOD/admin) read their
+    // OWN current-month target, not the team aggregate. Backend ignores the
+    // param for non-aggregator viewers (it always filters by request.user).
+    const result = await getCurrentMotorRenewalMonthlyTarget(renewalModule, {
+      user_id: currentUserId ?? undefined,
+    });
     setCurrentTarget(result.data ?? null);
     setCurrentTargetLoaded(true);
-  }, [isRenewal, renewalModule]);
+  }, [isRenewal, renewalModule, currentUserId]);
 
   const fetchSheetTargets = useCallback(async () => {
     if (!isRenewal) return;
@@ -553,11 +558,14 @@ export function MotorEnquiryPage({
   }, [fetchTargetCard]);
 
   // True once the /current/ call resolves and finds no target for this month.
-  // Blocks all data-entry mutations on the page until cleared. HOD users and
-  // super admins (is_staff) see aggregated team data and don't carry personal
-  // monthly targets, so the gate is skipped for both.
+  // Triggers the auto-open of the target-setup popup. HODs are oversight-only
+  // and cannot author targets, so they're excluded entirely.
   const noCurrentTarget =
-    isRenewal && !isHodUser && !user?.is_staff && currentTargetLoaded && !currentTarget;
+    isRenewal && !isHodUser && currentTargetLoaded && !currentTarget;
+  // The popup is only HARD-required (locked closed, blocks Add) for regular
+  // users. Admins see the same popup but can dismiss it and add entries
+  // without a personal target, since they typically work against team data.
+  const targetIsRequired = noCurrentTarget && !user?.is_staff;
   const isCurrentMonthCard =
     targetCardYear === today.getFullYear() &&
     targetCardMonth === today.getMonth() + 1;
@@ -625,7 +633,9 @@ export function MotorEnquiryPage({
   };
 
   const openAddModal = () => {
-    if (noCurrentTarget) {
+    // Only force the target-setup detour when the gate is hard-required.
+    // Admins can add entries without setting a personal target.
+    if (targetIsRequired) {
       setIsTargetModalOpen(true);
       return;
     }
@@ -1124,8 +1134,8 @@ export function MotorEnquiryPage({
             />
             {!isHodUser && (
               <Button
-                disabled={noCurrentTarget}
-                title={noCurrentTarget ? "Set this month's retention target first" : undefined}
+                disabled={targetIsRequired}
+                title={targetIsRequired ? "Set this month's retention target first" : undefined}
                 onClick={openAddModal}
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -1224,19 +1234,22 @@ export function MotorEnquiryPage({
         <MotorRenewalTargetModal
           module={renewalModule}
           isOpen={isTargetModalOpen}
-          // While the user has no current-month target, force the modal onto
-          // the current month regardless of which card month is displayed —
-          // they must satisfy the gate before doing anything else.
-          year={noCurrentTarget ? today.getFullYear() : targetCardYear}
-          month={noCurrentTarget ? today.getMonth() + 1 : targetCardMonth}
+          // Required (non-admin) viewers are locked onto the current month so
+          // they satisfy the gate before doing anything else. Admins (skippable
+          // popup) get the card's currently-displayed month so manual Edits
+          // can target other months.
+          year={targetIsRequired ? today.getFullYear() : targetCardYear}
+          month={targetIsRequired ? today.getMonth() + 1 : targetCardMonth}
+          // For the viewer's own current month, prefer currentTarget (which is
+          // now scoped to the viewer's own user_id, so it's correct for admins
+          // too — the bug where this showed the team aggregate is gone). For
+          // other months use targetCard, which is properly scoped via
+          // cardViewUserId since the Edit affordance is only reachable on the
+          // 'my' scope.
           existing={
-            noCurrentTarget
-              ? currentTarget
-              : isCurrentMonthCard
-              ? currentTarget ?? targetCard
-              : targetCard
+            targetIsRequired || isCurrentMonthCard ? currentTarget : targetCard
           }
-          required={noCurrentTarget}
+          required={targetIsRequired}
           onClose={() => setIsTargetModalOpen(false)}
           onSaved={() => {
             setIsTargetModalOpen(false);

@@ -456,10 +456,18 @@ export async function updateMotorEnquiryRevisions(
 // module slug so the same functions service both routes.
 
 export async function getCurrentMotorRenewalMonthlyTarget(
-  module: MotorRenewalModule
+  module: MotorRenewalModule,
+  // Pass the viewer's own user_id so aggregator viewers (HOD/admin) get their
+  // OWN current-month row instead of the default team-aggregated response.
+  params: { user_id?: number | string } = {}
 ): Promise<ApiResponse<MotorRenewalMonthlyTarget | null>> {
+  const qs = new URLSearchParams();
+  if (params.user_id != null && params.user_id !== '') {
+    qs.set('user_id', String(params.user_id));
+  }
+  const suffix = qs.toString() ? `?${qs}` : '';
   return fetchApi<MotorRenewalMonthlyTarget | null>(
-    `/api/entries/${module}/monthly-targets/current/`
+    `/api/entries/${module}/monthly-targets/current/${suffix}`
   );
 }
 
@@ -605,11 +613,18 @@ export async function updateGeneralRenewalRevisions(
   );
 }
 
-export async function getCurrentGeneralRenewalMonthlyTarget(): Promise<
-  ApiResponse<GeneralRenewalMonthlyTarget | null>
-> {
+export async function getCurrentGeneralRenewalMonthlyTarget(
+  // Pass the viewer's own user_id so aggregator viewers (HOD/admin) get their
+  // OWN current-month row instead of the default team-aggregated response.
+  params: { user_id?: number | string } = {}
+): Promise<ApiResponse<GeneralRenewalMonthlyTarget | null>> {
+  const qs = new URLSearchParams();
+  if (params.user_id != null && params.user_id !== '') {
+    qs.set('user_id', String(params.user_id));
+  }
+  const suffix = qs.toString() ? `?${qs}` : '';
   return fetchApi<GeneralRenewalMonthlyTarget | null>(
-    '/api/entries/general-renewal/monthly-targets/current/'
+    `/api/entries/general-renewal/monthly-targets/current/${suffix}`
   );
 }
 

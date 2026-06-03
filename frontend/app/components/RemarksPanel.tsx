@@ -231,7 +231,7 @@ export function RemarksPanel({
                         )}
                       </div>
                       <div className="text-xs text-zinc-500 mt-1">
-                        {formatDateTimeShort(r.created_at)}
+                        Added on {formatDateTimeShort(r.created_at)}
                         {!r.can_edit && r.author_name ? ` · ${r.author_name}` : ''}
                       </div>
                     </>

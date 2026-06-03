@@ -117,7 +117,7 @@ const STATUS_BADGE_CLASSES: Record<SalesKPIStatus, string> = {
   lead: 'bg-blue-100 text-blue-800',
   in_progress: 'bg-amber-100 text-amber-800',
   won: 'bg-green-100 text-green-800',
-  lost: 'bg-gray-200 text-gray-700',
+  lost: 'bg-red-100 text-red-800',
 };
 
 function formatPremium(val: number | string | null | undefined): string {

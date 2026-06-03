@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -347,6 +348,9 @@ function UserForm({
   // Radix bug where the trigger label doesn't refresh after value prop change.
   const [formData, setFormData] = useState(() => buildInitial(user));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // TED-484: Ctrl+Enter / Cmd+Enter submits via the form's onSubmit handler.
+  const formRef = useRef<HTMLFormElement>(null);
+  useSubmitShortcut(formRef);
 
   // If the user prop changes while the form is mounted (rare, since the
   // Dialog unmounts content on close), resync.
@@ -363,7 +367,7 @@ function UserForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+    <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
       <div className="space-y-4 px-4 py-4 overflow-y-auto flex-1 min-h-0">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">

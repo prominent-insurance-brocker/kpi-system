@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate } from '@/app/lib/date';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
+import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { toast } from 'sonner';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { AddedByCell } from '@/app/components/KpiModulePage';
@@ -347,6 +348,9 @@ export default function MedicalClaimPage() {
 function EntryForm({ entry, onSave, onClose, error }: { entry: MedicalClaimEntry | null; onSave: (data: Partial<MedicalClaimEntry>) => void; onClose: () => void; error: string }) {
   const [formData, setFormData] = useState({ date: '', customer_name: '', status: 'claims_opened' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // TED-484: Ctrl+Enter / Cmd+Enter submits via the form's onSubmit handler.
+  const formRef = useRef<HTMLFormElement>(null);
+  useSubmitShortcut(formRef);
   useEffect(() => {
     if (entry) setFormData({ date: entry.date, customer_name: entry.customer_name, status: entry.status });
     else setFormData({ date: new Date().toISOString().split('T')[0], customer_name: '', status: 'claims_opened' });
@@ -366,7 +370,7 @@ function EntryForm({ entry, onSave, onClose, error }: { entry: MedicalClaimEntry
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 p-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 p-4">
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">{error}</div>}
       <FormDatePicker label="Date" value={formData.date} onChange={(date) => setFormData({ ...formData, date })} required />
       <div className="grid grid-cols-1 gap-4">

@@ -7,7 +7,7 @@
  * target) plus FK lookups for Type of Accident + Insurance Company.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -47,6 +47,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate } from '@/app/lib/date';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
+import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
@@ -935,6 +936,9 @@ function ClaimForm({
   // Add-mode only: seed the new claim's first comment.
   const [remarks, setRemarks] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // TED-484: Ctrl+Enter / Cmd+Enter submits via the form's onSubmit handler.
+  const formRef = useRef<HTMLFormElement>(null);
+  useSubmitShortcut(formRef);
 
   const sourceFetchPage = useCallback(
     async ({ search, page }: { search: string; page: number }) => {
@@ -1002,7 +1006,7 @@ function ClaimForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 p-4 max-h-[70vh] overflow-y-auto">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 p-4 max-h-[70vh] overflow-y-auto">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
           {error}

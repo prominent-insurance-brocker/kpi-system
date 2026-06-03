@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -308,6 +309,9 @@ function RoleForm({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modules, setModules] = useState<ModuleInfo[]>([]);
+  // TED-484: Ctrl+Enter / Cmd+Enter submits via the form's onSubmit handler.
+  const formRef = useRef<HTMLFormElement>(null);
+  useSubmitShortcut(formRef);
 
   useEffect(() => {
     getModules().then((result) => {
@@ -392,7 +396,7 @@ function RoleForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+    <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
       <div className="space-y-4 px-4 py-4 overflow-y-auto flex-1 min-h-0">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">

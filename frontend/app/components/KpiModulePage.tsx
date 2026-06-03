@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,7 @@ import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { formatDate } from '@/app/lib/date';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
+import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { toast } from 'sonner';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 
@@ -950,6 +951,9 @@ function EntryModal<T extends BaseModuleEntry>({
 
   const [formData, setFormData] = useState<Record<string, string>>(buildInitial);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // TED-484: Ctrl+Enter / Cmd+Enter submits via the form's onSubmit handler.
+  const formRef = useRef<HTMLFormElement>(null);
+  useSubmitShortcut(formRef, { enabled: isOpen });
 
   useEffect(() => {
     if (entry) {
@@ -985,7 +989,7 @@ function EntryModal<T extends BaseModuleEntry>({
             {entry ? 'Edit Entry' : 'Add New Entry'}
           </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
               {error}

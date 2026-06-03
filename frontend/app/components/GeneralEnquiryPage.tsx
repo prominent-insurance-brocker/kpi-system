@@ -19,7 +19,7 @@
  *   - Enquiries: filter bar + paginated DataTable + inline RemarksPanel
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -72,6 +72,7 @@ import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
 import { formatDate } from '@/app/lib/date';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
+import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import {
   fetchApi,
   getUsersForModule,
@@ -1394,6 +1395,9 @@ function EnquiryForm({
     typeof entry?.insurance_company === 'number' ? entry.insurance_company : null
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // TED-484: Ctrl+Enter / Cmd+Enter submits via the form's onSubmit handler.
+  const formRef = useRef<HTMLFormElement>(null);
+  useSubmitShortcut(formRef);
 
   const agentFetchPage = useCallback(
     async ({ search, page }: { search: string; page: number }) => {
@@ -1457,7 +1461,7 @@ function EnquiryForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 p-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 p-4">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
           {error}
@@ -1732,6 +1736,8 @@ function GeneralRenewalTargetModal({
   const [clientsAssigned, setClientsAssigned] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const formRef = useRef<HTMLFormElement>(null);
+  useSubmitShortcut(formRef, { enabled: isOpen });
 
   const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`;
   const isNew = !existing?.id;
@@ -1783,7 +1789,7 @@ function GeneralRenewalTargetModal({
             Enter your retention target for {monthLabel}.
           </p>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit} className="p-4 space-y-4">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
               {error}

@@ -298,8 +298,11 @@ export default function SalesKPIPage() {
   //   '<id>' → a specific user's data (admin/HOD individual toggle)
   // Regular users never see the dropdown and stay on a personal-only path.
   const isAggregator = isHodUser || !!user?.is_staff;
+  // HODs have no personal data so default them to 'team'. Everyone else
+  // (admins included) defaults to their own data — they can switch via the
+  // dropdown.
   const [cardView, setCardView] = useState<string>(() =>
-    isHodUser ? 'team' : user?.is_staff ? 'team' : 'my',
+    isHodUser ? 'team' : 'my',
   );
 
   // Resolve the view selection into a concrete user_id (or empty for team).

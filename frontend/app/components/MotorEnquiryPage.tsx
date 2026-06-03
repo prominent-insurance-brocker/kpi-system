@@ -322,8 +322,11 @@ export function MotorEnquiryPage({
   // TED-464 card view selector (renewal modules only, aggregator viewers only).
   // 'team' → aggregated; 'my' → admin's own data; '<id>' → a specific user.
   const isAggregator = isHodUser || !!user?.is_staff;
+  // HODs have no personal data so default them to 'team'. Everyone else
+  // (admins included) defaults to their own data — they can switch via the
+  // dropdown.
   const [cardView, setCardView] = useState<string>(() =>
-    isAggregator ? 'team' : 'my',
+    isHodUser ? 'team' : 'my',
   );
   const cardViewUserId =
     cardView === 'team'

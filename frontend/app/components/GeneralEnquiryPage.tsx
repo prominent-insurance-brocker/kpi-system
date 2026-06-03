@@ -241,8 +241,11 @@ export function GeneralEnquiryPage() {
   const [currentTarget, setCurrentTarget] = useState<GeneralRenewalMonthlyTarget | null>(null);
   // TED-464 card view selector (aggregator viewers only).
   const isAggregator = isHodUser || !!user?.is_staff;
+  // HODs have no personal data so default them to 'team'. Everyone else
+  // (admins included) defaults to their own data — they can switch via the
+  // dropdown.
   const [cardView, setCardView] = useState<string>(() =>
-    isAggregator ? 'team' : 'my',
+    isHodUser ? 'team' : 'my',
   );
   const cardViewUserId =
     cardView === 'team'

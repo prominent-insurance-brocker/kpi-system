@@ -8,7 +8,10 @@
       "Bash(./.venv/Scripts/python.exe -c \"import django; django.setup\\(\\) if False else None; from django.core.management import call_command; call_command\\('check'\\)\")",
       "Bash(serializers\")",
       "Bash(./.venv/Scripts/python.exe -c ' *)",
-      "Bash(git mv *)"
+      "Bash(git mv *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\tedwi\\\\OneDrive\\\\Desktop\\\\kpi-system\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(xargs grep -l \"GeneralNewMonthlyTarget\")"
     ]
   }
 }

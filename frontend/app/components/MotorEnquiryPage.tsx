@@ -329,6 +329,11 @@ export function MotorEnquiryPage({
       : cardView === 'my'
         ? (currentUserId != null ? String(currentUserId) : '')
         : cardView;
+  // Inline editing in the side panel is only allowed when the viewer is
+  // looking at their own targets. Backend perform_create binds to
+  // request.user, so team-aggregated or individual-user views must stay
+  // read-only to avoid creating mis-attributed rows.
+  const isPanelEditable = !isAggregator || cardView === 'my';
 
   // Right-side "Monthly Targets" panel — same UX as Sales KPI's panel.
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -427,9 +432,12 @@ export function MotorEnquiryPage({
 
   const fetchSheetTargets = useCallback(async () => {
     if (!isRenewal) return;
-    const result = await getMotorRenewalMonthlyTargets(renewalModule, { year: sheetYear });
+    const result = await getMotorRenewalMonthlyTargets(renewalModule, {
+      year: sheetYear,
+      user_id: cardViewUserId || undefined,
+    });
     setSheetTargets(result.data ?? []);
-  }, [isRenewal, renewalModule, sheetYear]);
+  }, [isRenewal, renewalModule, sheetYear, cardViewUserId]);
 
   const handleSheetInlineSave = async (month: number) => {
     const raw = sheetInlineValues[month];
@@ -561,6 +569,13 @@ export function MotorEnquiryPage({
   useEffect(() => {
     if (isPanelOpen) fetchSheetTargets();
   }, [isPanelOpen, sheetYear, fetchSheetTargets]);
+  // Cancel any in-progress month-row edit when the scope or year changes — the
+  // edited value would otherwise be orphaned against the freshly-fetched
+  // (possibly read-only) target set.
+  useEffect(() => {
+    setSheetEditingMonth(null);
+    setSheetInlineValues({});
+  }, [cardViewUserId, sheetYear]);
 
   // ── Mutations ────────────────────────────────────────────────────────────
   const refreshAfterMutation = () => {
@@ -1229,16 +1244,28 @@ export function MotorEnquiryPage({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-base text-[#09090B]">Monthly Targets</h3>
-                <span
-                  className={
-                    'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ' +
-                    (isHodUser || user?.is_staff
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'bg-emerald-100 text-emerald-700')
-                  }
-                >
-                  {isHodUser || user?.is_staff ? 'Team Target' : 'My Target'}
-                </span>
+                {isAggregator ? (
+                  <Select value={cardView} onValueChange={setCardView}>
+                    <SelectTrigger className="w-[140px] h-7 shadow-none text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {user?.is_staff && <SelectItem value="my">My Deals</SelectItem>}
+                      <SelectItem value="team">Team Deals</SelectItem>
+                      {moduleUsers
+                        .filter((u) => u.id !== currentUserId)
+                        .map((u) => (
+                          <SelectItem key={u.id} value={String(u.id)}>
+                            {u.full_name || u.email}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">
+                    My Target
+                  </span>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Calendar year client retention targets
@@ -1354,7 +1381,7 @@ export function MotorEnquiryPage({
                   {isSet ? (
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-semibold text-[#09090B]">{val}</span>
-                      {!isHodUser && (
+                      {!isHodUser && isPanelEditable && (
                         <button
                           onClick={enterEdit}
                           className="text-muted-foreground hover:text-[#09090B]"
@@ -1367,7 +1394,7 @@ export function MotorEnquiryPage({
                   ) : (
                     <div className="flex items-center gap-3">
                       <span className="text-sm italic text-muted-foreground">Not set</span>
-                      {!isHodUser && (
+                      {!isHodUser && isPanelEditable && (
                         <button
                           onClick={enterEdit}
                           className="text-muted-foreground hover:text-[#09090B]"

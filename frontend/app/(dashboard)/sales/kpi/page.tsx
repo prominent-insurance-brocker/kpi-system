@@ -303,6 +303,12 @@ export default function SalesKPIPage() {
         ? (currentUserId ? String(currentUserId) : '')
         : cardView;
 
+  // Inline editing in the side panel is only allowed when the viewer is
+  // looking at their own targets. Backend perform_create binds to
+  // request.user, so team-aggregated or individual-user views must stay
+  // read-only to avoid creating mis-attributed rows.
+  const isPanelEditable = !isAggregator || cardView === 'my';
+
   const fetchCardData = useCallback(async () => {
     if (!currentUserId) return;
     // Targets endpoint: aggregator + user_id → that user's row; aggregator
@@ -329,11 +335,13 @@ export default function SalesKPIPage() {
   }, [cardYear, cardMonth, currentUserId, cardViewUserId]);
 
   const fetchSheetTargets = useCallback(async () => {
+    const qs = new URLSearchParams({ year: String(sheetYear) });
+    if (cardViewUserId) qs.set('user_id', cardViewUserId);
     const result = await fetchApi<{ results: SalesMonthlyTarget[] }>(
-      `/api/entries/sales-kpi/monthly-targets/?year=${sheetYear}`,
+      `/api/entries/sales-kpi/monthly-targets/?${qs}`,
     );
     setSheetTargets(result.data?.results ?? []);
-  }, [sheetYear]);
+  }, [sheetYear, cardViewUserId]);
 
   // Wide-window fetch for the Tracker tab — pulls every entry visible to the
   // user (the backend already scopes by data_visibility) for the months the
@@ -384,6 +392,13 @@ export default function SalesKPIPage() {
   useEffect(() => {
     if (isPanelOpen) fetchSheetTargets();
   }, [isPanelOpen, sheetYear, fetchSheetTargets]);
+  // Cancel any in-progress month-row edit when the scope or year changes — the
+  // edited value would otherwise be orphaned against the freshly-fetched
+  // (possibly read-only) target set.
+  useEffect(() => {
+    setSheetEditingKey(null);
+    setSheetInlineValues({});
+  }, [cardViewUserId, sheetYear]);
   // Load the team-view user list once. The TrackerView's filter dropdown and
   // the per-user row labels both read from this.
   useEffect(() => {
@@ -1079,16 +1094,28 @@ export default function SalesKPIPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-base text-[#09090B]">Monthly Targets</h3>
-                <span
-                  className={
-                    'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ' +
-                    (isAggregator
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'bg-emerald-100 text-emerald-700')
-                  }
-                >
-                  {isAggregator ? 'Team Target' : 'My Target'}
-                </span>
+                {isAggregator ? (
+                  <Select value={cardView} onValueChange={setCardView}>
+                    <SelectTrigger className="w-[140px] h-7 shadow-none text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {user?.is_staff && <SelectItem value="my">My Deals</SelectItem>}
+                      <SelectItem value="team">Team Deals</SelectItem>
+                      {moduleUsers
+                        .filter((u) => u.id !== currentUserId)
+                        .map((u) => (
+                          <SelectItem key={u.id} value={String(u.id)}>
+                            {u.full_name || u.email}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">
+                    My Target
+                  </span>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Calendar year monthly KPI targets
@@ -1223,24 +1250,28 @@ export default function SalesKPIPage() {
                               <span className="text-sm font-semibold text-[#09090B]">
                                 {tab === 'premium' ? formatPremium(Number(val)) : val}
                               </span>
-                              <button
-                                onClick={enterEdit}
-                                className="text-muted-foreground hover:text-[#09090B]"
-                                aria-label={`Edit ${name} target`}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </button>
+                              {isPanelEditable && (
+                                <button
+                                  onClick={enterEdit}
+                                  className="text-muted-foreground hover:text-[#09090B]"
+                                  aria-label={`Edit ${name} target`}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                              )}
                             </div>
                           ) : (
                             <div className="flex items-center gap-3">
                               <span className="text-sm italic text-muted-foreground">Not set</span>
-                              <button
-                                onClick={enterEdit}
-                                className="text-muted-foreground hover:text-[#09090B]"
-                                aria-label={`Set ${name} target`}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </button>
+                              {isPanelEditable && (
+                                <button
+                                  onClick={enterEdit}
+                                  className="text-muted-foreground hover:text-[#09090B]"
+                                  aria-label={`Set ${name} target`}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>

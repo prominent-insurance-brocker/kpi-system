@@ -248,6 +248,11 @@ export function GeneralEnquiryPage() {
       : cardView === 'my'
         ? (currentUserId != null ? String(currentUserId) : '')
         : cardView;
+  // Inline editing in the side panel is only allowed when the viewer is
+  // looking at their own targets. Backend perform_create binds to
+  // request.user, so team-aggregated or individual-user views must stay
+  // read-only to avoid creating mis-attributed rows.
+  const isPanelEditable = !isAggregator || cardView === 'my';
 
   // Right-side "Monthly Targets" panel
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -338,9 +343,12 @@ export function GeneralEnquiryPage() {
   }, []);
 
   const fetchSheetTargets = useCallback(async () => {
-    const result = await getGeneralRenewalMonthlyTargets({ year: sheetYear });
+    const result = await getGeneralRenewalMonthlyTargets({
+      year: sheetYear,
+      user_id: cardViewUserId || undefined,
+    });
     setSheetTargets(result.data ?? []);
-  }, [sheetYear]);
+  }, [sheetYear, cardViewUserId]);
 
   const fetchTargetCard = useCallback(async () => {
     // TED-464 view scoping:
@@ -460,6 +468,13 @@ export function GeneralEnquiryPage() {
   useEffect(() => {
     if (isPanelOpen) fetchSheetTargets();
   }, [isPanelOpen, sheetYear, fetchSheetTargets]);
+  // Cancel any in-progress month-row edit when the scope or year changes — the
+  // edited value would otherwise be orphaned against the freshly-fetched
+  // (possibly read-only) target set.
+  useEffect(() => {
+    setSheetEditingMonth(null);
+    setSheetInlineValues({});
+  }, [cardViewUserId, sheetYear]);
 
   // ── Mutations ────────────────────────────────────────────────────────────
   const refreshAfterMutation = () => {
@@ -1109,16 +1124,28 @@ export function GeneralEnquiryPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-base text-[#09090B]">Monthly Targets</h3>
-                <span
-                  className={
-                    'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ' +
-                    (isHodUser || user?.is_staff
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'bg-emerald-100 text-emerald-700')
-                  }
-                >
-                  {isHodUser || user?.is_staff ? 'Team Target' : 'My Target'}
-                </span>
+                {isAggregator ? (
+                  <Select value={cardView} onValueChange={setCardView}>
+                    <SelectTrigger className="w-[140px] h-7 shadow-none text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {user?.is_staff && <SelectItem value="my">My Deals</SelectItem>}
+                      <SelectItem value="team">Team Deals</SelectItem>
+                      {moduleUsers
+                        .filter((u) => u.id !== currentUserId)
+                        .map((u) => (
+                          <SelectItem key={u.id} value={String(u.id)}>
+                            {u.full_name || u.email}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">
+                    My Target
+                  </span>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Calendar year client retention targets
@@ -1234,7 +1261,7 @@ export function GeneralEnquiryPage() {
                   {isSet ? (
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-semibold text-[#09090B]">{val}</span>
-                      {!isHodUser && (
+                      {!isHodUser && isPanelEditable && (
                         <button
                           onClick={enterEdit}
                           className="text-muted-foreground hover:text-[#09090B]"
@@ -1247,7 +1274,7 @@ export function GeneralEnquiryPage() {
                   ) : (
                     <div className="flex items-center gap-3">
                       <span className="text-sm italic text-muted-foreground">Not set</span>
-                      {!isHodUser && (
+                      {!isHodUser && isPanelEditable && (
                         <button
                           onClick={enterEdit}
                           className="text-muted-foreground hover:text-[#09090B]"

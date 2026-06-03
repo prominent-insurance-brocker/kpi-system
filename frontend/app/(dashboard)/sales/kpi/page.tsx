@@ -205,6 +205,7 @@ export default function SalesKPIPage() {
   const statusFilter = searchParams.get('status') || '';
   const classFilter = searchParams.get('class_of_insurance') || '';
   const typeFilter = searchParams.get('entry_type') || '';
+  const customerName = searchParams.get('customer_name') || '';
 
   const updateFilters = (updates: Record<string, string | number>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -254,6 +255,7 @@ export default function SalesKPIPage() {
     if (statusFilter) params.set('status', statusFilter);
     if (classFilter) params.set('class_of_insurance', classFilter);
     if (typeFilter) params.set('entry_type', typeFilter);
+    if (customerName) params.set('customer_name', customerName);
     const result = await fetchApi<{ results: SalesKPIEntry[]; count: number }>(
       `/api/entries/sales-kpi/?${params}`,
     );
@@ -262,7 +264,7 @@ export default function SalesKPIPage() {
     setIsLoading(false);
   }, [
     page, pageSize, dateFrom, dateTo, userId, assigneeId,
-    statusFilter, classFilter, typeFilter,
+    statusFilter, classFilter, typeFilter, customerName,
   ]);
 
   const fetchStats = useCallback(async () => {
@@ -692,7 +694,7 @@ export default function SalesKPIPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   const hasActiveFilters = !!(
-    dateFrom || dateTo || userId || assigneeId || statusFilter || classFilter || typeFilter
+    dateFrom || dateTo || userId || assigneeId || statusFilter || classFilter || typeFilter || customerName
   );
 
   return (
@@ -999,6 +1001,12 @@ export default function SalesKPIPage() {
 
           <TabsContent value="enquiries" className="mt-4 space-y-4">
             <FilterBar
+              search={{
+                value: customerName,
+                onChange: (v) => updateFilters({ customer_name: v, page: 1 }),
+                placeholder: 'Search by customer name…',
+                label: 'Customer',
+              }}
               dateRange={{
                 from: dateFrom,
                 to: dateTo,
@@ -1049,7 +1057,8 @@ export default function SalesKPIPage() {
               onClear={() =>
                 updateFilters({
                   dateFrom: '', dateTo: '', userId: '', assignee: '',
-                  status: '', class_of_insurance: '', entry_type: '', page: 1,
+                  status: '', class_of_insurance: '', entry_type: '',
+                  customer_name: '', page: 1,
                 })
               }
             />

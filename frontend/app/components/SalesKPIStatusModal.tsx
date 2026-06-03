@@ -179,17 +179,17 @@ export function SalesKPIStatusModal({
           {needsQuestions && (
             <div className="space-y-3">
               <YesNoRow
-                label="Sent for quote?"
+                label="Have you sent this deal for quote creation?"
                 value={sentForQuote}
                 onChange={setSentForQuote}
               />
               <YesNoRow
-                label="Quote received?"
+                label="Have you received a quote from the operations team?"
                 value={quoteReceived}
                 onChange={setQuoteReceived}
               />
               <YesNoRow
-                label="Submitted to client?"
+                label="Have you submitted the quote to the client?"
                 value={submittedToClient}
                 onChange={setSubmittedToClient}
               />

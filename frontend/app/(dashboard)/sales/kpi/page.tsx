@@ -303,11 +303,13 @@ export default function SalesKPIPage() {
         ? (currentUserId ? String(currentUserId) : '')
         : cardView;
 
-  // Inline editing in the side panel is only allowed when the viewer is
-  // looking at their own targets. Backend perform_create binds to
-  // request.user, so team-aggregated or individual-user views must stay
-  // read-only to avoid creating mis-attributed rows.
-  const isPanelEditable = !isAggregator || cardView === 'my';
+  // True when the target row currently displayed belongs to the viewer
+  // (regular user, or aggregator on the 'my' scope). Drives Edit-button
+  // visibility on the small card AND inline-edit affordances in the side
+  // panel — both must stay read-only when team-aggregated or another user's
+  // row is on screen, since the backend's perform_create always binds new
+  // rows to request.user and team aggregates have no id to PATCH against.
+  const isOwnTargetView = !isAggregator || cardView === 'my';
 
   const fetchCardData = useCallback(async () => {
     if (!currentUserId) return;
@@ -813,14 +815,16 @@ export default function SalesKPIPage() {
             >
               <Calendar className="h-3 w-3 mr-1" /> Today
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto"
-              onClick={() => setIsTargetModalOpen(true)}
-            >
-              <Pencil className="h-3 w-3 mr-1" /> Edit
-            </Button>
+            {isOwnTargetView && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto"
+                onClick={() => setIsTargetModalOpen(true)}
+              >
+                <Pencil className="h-3 w-3 mr-1" /> Edit
+              </Button>
+            )}
           </div>
         </div>
 
@@ -1250,7 +1254,7 @@ export default function SalesKPIPage() {
                               <span className="text-sm font-semibold text-[#09090B]">
                                 {tab === 'premium' ? formatPremium(Number(val)) : val}
                               </span>
-                              {isPanelEditable && (
+                              {isOwnTargetView && (
                                 <button
                                   onClick={enterEdit}
                                   className="text-muted-foreground hover:text-[#09090B]"
@@ -1263,7 +1267,7 @@ export default function SalesKPIPage() {
                           ) : (
                             <div className="flex items-center gap-3">
                               <span className="text-sm italic text-muted-foreground">Not set</span>
-                              {isPanelEditable && (
+                              {isOwnTargetView && (
                                 <button
                                   onClick={enterEdit}
                                   className="text-muted-foreground hover:text-[#09090B]"

@@ -329,11 +329,13 @@ export function MotorEnquiryPage({
       : cardView === 'my'
         ? (currentUserId != null ? String(currentUserId) : '')
         : cardView;
-  // Inline editing in the side panel is only allowed when the viewer is
-  // looking at their own targets. Backend perform_create binds to
-  // request.user, so team-aggregated or individual-user views must stay
-  // read-only to avoid creating mis-attributed rows.
-  const isPanelEditable = !isAggregator || cardView === 'my';
+  // True when the target row currently displayed belongs to the viewer
+  // (regular user, or aggregator on the 'my' scope). Drives Edit-button
+  // visibility on the small card AND inline-edit affordances in the side
+  // panel — both must stay read-only when team-aggregated or another user's
+  // row is on screen, since the backend's perform_create always binds new
+  // rows to request.user and team aggregates have no id to PATCH against.
+  const isOwnTargetView = !isAggregator || cardView === 'my';
 
   // Right-side "Monthly Targets" panel — same UX as Sales KPI's panel.
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -856,7 +858,7 @@ export function MotorEnquiryPage({
           month={targetCardMonth}
           target={targetCard}
           actuals={targetActuals}
-          isReadOnly={isHodUser}
+          isReadOnly={isHodUser || !isOwnTargetView}
           showViewSelector={isAggregator}
           showMyDealsOption={!!user?.is_staff}
           cardView={cardView}
@@ -1381,7 +1383,7 @@ export function MotorEnquiryPage({
                   {isSet ? (
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-semibold text-[#09090B]">{val}</span>
-                      {!isHodUser && isPanelEditable && (
+                      {!isHodUser && isOwnTargetView && (
                         <button
                           onClick={enterEdit}
                           className="text-muted-foreground hover:text-[#09090B]"
@@ -1394,7 +1396,7 @@ export function MotorEnquiryPage({
                   ) : (
                     <div className="flex items-center gap-3">
                       <span className="text-sm italic text-muted-foreground">Not set</span>
-                      {!isHodUser && isPanelEditable && (
+                      {!isHodUser && isOwnTargetView && (
                         <button
                           onClick={enterEdit}
                           className="text-muted-foreground hover:text-[#09090B]"

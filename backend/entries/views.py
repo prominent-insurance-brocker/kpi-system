@@ -1002,6 +1002,20 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
         )
         _seed_initial_remark(initial_remark, instance, self.request.user)
 
+    def destroy(self, request, *args, **kwargs):
+        """Block deletion once the deal has reached a terminal status —
+        won/lost rows feed dashboard aggregates and audit logs, so they
+        shouldn't disappear after the fact. Pre-terminal rows still follow
+        the base creator-only delete rule.
+        """
+        instance = self.get_object()
+        if instance.is_terminal:
+            return Response(
+                {'error': 'Cannot delete a won or lost enquiry.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
     @action(detail=True, methods=['patch'], url_path='update-status')
     def update_status(self, request, pk=None):
         """TED-447 workflow. Bypasses 30-min window + ownership; accepts the

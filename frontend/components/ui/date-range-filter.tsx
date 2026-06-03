@@ -26,14 +26,30 @@ interface DateRangeFilterProps {
   onChange: (dateFrom: string, dateTo: string) => void
 }
 
-type PresetKey = "all" | "today" | "last-week" | "last-two-weeks" | "last-month" | "custom"
+// TED-486: preset list standardised across every entry-date filter. The
+// motor-claim "Next call date" filter uses a separate FilterBar
+// `presetDateRange` control (future-dated follow-ups) and is intentionally
+// outside this list.
+type PresetKey =
+  | "all"
+  | "today"
+  | "1-day-ago"
+  | "3-days-ago"
+  | "this-week"
+  | "prev-week"
+  | "this-month"
+  | "prev-month"
+  | "custom"
 
 const presets: { key: PresetKey; label: string }[] = [
-  { key: "all", label: "All Time" },
+  { key: "all", label: "All time" },
   { key: "today", label: "Today" },
-  { key: "last-week", label: "Last Week" },
-  { key: "last-two-weeks", label: "Last Two Weeks" },
-  { key: "last-month", label: "Last Month" },
+  { key: "1-day-ago", label: "1 day ago" },
+  { key: "3-days-ago", label: "3 days ago" },
+  { key: "this-week", label: "This week" },
+  { key: "prev-week", label: "Previous week" },
+  { key: "this-month", label: "This month" },
+  { key: "prev-month", label: "Previous month" },
   { key: "custom", label: "Custom" },
 ]
 
@@ -51,20 +67,45 @@ const getDateRange = (preset: PresetKey): { from: string; to: string } => {
   switch (preset) {
     case "today":
       return { from: formatDate(today), to: formatDate(today) }
-    case "last-week": {
-      const weekAgo = new Date(today)
-      weekAgo.setDate(today.getDate() - 7)
-      return { from: formatDate(weekAgo), to: formatDate(today) }
+    case "1-day-ago": {
+      // Single-day filter — yesterday only, mirroring "Today".
+      const d = new Date(today)
+      d.setDate(today.getDate() - 1)
+      return { from: formatDate(d), to: formatDate(d) }
     }
-    case "last-two-weeks": {
-      const twoWeeksAgo = new Date(today)
-      twoWeeksAgo.setDate(today.getDate() - 14)
-      return { from: formatDate(twoWeeksAgo), to: formatDate(today) }
+    case "3-days-ago": {
+      const d = new Date(today)
+      d.setDate(today.getDate() - 3)
+      return { from: formatDate(d), to: formatDate(d) }
     }
-    case "last-month": {
-      const monthAgo = new Date(today)
-      monthAgo.setDate(today.getDate() - 30)
-      return { from: formatDate(monthAgo), to: formatDate(today) }
+    case "this-week": {
+      // Monday-start week. Range ends at today since future entries don't
+      // exist; user can still flip to Custom for an explicit Mon–Sun window.
+      const start = new Date(today)
+      const dayOfWeek = (start.getDay() + 6) % 7 // 0 = Mon … 6 = Sun
+      start.setDate(start.getDate() - dayOfWeek)
+      return { from: formatDate(start), to: formatDate(today) }
+    }
+    case "prev-week": {
+      // Monday-to-Sunday of the previous calendar week.
+      const end = new Date(today)
+      const dayOfWeek = (end.getDay() + 6) % 7
+      end.setDate(end.getDate() - dayOfWeek - 1) // Sunday of last week
+      const start = new Date(end)
+      start.setDate(end.getDate() - 6) // Monday of last week
+      return { from: formatDate(start), to: formatDate(end) }
+    }
+    case "this-month": {
+      // First of the current month → today (same rationale as this-week).
+      const start = new Date(today.getFullYear(), today.getMonth(), 1)
+      return { from: formatDate(start), to: formatDate(today) }
+    }
+    case "prev-month": {
+      // First → last day of the previous calendar month. Day 0 of the next
+      // month resolves to the last day of the prior month.
+      const start = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+      const end = new Date(today.getFullYear(), today.getMonth(), 0)
+      return { from: formatDate(start), to: formatDate(end) }
     }
     default:
       return { from: "", to: "" }
@@ -78,8 +119,17 @@ const detectPreset = (dateFrom: string, dateTo: string): PresetKey => {
   today.setHours(0, 0, 0, 0)
   const todayStr = formatDate(today)
 
-  // Check each preset
-  for (const preset of ["today", "last-week", "last-two-weeks", "last-month"] as PresetKey[]) {
+  // Check each preset — order matches the dropdown so a range that satisfies
+  // multiple presets resolves to the most specific one declared first.
+  for (const preset of [
+    "today",
+    "1-day-ago",
+    "3-days-ago",
+    "this-week",
+    "prev-week",
+    "this-month",
+    "prev-month",
+  ] as PresetKey[]) {
     const range = getDateRange(preset)
     if (range.from === dateFrom && range.to === dateTo) {
       return preset
@@ -230,7 +280,7 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
       if (from) return `From ${from}`
       if (to) return `To ${to}`
     }
-    return presets.find((p) => p.key === currentPreset)?.label || "All Time"
+    return presets.find((p) => p.key === currentPreset)?.label || "All time"
   }
 
   const showCustomButton = currentPreset === "custom" || isCustomMode

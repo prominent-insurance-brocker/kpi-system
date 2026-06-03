@@ -1057,7 +1057,11 @@ export default function SalesKPIPage() {
                   onEdit={openEditModal}
                   onDelete={handleDeleteEntry}
                   canEdit={(entry) => entry.is_editable}
-                  canDelete={(entry) => entry.added_by === currentUserId}
+                  canDelete={(entry) =>
+                    entry.added_by === currentUserId &&
+                    entry.status !== 'won' &&
+                    entry.status !== 'lost'
+                  }
                   isLoading={isLoading}
                 />
               </div>

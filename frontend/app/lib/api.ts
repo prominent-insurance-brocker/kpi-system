@@ -951,6 +951,8 @@ export interface SalesKPIStats {
   in_progress: number;
   won: number;
   lost: number;
+  // TED-494: won deals where entry_type === 'new'.
+  new_clients_acquired: number;
   potential_premium_total: number;
   converted_premium_total: number;
 }

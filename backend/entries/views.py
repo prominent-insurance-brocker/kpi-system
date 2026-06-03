@@ -1086,6 +1086,12 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
         lost = counts.get('lost', 0)
         total = lead + in_progress + won + lost
 
+        # TED-494: dashboard card showing won deals tied to a new-business
+        # entry. Renewal deals on the same module are excluded.
+        new_clients_acquired = queryset.filter(
+            status='won', entry_type='new',
+        ).count()
+
         def _sum(qs, field):
             r = qs.aggregate(s=Sum(field))['s']
             return float(r) if r is not None else 0.0
@@ -1099,6 +1105,7 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
             'in_progress': in_progress,
             'won': won,
             'lost': lost,
+            'new_clients_acquired': new_clients_acquired,
             'potential_premium_total': round(potential_total, 2),
             'converted_premium_total': round(converted_premium_total, 2),
         })

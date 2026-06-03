@@ -912,7 +912,7 @@ export default function SalesKPIPage() {
               <StatCard title="Won" value={stats?.won ?? 0} accent="text-green-600" />
               <StatCard title="Lost" value={stats?.lost ?? 0} accent="text-gray-600" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               <StatCard
                 title="Total Potential Premium"
                 value={formatPremium(stats?.potential_premium_total ?? 0)}
@@ -923,6 +923,11 @@ export default function SalesKPIPage() {
                 value={formatPremium(stats?.converted_premium_total ?? 0)}
                 accent="text-green-600"
                 isCurrency
+              />
+              <StatCard
+                title="New Clients Acquired"
+                value={stats?.new_clients_acquired ?? 0}
+                accent="text-green-600"
               />
             </div>
           </TabsContent>

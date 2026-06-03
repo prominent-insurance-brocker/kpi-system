@@ -69,6 +69,7 @@ import {
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate } from '@/app/lib/date';
+import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import {
   fetchApi,
   getUsersForModule,
@@ -572,6 +573,20 @@ export function GeneralNewEnquiryPage() {
     }
   };
 
+  const openAddModal = () => {
+    if (noCurrentTarget) {
+      setIsTargetModalOpen(true);
+      return;
+    }
+    setEditingEntry(null);
+    setModalError('');
+    setIsModalOpen(true);
+  };
+  // TED-483: "C" anywhere on the page triggers the same Add flow as the button.
+  useAddShortcut(openAddModal, {
+    enabled: !isHodUser && !isModalOpen && !isTargetModalOpen,
+  });
+
   const handleDelete = async (entry: MotorEnquiryEntry) => {
     const ok = await confirm({
       title: 'Delete enquiry?',
@@ -1051,15 +1066,7 @@ export function GeneralNewEnquiryPage() {
               <Button
                 disabled={noCurrentTarget}
                 title={noCurrentTarget ? "Set this month's retention target first" : undefined}
-                onClick={() => {
-                  if (noCurrentTarget) {
-                    setIsTargetModalOpen(true);
-                    return;
-                  }
-                  setEditingEntry(null);
-                  setModalError('');
-                  setIsModalOpen(true);
-                }}
+                onClick={openAddModal}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Enquiry

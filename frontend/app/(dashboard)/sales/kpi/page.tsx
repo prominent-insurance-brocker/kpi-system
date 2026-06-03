@@ -59,6 +59,7 @@ import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate } from '@/app/lib/date';
+import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import {
@@ -465,6 +466,9 @@ export default function SalesKPIPage() {
     setModalError('');
     setIsModalOpen(true);
   };
+  // TED-483: "C" anywhere on the page triggers the same Add flow as the button.
+  // Disabled while the entry modal is already open so it doesn't fight focus.
+  useAddShortcut(openAddModal, { enabled: !isModalOpen });
 
   const openEditModal = (entry: SalesKPIEntry) => {
     setEditingEntry(entry);
@@ -684,7 +688,7 @@ export default function SalesKPIPage() {
               disabled={noCurrentTarget}
               title={noCurrentTarget ? 'Set monthly targets first' : undefined}
             >
-              <Plus className="h-4 w-4 mr-2" /> Add Enquiry
+              <Plus className="h-4 w-4 mr-2" /> New Deal
             </Button>
           </div>
         </div>

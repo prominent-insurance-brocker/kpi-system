@@ -33,6 +33,7 @@ import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { formatDate } from '@/app/lib/date';
+import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { toast } from 'sonner';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 
@@ -1050,10 +1051,11 @@ export function KpiModulePage<T extends BaseModuleEntry>({
 }: KpiModulePageProps<T>) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { canSeeAllData, user } = useAuth();
+  const { canSeeAllData, user, isHOD } = useAuth();
   const confirm = useConfirm();
 
   const isAdmin = canSeeAllData();
+  const isHodUser = isHOD();
   const currentUserId = user?.id;
 
   const today = new Date();
@@ -1256,6 +1258,10 @@ export function KpiModulePage<T extends BaseModuleEntry>({
     setModalDate(date || todayStr);
     setIsModalOpen(true);
   };
+  // TED-483: "C" anywhere on the page triggers the same Add flow as the per-day
+  // Add buttons inside the tracker. HOD viewers can't write, so the shortcut is
+  // gated to authors only and suppressed while the modal is already open.
+  useAddShortcut(() => openAddModal(), { enabled: !isHodUser && !isModalOpen });
   const openEditModal = (entry: T) => {
     setEditingEntry(entry);
     setModalError('');

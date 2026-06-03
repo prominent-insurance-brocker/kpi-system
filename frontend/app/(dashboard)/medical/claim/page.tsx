@@ -14,6 +14,7 @@ import { Plus } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate } from '@/app/lib/date';
+import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { toast } from 'sonner';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { AddedByCell } from '@/app/components/KpiModulePage';
@@ -209,6 +210,15 @@ export default function MedicalClaimPage() {
     else { setError(result.error || 'Failed to save entry'); }
   };
 
+  const openAddModal = () => {
+    setEditingEntry(null);
+    setError('');
+    setIsModalOpen(true);
+  };
+  const canAdd = !isHodUser && (!userId || userId === String(currentUserId));
+  // TED-483: "C" anywhere on the page triggers the same Add flow as the button.
+  useAddShortcut(openAddModal, { enabled: canAdd && !isModalOpen });
+
   const handleDelete = async (entry: MedicalClaimEntry) => {
     const ok = await confirm({
       title: 'Delete entry?',
@@ -257,8 +267,8 @@ export default function MedicalClaimPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Medical Claim</h1>
-        {!isHodUser && (!userId || userId === String(currentUserId)) && (
-          <Button onClick={() => { setEditingEntry(null); setError(''); setIsModalOpen(true); }}><Plus className="h-4 w-4 mr-2" /> Add Entry</Button>
+        {canAdd && (
+          <Button onClick={openAddModal}><Plus className="h-4 w-4 mr-2" /> Add Entry</Button>
         )}
       </div>
       <FilterBar

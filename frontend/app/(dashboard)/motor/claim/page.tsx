@@ -46,6 +46,7 @@ import {
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate } from '@/app/lib/date';
+import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
@@ -350,6 +351,14 @@ export default function MotorClaimPage() {
     }
   };
 
+  const openAddModal = () => {
+    setEditingEntry(null);
+    setModalError('');
+    setIsModalOpen(true);
+  };
+  // TED-483: "C" anywhere on the page triggers the same Add flow as the button.
+  useAddShortcut(openAddModal, { enabled: !isHodUser && !isModalOpen });
+
   const handleDelete = async (entry: MotorClaimEntry) => {
     const ok = await confirm({
       title: 'Delete claim?',
@@ -507,13 +516,7 @@ export default function MotorClaimPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Motor Claim</h1>
         {!isHodUser && (
-          <Button
-            onClick={() => {
-              setEditingEntry(null);
-              setModalError('');
-              setIsModalOpen(true);
-            }}
-          >
+          <Button onClick={openAddModal}>
             <Plus className="h-4 w-4 mr-2" />
             Add Claim
           </Button>

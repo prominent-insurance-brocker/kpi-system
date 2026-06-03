@@ -71,6 +71,7 @@ import { useConfirm } from '@/app/components/ConfirmDialog';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
 import { formatDate } from '@/app/lib/date';
+import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import {
   fetchApi,
   getUsersForModule,
@@ -519,6 +520,20 @@ export function GeneralEnquiryPage() {
       setModalError(result.error || 'Failed to save enquiry');
     }
   };
+
+  const openAddModal = () => {
+    if (noCurrentTarget) {
+      setIsTargetModalOpen(true);
+      return;
+    }
+    setEditingEntry(null);
+    setModalError('');
+    setIsModalOpen(true);
+  };
+  // TED-483: "C" anywhere on the page triggers the same Add flow as the button.
+  useAddShortcut(openAddModal, {
+    enabled: !isHodUser && !isModalOpen && !isTargetModalOpen,
+  });
 
   const handleDelete = async (entry: GeneralRenewalEntry) => {
     const ok = await confirm({
@@ -995,15 +1010,7 @@ export function GeneralEnquiryPage() {
                 <Button
                   disabled={noCurrentTarget}
                   title={noCurrentTarget ? "Set this month's retention target first" : undefined}
-                  onClick={() => {
-                    if (noCurrentTarget) {
-                      setIsTargetModalOpen(true);
-                      return;
-                    }
-                    setEditingEntry(null);
-                    setModalError('');
-                    setIsModalOpen(true);
-                  }}
+                  onClick={openAddModal}
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Add Enquiry

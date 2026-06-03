@@ -351,6 +351,8 @@ export interface MotorEnquiryEntry {
   added_at: string;
   updated_at: string;
   is_editable: boolean;
+  // Count of EntryRemark rows. Tints the Notes icon indigo when > 0.
+  remark_count: number;
   // Index signature required for compatibility with shared BaseModuleEntry-based
   // components (PersonalDailyTracker, TrackerView).
   [key: string]: unknown;
@@ -548,6 +550,8 @@ export interface GeneralRenewalEntry {
   added_at: string;
   updated_at: string;
   is_editable: boolean;
+  // Count of EntryRemark rows. Tints the Notes icon indigo when > 0.
+  remark_count: number;
   // Index signature for compatibility with shared tracker components.
   [key: string]: unknown;
 }
@@ -701,6 +705,8 @@ export interface MotorClaimEntry {
   tat_display: string;
   allowed_transitions: string[];
   is_terminal: boolean;
+  // Count of EntryRemark rows. Tints the Notes icon indigo when > 0.
+  remark_count: number;
   // Index signature for compatibility with shared BaseModuleEntry-based
   // components (PersonalDailyTracker, TrackerView).
   [key: string]: unknown;
@@ -933,6 +939,8 @@ export interface SalesKPIEntry {
   added_at: string;
   updated_at: string;
   is_editable: boolean;
+  // Count of EntryRemark rows. Tints the Notes icon indigo when > 0.
+  remark_count: number;
   // Index signature for compatibility with shared tracker components.
   [key: string]: unknown;
 }

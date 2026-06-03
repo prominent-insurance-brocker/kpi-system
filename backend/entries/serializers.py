@@ -1,3 +1,4 @@
+from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
 from .models import (
     EntryRemark,
@@ -35,6 +36,9 @@ class BaseEntrySerializer(serializers.ModelSerializer):
     added_by_name = serializers.SerializerMethodField()
     on_behalf_of_name = serializers.SerializerMethodField()
     is_editable = serializers.SerializerMethodField()
+    # TED: surfaces whether the entry has any EntryRemark rows so the Notes
+    # column icon can be tinted indigo (#6366F1) on the frontend when > 0.
+    remark_count = serializers.SerializerMethodField()
 
     # Subclasses set this to False for claim modules (motor_claim, medical_claim).
     enforce_one_per_day = True
@@ -52,6 +56,13 @@ class BaseEntrySerializer(serializers.ModelSerializer):
         if not request or not request.user:
             return False
         return obj.can_edit(request.user)
+
+    def get_remark_count(self, obj):
+        # EntryRemark uses a GenericForeignKey, so there's no reverse manager
+        # on each entry model. Run a count per row — acceptable at the default
+        # page_size=20 in list views.
+        ct = ContentType.objects.get_for_model(obj.__class__)
+        return EntryRemark.objects.filter(content_type=ct, object_id=obj.pk).count()
 
     def validate_accuracy(self, value):
         if value < 0 or value > 100:
@@ -113,7 +124,7 @@ class GeneralNewEntrySerializer(BaseEntrySerializer):
             'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
-            'added_at', 'updated_at', 'is_editable',
+            'added_at', 'updated_at', 'is_editable', 'remark_count',
         ]
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
@@ -201,7 +212,7 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
             'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
-            'added_at', 'updated_at', 'is_editable',
+            'added_at', 'updated_at', 'is_editable', 'remark_count',
         ]
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
@@ -303,7 +314,7 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
             'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
-            'added_at', 'updated_at', 'is_editable',
+            'added_at', 'updated_at', 'is_editable', 'remark_count',
         ]
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
@@ -389,7 +400,7 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
             'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
-            'added_at', 'updated_at', 'is_editable',
+            'added_at', 'updated_at', 'is_editable', 'remark_count',
         ]
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
@@ -471,7 +482,7 @@ class MotorClaimEntrySerializer(BaseEntrySerializer):
             'next_call_date', 'garage_name', 'garage_number',
             'status', 'initial_remark',
             'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name',
-            'added_at', 'updated_at', 'is_editable',
+            'added_at', 'updated_at', 'is_editable', 'remark_count',
             'tat_display', 'allowed_transitions', 'is_terminal',
         ]
         read_only_fields = ['id', 'pib_id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']
@@ -583,7 +594,7 @@ class SalesKPIEntrySerializer(BaseEntrySerializer):
             'initial_remark',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
-            'added_at', 'updated_at', 'is_editable',
+            'added_at', 'updated_at', 'is_editable', 'remark_count',
         ]
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
@@ -710,7 +721,7 @@ class MotorFleetNewEntrySerializer(BaseEntrySerializer):
             'converted_premium',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
-            'added_at', 'updated_at', 'is_editable',
+            'added_at', 'updated_at', 'is_editable', 'remark_count',
         ]
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
@@ -787,7 +798,7 @@ class MotorFleetRenewalEntrySerializer(BaseEntrySerializer):
             'converted_premium',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
-            'added_at', 'updated_at', 'is_editable',
+            'added_at', 'updated_at', 'is_editable', 'remark_count',
         ]
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
@@ -890,7 +901,7 @@ class MedicalClaimEntrySerializer(BaseEntrySerializer):
         model = MedicalClaimEntry
         fields = [
             'id', 'pib_id', 'date', 'customer_name', 'status',
-            'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name', 'added_at', 'updated_at', 'is_editable',
+            'added_by', 'added_by_name', 'on_behalf_of', 'on_behalf_of_name', 'added_at', 'updated_at', 'is_editable', 'remark_count',
             'tat_display', 'allowed_transitions', 'is_terminal'
         ]
         read_only_fields = ['id', 'pib_id', 'added_by', 'on_behalf_of', 'added_at', 'updated_at']

@@ -500,7 +500,10 @@ export default function MotorClaimPage() {
         <button
           type="button"
           aria-label="View remarks"
-          className="p-1 rounded hover:bg-zinc-100 text-zinc-700"
+          className={
+            'p-1 rounded hover:bg-zinc-100 ' +
+            (item.remark_count > 0 ? 'text-[#6366F1]' : 'text-zinc-700')
+          }
           onClick={() => setPanelEntry(item)}
         >
           <FileText className="h-4 w-4" />

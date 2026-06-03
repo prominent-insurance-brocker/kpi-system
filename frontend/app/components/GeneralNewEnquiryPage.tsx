@@ -789,7 +789,12 @@ export function GeneralNewEnquiryPage() {
           className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-[#F3F3F3]"
           aria-label="View remarks"
         >
-          <FileText className="h-4 w-4 text-[#71717A]" />
+          <FileText
+            className={
+              'h-4 w-4 ' +
+              (Number(item.remark_count) > 0 ? 'text-[#6366F1]' : 'text-[#71717A]')
+            }
+          />
         </button>
       ),
     },

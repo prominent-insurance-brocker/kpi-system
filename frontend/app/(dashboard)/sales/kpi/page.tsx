@@ -90,8 +90,12 @@ interface SalesMonthlyTarget {
   user?: number;
   year: number;
   month: number;
+  // TED-496: shown in the UI as "New Business Premium Target".
   premium_target: string | null;
-  clients_assigned: number | null;
+  // TED-496: shown in the UI as "Renewal Premium Target". Column name is
+  // preserved server-side to avoid a rename-cascade; type is now decimal
+  // (string in DRF serialization) rather than integer.
+  clients_assigned: string | null;
 }
 
 const STATUS_OPTIONS: Array<{ value: SalesKPIStatus; label: string }> = [
@@ -435,24 +439,35 @@ export default function SalesKPIPage() {
 
   // ── Monthly target card aggregates ───────────────────────────────────────
 
+  // TED-496: "New Premium" = sum(converted_premium) for Won tickets where
+  // entry_type='new'. Renewal-type Won deals roll up into "Renewal Premium"
+  // below instead of mixing into the New Premium total.
   const cardPremiumActual = cardEntries
-    .filter((e) => e.status === 'won')
+    .filter((e) => e.status === 'won' && e.entry_type === 'new')
     .reduce((sum, e) => sum + Number(e.converted_premium ?? 0), 0);
-  // Client Retention counts only Renewal-type tickets that closed as Won —
-  // a New deal is acquisition, not retention.
-  const cardClientsActual = cardEntries.filter(
-    (e) => e.status === 'won' && e.entry_type === 'renewal',
-  ).length;
+  // TED-496: "Renewal Premium" = sum(converted_premium) for Won tickets of
+  // type 'renewal'. Replaces the previous Client Retention count.
+  const cardRenewalPremiumActual = cardEntries
+    .filter((e) => e.status === 'won' && e.entry_type === 'renewal')
+    .reduce((sum, e) => sum + Number(e.converted_premium ?? 0), 0);
   const premiumTarget = cardTarget?.premium_target != null ? Number(cardTarget.premium_target) : null;
-  const clientsTarget = cardTarget?.clients_assigned ?? null;
+  // clients_assigned column is reused to store the Renewal Premium Target —
+  // see SalesMonthlyTarget model note for the rationale.
+  const renewalPremiumTarget = cardTarget?.clients_assigned != null
+    ? Number(cardTarget.clients_assigned)
+    : null;
 
   const TARGET_MULTIPLIER = 1.5;
   const premiumMax = premiumTarget ? premiumTarget * TARGET_MULTIPLIER : 0;
-  const clientsMax = clientsTarget ? clientsTarget * TARGET_MULTIPLIER : 0;
+  const renewalPremiumMax = renewalPremiumTarget ? renewalPremiumTarget * TARGET_MULTIPLIER : 0;
   const premiumPct = premiumMax ? Math.min(100, (cardPremiumActual / premiumMax) * 100) : 0;
-  const clientsPct = clientsMax ? Math.min(100, (cardClientsActual / clientsMax) * 100) : 0;
+  const renewalPremiumPct = renewalPremiumMax
+    ? Math.min(100, (cardRenewalPremiumActual / renewalPremiumMax) * 100)
+    : 0;
   const premiumMarkerPct = premiumMax ? (premiumTarget! / premiumMax) * 100 : 0;
-  const clientsMarkerPct = clientsMax ? (clientsTarget! / clientsMax) * 100 : 0;
+  const renewalPremiumMarkerPct = renewalPremiumMax
+    ? (renewalPremiumTarget! / renewalPremiumMax) * 100
+    : 0;
 
   const isCurrentMonthCard =
     cardYear === today.getFullYear() && cardMonth === today.getMonth() + 1;
@@ -646,8 +661,8 @@ export default function SalesKPIPage() {
     if (Number(val) <= 0) {
       toast.error(
         tab === 'premium'
-          ? 'Premium target must be greater than 0'
-          : 'Assigned clients must be greater than 0',
+          ? 'New Business Premium Target must be greater than 0'
+          : 'Renewal Premium Target must be greater than 0',
       );
       return;
     }
@@ -720,7 +735,10 @@ export default function SalesKPIPage() {
         </div>
 
         {/* Monthly Target progress card */}
-        <div className="border rounded-lg p-4 space-y-2 bg-white w-[362px]">
+        {/* TED-496: card widened so the amount + "New Premium" label have
+            visual breathing room — previously the label was butted up
+            against the number. */}
+        <div className="border rounded-lg p-4 space-y-2 bg-white w-[440px]">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Monthly Target</h2>
             {isAggregator && (
@@ -744,9 +762,9 @@ export default function SalesKPIPage() {
           </div>
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-1">
-              <div className="flex items-baseline justify-between">
+              <div className="flex items-baseline justify-between gap-3">
                 <span className="text-xl font-bold">{formatPremium(cardPremiumActual)}</span>
-                <span className="text-sm text-muted-foreground">Premium</span>
+                <span className="text-sm text-muted-foreground">New Premium</span>
               </div>
               <div className="relative">
                 <div
@@ -779,37 +797,37 @@ export default function SalesKPIPage() {
               </div>
             </div>
             <div className="space-y-1">
-              <div className="flex items-baseline justify-between">
-                <span className="text-xl font-bold">{cardClientsActual.toLocaleString()}</span>
-                <span className="text-sm text-muted-foreground">Client Retention</span>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-xl font-bold">{formatPremium(cardRenewalPremiumActual)}</span>
+                <span className="text-sm text-muted-foreground">Renewal Premium</span>
               </div>
               <div className="relative">
                 <div
                   className={
-                    clientsTarget !== null && cardClientsActual >= clientsTarget
+                    renewalPremiumTarget !== null && cardRenewalPremiumActual >= renewalPremiumTarget
                       ? '[&_[data-slot=progress-indicator]]:bg-green-500'
                       : '[&_[data-slot=progress-indicator]]:bg-red-400'
                   }
                 >
-                  <Progress value={clientsPct} className="h-2 bg-gray-100" />
+                  <Progress value={renewalPremiumPct} className="h-2 bg-gray-100" />
                 </div>
-                {clientsTarget !== null && (
+                {renewalPremiumTarget !== null && (
                   <div
                     className="absolute top-0 h-2 w-0.5 bg-gray-400 rounded-full"
-                    style={{ left: `${clientsMarkerPct}%` }}
+                    style={{ left: `${renewalPremiumMarkerPct}%` }}
                   />
                 )}
               </div>
               <div className="relative">
                 <span className="text-xs text-muted-foreground">0</span>
-                {clientsTarget !== null && (
+                {renewalPremiumTarget !== null && (
                   <div
                     className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
-                    style={{ left: `${clientsMarkerPct}%` }}
+                    style={{ left: `${renewalPremiumMarkerPct}%` }}
                   >
                     <span className="text-blue-500 leading-none">▲</span>
                     <span className="text-muted-foreground">
-                      {Math.round(clientsTarget).toLocaleString()}
+                      {formatPremium(renewalPremiumTarget)}
                     </span>
                   </div>
                 )}
@@ -1205,13 +1223,13 @@ export default function SalesKPIPage() {
                   value="premium"
                   className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280]"
                 >
-                  Premium
+                  New Premium
                 </TabsTrigger>
                 <TabsTrigger
                   value="clients"
                   className="px-4 py-1.5 text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#09090B] data-[state=active]:border data-[state=active]:border-[#E4E4E4] data-[state=active]:shadow-none data-[state=inactive]:bg-transparent data-[state=inactive]:text-[#6B7280]"
                 >
-                  Clients Assigned
+                  Renewal Premium
                 </TabsTrigger>
               </TabsList>
               {(['premium', 'clients'] as const).map((tab) => (
@@ -1246,18 +1264,20 @@ export default function SalesKPIPage() {
                               {name} {sheetYear}
                             </h4>
                             <Label htmlFor={key} className="text-sm">
-                              {tab === 'premium' ? 'Premium Target' : 'Clients Assigned'}
+                              {tab === 'premium'
+                                ? 'New Business Premium Target'
+                                : 'Renewal Premium Target'}
                             </Label>
                             <Input
                               id={key}
                               type="number"
-                              min={tab === 'premium' ? '0.01' : '1'}
-                              step={tab === 'premium' ? '0.01' : '1'}
+                              min="0.01"
+                              step="0.01"
                               autoFocus
                               placeholder={
                                 tab === 'premium'
-                                  ? 'Enter premium target…'
-                                  : 'Enter clients assigned…'
+                                  ? 'Enter new premium target…'
+                                  : 'Enter renewal premium target…'
                               }
                               value={sheetInlineValues[key] ?? ''}
                               onChange={(e) =>
@@ -1298,7 +1318,7 @@ export default function SalesKPIPage() {
                           {isSet ? (
                             <div className="flex items-center gap-3">
                               <span className="text-sm font-semibold text-[#09090B]">
-                                {tab === 'premium' ? formatPremium(Number(val)) : val}
+                                {formatPremium(Number(val))}
                               </span>
                               {isOwnTargetView && (
                                 <button
@@ -1625,11 +1645,11 @@ function TargetModal({
     e.preventDefault();
     setError('');
     if (premiumTarget !== '' && Number(premiumTarget) <= 0) {
-      setError('Premium target must be greater than 0');
+      setError('New Business Premium Target must be greater than 0');
       return;
     }
     if (clientsAssigned !== '' && Number(clientsAssigned) <= 0) {
-      setError('Assigned clients must be greater than 0');
+      setError('Renewal Premium Target must be greater than 0');
       return;
     }
     setIsSubmitting(true);
@@ -1681,13 +1701,14 @@ function TargetModal({
               <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
               <p className="text-sm text-amber-800">
                 <span className="font-semibold">Action required for {monthLabel}</span> — Add your
-                premium target and assigned clients to continue using the software.
+                New Business Premium Target and Renewal Premium Target to continue using the
+                software.
               </p>
             </div>
           )}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <Label>Premium Target</Label>
+              <Label>New Business Premium Target</Label>
               <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
                 {monthLabel}
               </span>
@@ -1700,24 +1721,27 @@ function TargetModal({
               value={premiumTarget}
               onChange={(e) => setPremiumTarget(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">Total premium target for this month</p>
+            <p className="text-xs text-muted-foreground">
+              New business premium target for this month
+            </p>
           </div>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <Label>Assigned Clients</Label>
+              <Label>Renewal Premium Target</Label>
               <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
                 {monthLabel}
               </span>
             </div>
             <Input
               type="number"
-              min="1"
-              placeholder="e.g. 50"
+              min="0.01"
+              step="0.01"
+              placeholder="e.g. 150.00"
               value={clientsAssigned}
               onChange={(e) => setClientsAssigned(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Total existing clients assigned to you for this month.
+              Renewal premium target for this month
             </p>
           </div>
           <DialogFooter>

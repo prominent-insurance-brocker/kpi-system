@@ -1203,8 +1203,14 @@ class SalesMonthlyTarget(models.Model):
     # reconstructing it from the year+month integers each time.
     # Auto-derived from (year, month) on every save() — never set by hand.
     calculated_date = models.DateField(db_index=True)
+    # TED-496 renamed these labels in the UI:
+    # - premium_target is shown as "New Business Premium Target"
+    # - clients_assigned is shown as "Renewal Premium Target" and now stores
+    #   a currency amount (decimal) rather than an integer client count. The
+    #   column name is preserved to avoid a rename-cascade through
+    #   serializers / frontend; only its type and semantic meaning shift.
     premium_target = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
-    clients_assigned = models.PositiveIntegerField(null=True, blank=True)
+    clients_assigned = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

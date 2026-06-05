@@ -22,7 +22,7 @@ import {
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DateRangeFilter } from "@/components/ui/date-range-filter";
 import { cn } from "@/lib/utils";
-import { getUsersForModulePage } from "@/app/lib/api";
+import { getUsersForModulePage, getActiveUsersPage } from "@/app/lib/api";
 // (FormDatePicker import removed — replaced by the inline CustomRangePopover
 // below so the Custom branch matches Entry-date's single-trigger calendar UX.)
 
@@ -236,6 +236,9 @@ export interface FilterBarProps {
     value: string;
     onChange: (value: string) => void;
     moduleKey?: string; // defaults to 'sales_kpi'
+    // TED-513 opt-in: when true, pulls ALL active users instead of users
+    // scoped to `moduleKey`. moduleKey is ignored in this mode.
+    allUsers?: boolean;
     selectedLabel?: string | null;
     placeholder?: string;
     label?: string;
@@ -321,15 +324,18 @@ export function FilterBar({
   );
 
   const agentModuleKey = agent?.moduleKey ?? "sales_kpi";
+  const agentAllUsers = agent?.allUsers ?? false;
   const agentFetchPage = useCallback(
     async ({ search: q, page }: { search: string; page: number }) => {
-      const res = await getUsersForModulePage(agentModuleKey, { search: q, page });
+      const res = agentAllUsers
+        ? await getActiveUsersPage({ search: q, page })
+        : await getUsersForModulePage(agentModuleKey, { search: q, page });
       return {
         results: res.data?.results ?? [],
         hasMore: res.data?.has_more ?? false,
       };
     },
-    [agentModuleKey]
+    [agentModuleKey, agentAllUsers]
   );
 
   return (

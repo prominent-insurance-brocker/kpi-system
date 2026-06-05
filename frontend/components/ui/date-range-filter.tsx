@@ -156,6 +156,13 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
   const [tempSingle, setTempSingle] = React.useState<Date | undefined>(undefined)
   const [pickerMode, setPickerMode] = React.useState<PickerMode>("range")
   const [isCustomMode, setIsCustomMode] = React.useState(false)
+  // TED-507: remember the user's last explicit preset pick so we can render
+  // the right label when two presets resolve to the same date range. The
+  // canonical example: when today is in a month whose 1st falls on a Monday,
+  // "This week" and "This month" both span [1st-of-month, today]. Without
+  // this memory, detectPreset returns whichever preset comes first in the
+  // loop, which flips the trigger label after the user picks the other one.
+  const [lastPick, setLastPick] = React.useState<PresetKey | null>(null)
   const justOpenedRef = React.useRef(false)
 
   // When the parent clears the filter (props become empty), reset internal
@@ -167,11 +174,24 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
       setTempRange(undefined)
       setTempSingle(undefined)
       setIsCalendarOpen(false)
+      setLastPick(null)
     }
   }, [dateFrom, dateTo])
 
+  // Prefer the user's last explicit pick if its date math still matches the
+  // current bounds — covers the tied-range ambiguity above. Otherwise fall
+  // through to detection from the dates alone.
   const detectedPreset = detectPreset(dateFrom, dateTo)
-  const currentPreset = isCustomMode ? "custom" : detectedPreset
+  const lastPickStillMatches = (() => {
+    if (!lastPick || lastPick === "custom") return false
+    const r = getDateRange(lastPick)
+    return r.from === dateFrom && r.to === dateTo
+  })()
+  const currentPreset: PresetKey = isCustomMode
+    ? "custom"
+    : lastPickStillMatches
+      ? (lastPick as PresetKey)
+      : detectedPreset
 
   const handlePresetChange = (value: string) => {
     const preset = value as PresetKey
@@ -208,6 +228,9 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
       }, 50)
     } else {
       setIsCustomMode(false)
+      // TED-507: remember the explicit pick so the trigger label keeps
+      // showing what the user chose even when another preset's range ties.
+      setLastPick(preset)
       const range = getDateRange(preset)
       onChange(range.from, range.to)
     }

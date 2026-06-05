@@ -1204,6 +1204,17 @@ export function GeneralEnquiryPage() {
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
+              {/* TED: snap back to the current calendar year so the current
+                  month row is visible without paging. */}
+              <button
+                onClick={() => setSheetYear(today.getFullYear())}
+                disabled={sheetYear === today.getFullYear()}
+                className="h-7 inline-flex items-center gap-1 px-2 rounded-md border border-[#E4E4E4] bg-white hover:bg-accent text-xs disabled:opacity-50 disabled:cursor-default"
+                aria-label="Go to current year"
+              >
+                <Calendar className="h-3 w-3" />
+                Today
+              </button>
             </div>
           </div>
           <div>

@@ -311,6 +311,28 @@ export async function getUsersForModulePage(
   }>(`/api/auth/users/module-members/?${qs}`);
 }
 
+// TED-513: paginated + searchable list of ALL active users, regardless of
+// module permission. Same response shape as getUsersForModulePage so
+// SearchableSelect pickers can swap between the two without other changes.
+export async function getActiveUsersPage(
+  params: { search?: string; page?: number; page_size?: number } = {}
+): Promise<ApiResponse<{
+  results: { id: number; email: string; full_name: string }[];
+  count: number;
+  has_more: boolean;
+}>> {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set('search', params.search);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.page_size) qs.set('page_size', String(params.page_size));
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return fetchApi<{
+    results: { id: number; email: string; full_name: string }[];
+    count: number;
+    has_more: boolean;
+  }>(`/api/auth/users/active/${suffix}`);
+}
+
 // ─── Motor enquiry (motor_new / motor_renewal / general_new share the same
 //     shape — general_new omits chassis_no). ───────────────────────────────
 

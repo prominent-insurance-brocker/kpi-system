@@ -1162,6 +1162,16 @@ class SalesKPIEntry(BaseEntry):
     def is_terminal(self):
         return self.status in self.TERMINAL_STATUSES
 
+    def can_edit(self, user):
+        """Won/Lost deals are locked — once closed they feed dashboard
+        aggregates and the audit log, so the row shouldn't change after the
+        fact. Falls back to the normal ownership + 30-min window for
+        pre-terminal statuses.
+        """
+        if self.is_terminal:
+            return False
+        return super().can_edit(user)
+
 
 class SalesKPIStatusTransition(models.Model):
     """Records each status change for a Sales KPI enquiry."""

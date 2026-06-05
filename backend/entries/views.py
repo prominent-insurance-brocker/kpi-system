@@ -1016,6 +1016,20 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
             )
         return super().destroy(request, *args, **kwargs)
 
+    def update(self, request, *args, **kwargs):
+        """Mirror destroy(): block PATCH/PUT on Won/Lost deals. SalesKPIEntry
+        also overrides can_edit() so is_editable=False on terminal rows and
+        the UI hides the Edit affordance, but this guard rejects any direct
+        API call that bypasses the UI.
+        """
+        instance = self.get_object()
+        if instance.is_terminal:
+            return Response(
+                {'error': 'Cannot edit a won or lost enquiry.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().update(request, *args, **kwargs)
+
     @action(detail=True, methods=['patch'], url_path='update-status')
     def update_status(self, request, pk=None):
         """TED-447 workflow. Bypasses 30-min window + ownership; accepts the

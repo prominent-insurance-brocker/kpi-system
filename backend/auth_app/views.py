@@ -487,3 +487,52 @@ class UserViewSet(viewsets.ModelViewSet):
             'count': total,
             'has_more': offset + len(data) < total,
         })
+
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path='active',
+        permission_classes=[IsAuthenticated],
+    )
+    def active_users(self, request):
+        """TED-513: paginated, searchable list of ALL active users.
+
+        Same response shape as `module_members` so SearchableSelect can swap
+        between the two without consumer changes. Use this for pickers
+        (assignee, agent, source, etc.) when the picker should not be scoped
+        to a single module's permission set.
+        """
+        from django.db import models as db_models
+        search = (request.query_params.get('search') or '').strip()
+        try:
+            page = max(int(request.query_params.get('page', 1)), 1)
+            page_size = min(max(int(request.query_params.get('page_size', 20)), 1), 200)
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'page and page_size must be integers'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = (
+            CustomUser.objects
+            .filter(is_active=True)
+            .order_by('full_name', 'email', 'id')
+        )
+        if search:
+            qs = qs.filter(
+                db_models.Q(full_name__icontains=search) |
+                db_models.Q(email__icontains=search)
+            )
+
+        total = qs.count()
+        offset = (page - 1) * page_size
+        users = qs[offset:offset + page_size]
+        data = [
+            {'id': u.id, 'email': u.email, 'full_name': u.get_full_name()}
+            for u in users
+        ]
+        return Response({
+            'results': data,
+            'count': total,
+            'has_more': offset + len(data) < total,
+        })

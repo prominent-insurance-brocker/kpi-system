@@ -76,6 +76,7 @@ import {
   getSalesKPIStats,
   getUsersForModule,
   getUsersForModulePage,
+  getActiveUsersPage,
   getClassOfInsurancePage,
   getRemarksContentTypes,
   REMARKS_MODEL_NAME_BY_API_SLUG,
@@ -336,10 +337,16 @@ export default function SalesKPIPage() {
       month: String(cardMonth),
     });
     if (cardViewUserId) targetQs.set('user_id', cardViewUserId);
-    const targetResult = await fetchApi<{ results: SalesMonthlyTarget[] }>(
-      `/api/entries/sales-kpi/monthly-targets/?${targetQs}`,
-    );
-    setCardTarget(targetResult.data?.results?.[0] ?? null);
+    // TED-512: aggregator path (no user_id) returns a bare list of
+    // team-summed rows; per-user path returns the standard
+    // {results: [...]} paginated shape. Handle both.
+    const targetResult = await fetchApi<
+      { results: SalesMonthlyTarget[] } | SalesMonthlyTarget[]
+    >(`/api/entries/sales-kpi/monthly-targets/?${targetQs}`);
+    const targetRows = Array.isArray(targetResult.data)
+      ? targetResult.data
+      : (targetResult.data?.results ?? []);
+    setCardTarget(targetRows[0] ?? null);
 
     const firstDay = `${cardYear}-${String(cardMonth).padStart(2, '0')}-01`;
     const lastDay = toLocalDateString(new Date(cardYear, cardMonth, 0));
@@ -355,10 +362,18 @@ export default function SalesKPIPage() {
   const fetchSheetTargets = useCallback(async () => {
     const qs = new URLSearchParams({ year: String(sheetYear) });
     if (cardViewUserId) qs.set('user_id', cardViewUserId);
-    const result = await fetchApi<{ results: SalesMonthlyTarget[] }>(
-      `/api/entries/sales-kpi/monthly-targets/?${qs}`,
-    );
-    setSheetTargets(result.data?.results ?? []);
+    // TED-512: when admin views "Team Deals" (no user_id), the backend's
+    // HodAwareMonthlyTargetMixin returns aggregated rows as a bare list
+    // (sum across all users); per-user requests return the standard
+    // {results: [...]} paginated shape. Unwrap both so Team Deals shows
+    // the team-wide totals instead of "Not set" everywhere.
+    const result = await fetchApi<
+      { results: SalesMonthlyTarget[] } | SalesMonthlyTarget[]
+    >(`/api/entries/sales-kpi/monthly-targets/?${qs}`);
+    const rows = Array.isArray(result.data)
+      ? result.data
+      : (result.data?.results ?? []);
+    setSheetTargets(rows);
   }, [sheetYear, cardViewUserId]);
 
   // Wide-window fetch for the Tracker tab — pulls every entry visible to the
@@ -456,6 +471,19 @@ export default function SalesKPIPage() {
   const renewalPremiumTarget = cardTarget?.clients_assigned != null
     ? Number(cardTarget.clients_assigned)
     : null;
+
+  // TED-505: small-card button label reflects how many of the two targets
+  // (New Business Premium + Renewal Premium) are set for the displayed
+  // month: 0 → "Add", 1 → "Add / Edit", 2 → "Edit".
+  const targetSetCount =
+    (premiumTarget != null ? 1 : 0) +
+    (renewalPremiumTarget != null ? 1 : 0);
+  const targetButtonLabel =
+    targetSetCount === 0
+      ? 'Add'
+      : targetSetCount === 1
+        ? 'Add / Edit'
+        : 'Edit';
 
   const TARGET_MULTIPLIER = 1.5;
   const premiumMax = premiumTarget ? premiumTarget * TARGET_MULTIPLIER : 0;
@@ -870,7 +898,12 @@ export default function SalesKPIPage() {
                 className="ml-auto"
                 onClick={() => setIsTargetModalOpen(true)}
               >
-                <Pencil className="h-3 w-3 mr-1" /> Edit
+                {targetSetCount === 0 ? (
+                  <Plus className="h-3 w-3 mr-1" />
+                ) : (
+                  <Pencil className="h-3 w-3 mr-1" />
+                )}{' '}
+                {targetButtonLabel}
               </Button>
             )}
           </div>
@@ -1040,7 +1073,9 @@ export default function SalesKPIPage() {
               agent={{
                 value: assigneeId,
                 onChange: (v) => updateFilters({ assignee: v, page: 1 }),
-                moduleKey: 'sales_kpi',
+                // TED-513: Assignee filter matches the modal picker — lists
+                // every active user, not just users with sales_kpi access.
+                allUsers: true,
                 label: 'Assignee',
                 placeholder: 'All Assignees',
               }}
@@ -1093,7 +1128,11 @@ export default function SalesKPIPage() {
                   onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })}
                   onEdit={openEditModal}
                   onDelete={handleDeleteEntry}
-                  canEdit={(entry) => entry.is_editable}
+                  canEdit={(entry) =>
+                    entry.is_editable &&
+                    entry.status !== 'won' &&
+                    entry.status !== 'lost'
+                  }
                   canDelete={(entry) =>
                     entry.added_by === currentUserId &&
                     entry.status !== 'won' &&
@@ -1213,6 +1252,17 @@ export default function SalesKPIPage() {
                 aria-label="Next year"
               >
                 <ChevronRight className="h-4 w-4" />
+              </button>
+              {/* TED: snap back to the current calendar year so the current
+                  month row is visible without paging. */}
+              <button
+                onClick={() => setSheetYear(today.getFullYear())}
+                disabled={sheetYear === today.getFullYear()}
+                className="h-7 inline-flex items-center gap-1 px-2 rounded-md border border-[#E4E4E4] bg-white hover:bg-accent text-xs disabled:opacity-50 disabled:cursor-default"
+                aria-label="Go to current year"
+              >
+                <Calendar className="h-3 w-3" />
+                Today
               </button>
             </div>
           </div>
@@ -1431,9 +1481,12 @@ function EntryModal({
     setInitialRemark('');
   }, [isOpen, entry]);
 
+  // TED-513: Assignee picker lists ALL active users, not just those with
+  // sales_kpi module permission — sales reps often hand deals off to ops or
+  // other teams who aren't on the Deals permission list.
   const assigneeFetchPage = useCallback(
     async ({ search, page }: { search: string; page: number }) => {
-      const res = await getUsersForModulePage('sales_kpi', { search, page });
+      const res = await getActiveUsersPage({ search, page });
       return {
         results: res.data?.results ?? [],
         hasMore: res.data?.has_more ?? false,
@@ -1632,6 +1685,12 @@ function TargetModal({
 
   const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`;
   const isNew = !existing?.id;
+  // TED-506: the "Action required" yellow banner only makes sense for the
+  // CURRENT month — that's the gate that blocks the user from adding deals.
+  // Past or future months are just admin housekeeping; no urgency, no banner.
+  const today = new Date();
+  const isCurrentMonth =
+    year === today.getFullYear() && month === today.getMonth() + 1;
 
   useEffect(() => {
     if (isOpen) {
@@ -1688,7 +1747,11 @@ function TargetModal({
           <DialogTitle>
             {isNew ? `Set ${monthLabel} Targets` : `Edit ${monthLabel} Targets`}
           </DialogTitle>
-          <p className="text-sm text-muted-foreground">Enter your targets for {monthLabel}.</p>
+          <p className="text-sm text-muted-foreground">
+            {isNew
+              ? `Enter your targets for ${monthLabel}.`
+              : `Edit your targets for ${monthLabel}.`}
+          </p>
         </DialogHeader>
         <form ref={formRef} onSubmit={handleSave} className="space-y-4 p-4">
           {error && (
@@ -1696,7 +1759,7 @@ function TargetModal({
               {error}
             </div>
           )}
-          {isNew && (
+          {isNew && isCurrentMonth && (
             <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
               <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
               <p className="text-sm text-amber-800">

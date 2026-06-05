@@ -766,7 +766,7 @@ export default function SalesKPIPage() {
         {/* TED-496: card widened so the amount + "New Premium" label have
             visual breathing room — previously the label was butted up
             against the number. */}
-        <div className="border rounded-lg p-4 space-y-2 bg-white w-[440px]">
+        <div className="border rounded-lg p-4 space-y-2 bg-white w-[560px]">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Monthly Target</h2>
             {isAggregator && (
@@ -790,7 +790,7 @@ export default function SalesKPIPage() {
           </div>
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-1">
-              <div className="flex items-baseline justify-between gap-3">
+              <div className="flex items-baseline justify-between gap-6">
                 <span className="text-xl font-bold">{formatPremium(cardPremiumActual)}</span>
                 <span className="text-sm text-muted-foreground">New Premium</span>
               </div>
@@ -825,7 +825,7 @@ export default function SalesKPIPage() {
               </div>
             </div>
             <div className="space-y-1">
-              <div className="flex items-baseline justify-between gap-3">
+              <div className="flex items-baseline justify-between gap-6">
                 <span className="text-xl font-bold">{formatPremium(cardRenewalPremiumActual)}</span>
                 <span className="text-sm text-muted-foreground">Renewal Premium</span>
               </div>

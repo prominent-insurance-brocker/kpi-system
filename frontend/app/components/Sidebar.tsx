@@ -59,6 +59,15 @@ const navigation: NavItem[] = [
     icon: HeartPulse,
     children: [
       { name: 'Medical Claim', href: '/medical/claim', moduleKey: 'medical_claim' },
+      // TED: six placeholder sub-modules. Pages render Coming Soon for now;
+      // permissions can still be assigned via the Roles UI so we're ready
+      // when the data-entry surfaces ship.
+      { name: 'Medical Individual New', href: '/medical/individual-new', moduleKey: 'medical_individual_new' },
+      { name: 'Medical Individual Renewal', href: '/medical/individual-renewal', moduleKey: 'medical_individual_renewal' },
+      { name: 'Medical SME New', href: '/medical/sme-new', moduleKey: 'medical_sme_new' },
+      { name: 'Medical SME Renewal', href: '/medical/sme-renewal', moduleKey: 'medical_sme_renewal' },
+      { name: 'Medical Corporate New', href: '/medical/corporate-new', moduleKey: 'medical_corporate_new' },
+      { name: 'Medical Corporate Renewal', href: '/medical/corporate-renewal', moduleKey: 'medical_corporate_renewal' },
     ],
   },
   {

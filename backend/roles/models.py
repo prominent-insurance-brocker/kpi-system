@@ -44,6 +44,15 @@ class RoleModulePermission(models.Model):
         ('marine_new', 'Marine New'),
         ('marine_renewal', 'Marine Renewal'),
         ('medical_claim', 'Medical Claim'),
+        # TED: six placeholder medical sub-modules. Permissions configurable
+        # now so admins can pre-assign access; the data-entry pages render
+        # Coming Soon until the per-module surfaces ship.
+        ('medical_individual_new', 'Medical Individual New'),
+        ('medical_individual_renewal', 'Medical Individual Renewal'),
+        ('medical_sme_new', 'Medical SME New'),
+        ('medical_sme_renewal', 'Medical SME Renewal'),
+        ('medical_corporate_new', 'Medical Corporate New'),
+        ('medical_corporate_renewal', 'Medical Corporate Renewal'),
         ('settings', 'Settings'),
     ]
 

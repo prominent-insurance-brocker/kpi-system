@@ -214,8 +214,11 @@ function LookupTab({ resource }: { resource: LookupResource }) {
         </Button>
       </div>
 
-      <div className="bg-white border border-[#E4E4E4] rounded-2xl overflow-hidden">
-        <table className="w-full border-collapse">
+      {/* TED-515: overflow-auto + max-h gives users visible horizontal +
+          vertical scrollbars when content overflows. Was overflow-hidden
+          which silently clipped anything past the visible area. */}
+      <div className="bg-white border border-[#E4E4E4] rounded-2xl overflow-auto max-h-[calc(100vh-270px)]">
+        <table className="w-full min-w-max border-collapse">
           <thead>
             <tr className="bg-[#F3F3F3] h-11">
               <th className="px-5 text-left text-sm font-medium text-[#71717A]">Name</th>

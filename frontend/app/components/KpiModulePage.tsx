@@ -463,7 +463,8 @@ export function TrackerView<T extends BaseModuleEntry>({
         </div>
       </div>
 
-      <div className="overflow-auto max-h-[calc(100vh-15rem)] scrollbar-hide">
+      {/* TED-515: native scrollbars visible (was scrollbar-hide). */}
+      <div className="overflow-auto max-h-[calc(100vh-15rem)]">
         <table className="border-collapse w-full min-w-max">
           <thead className="sticky top-0 z-20">
             <tr className="border-b border-[#E4E4E4]">
@@ -696,7 +697,8 @@ export function WeeklyView<T extends BaseModuleEntry>({
         </div>
       </div>
 
-      <div className="overflow-auto scrollbar-hide" style={{ maxHeight: tableMaxHeight }}>
+      {/* TED-515: native scrollbars visible (was scrollbar-hide). */}
+      <div className="overflow-auto" style={{ maxHeight: tableMaxHeight }}>
         <table className="w-full min-w-max border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#F9F9F9] border-b border-[#E4E4E4]">

@@ -92,8 +92,9 @@ export function DataTable<T extends { id: number }>({
   return (
     <div className={`bg-white border border-[#E4E4E4] rounded-2xl ${height}`}>
       <div className="p-3 flex flex-col h-full">
-        {/* Table */}
-        <div className="flex-1 min-h-0 rounded-lg overflow-auto scrollbar-hide">
+        {/* Table — TED-515: show native scrollbars (was scrollbar-hide) so
+            users see when content overflows horizontally or vertically. */}
+        <div className="flex-1 min-h-0 rounded-lg overflow-auto">
           <table className="w-full min-w-max border-collapse">
             {/* Table Header */}
             <thead className="sticky top-0 z-10">

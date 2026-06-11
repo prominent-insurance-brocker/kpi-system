@@ -647,16 +647,25 @@ export default function SalesKPIPage() {
             value={item.status}
             onValueChange={(v) => handleStatusChange(item, v as SalesKPIStatus)}
           >
-            <SelectTrigger className="h-8 w-[140px] text-xs shadow-none">
+            <SelectTrigger className="h-8 w-[180px] text-xs shadow-none">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={item.status} disabled>
-                {STATUS_LABEL[item.status]}
-              </SelectItem>
-              {item.allowed_transitions.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {STATUS_LABEL[s]}
+              {/* TED-542: always render the five stages in the fixed pipeline
+                  order (Lead → Awaiting Quote → Shared with Client → Won →
+                  Lost), regardless of the current status. The current status
+                  stays in its canonical position (disabled); any status that
+                  isn't a valid transition is disabled too. */}
+              {STATUS_OPTIONS.map((opt) => (
+                <SelectItem
+                  key={opt.value}
+                  value={opt.value}
+                  disabled={
+                    opt.value === item.status ||
+                    !item.allowed_transitions.includes(opt.value)
+                  }
+                >
+                  {opt.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -991,10 +1000,11 @@ export default function SalesKPIPage() {
               hasActiveFilters={!!(dashFrom || dashTo || dashUserId)}
               onClear={() => { setDashFrom(''); setDashTo(''); setDashUserId(''); }}
             />
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <StatCard title="Total Enquiries" value={stats?.total ?? 0} />
               <StatCard title="Lead" value={stats?.lead ?? 0} accent="text-blue-600" />
-              <StatCard title="In Progress" value={stats?.in_progress ?? 0} accent="text-amber-600" />
+              <StatCard title="Awaiting Quote" value={stats?.awaiting_quote ?? 0} accent="text-amber-600" />
+              <StatCard title="Shared with Client" value={stats?.shared_with_client ?? 0} accent="text-indigo-600" />
               <StatCard title="Won" value={stats?.won ?? 0} accent="text-green-600" />
               <StatCard title="Lost" value={stats?.lost ?? 0} accent="text-gray-600" />
             </div>

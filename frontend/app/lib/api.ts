@@ -986,8 +986,10 @@ export interface SalesKPIEntry {
 export interface SalesKPIStats {
   total: number;
   lead: number;
-  // TED-533: combined count of the two non-terminal sub-stages
-  // (awaiting_quote + shared_with_client).
+  // TED-540: the two non-terminal sub-stages, each shown as its own card.
+  awaiting_quote: number;
+  shared_with_client: number;
+  // Rollup of the two stages above (awaiting_quote + shared_with_client).
   in_progress: number;
   won: number;
   lost: number;

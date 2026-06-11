@@ -1157,9 +1157,12 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
 
         counts = dict(queryset.values_list('status').annotate(n=Count('id')))
         lead = counts.get('lead', 0)
-        # TED-533: the single "In Progress" dashboard card now rolls up the two
-        # non-terminal sub-stages (Awaiting Quote + Shared with Client).
-        in_progress = counts.get('awaiting_quote', 0) + counts.get('shared_with_client', 0)
+        # TED-540: the dashboard shows the two non-terminal sub-stages as their
+        # own cards (Awaiting Quote, Shared with Client). `in_progress` is kept
+        # as their rollup for back-compat.
+        awaiting_quote = counts.get('awaiting_quote', 0)
+        shared_with_client = counts.get('shared_with_client', 0)
+        in_progress = awaiting_quote + shared_with_client
         won = counts.get('won', 0)
         lost = counts.get('lost', 0)
         total = lead + in_progress + won + lost
@@ -1180,6 +1183,8 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
         return Response({
             'total': total,
             'lead': lead,
+            'awaiting_quote': awaiting_quote,
+            'shared_with_client': shared_with_client,
             'in_progress': in_progress,
             'won': won,
             'lost': lost,

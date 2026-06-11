@@ -629,9 +629,11 @@ export default function SalesKPIPage() {
 
   // ── Columns ───────────────────────────────────────────────────────────────
 
+  // TED-543: Sales table column order — ID, Customer Name, Status, Notes,
+  // Potential Premium, Converted Premium, then the remaining columns as before,
+  // with Date moved to the end.
   const columns = [
     { key: 'pib_id', header: 'ID', render: (item: SalesKPIEntry) => item.pib_id },
-    { key: 'date', header: 'Date', render: (item: SalesKPIEntry) => formatDate(item.date) },
     { key: 'customer_name', header: 'Customer Name' },
     {
       key: 'status',
@@ -693,17 +695,6 @@ export default function SalesKPIPage() {
       ),
     },
     {
-      key: 'entry_type',
-      header: 'Type',
-      render: (item: SalesKPIEntry) => item.entry_type_display,
-    },
-    {
-      key: 'class_of_insurance',
-      header: 'Class of Insurance',
-      render: (item: SalesKPIEntry) => item.class_of_insurance_name || '—',
-    },
-    { key: 'assignee', header: 'Assignee', render: (item: SalesKPIEntry) => item.assignee_name },
-    {
       key: 'potential_premium',
       header: 'Potential Premium',
       render: (item: SalesKPIEntry) => formatPremium(item.potential_premium),
@@ -715,10 +706,22 @@ export default function SalesKPIPage() {
         item.converted_premium != null ? formatPremium(item.converted_premium) : '—',
     },
     {
+      key: 'entry_type',
+      header: 'Type',
+      render: (item: SalesKPIEntry) => item.entry_type_display,
+    },
+    {
+      key: 'class_of_insurance',
+      header: 'Class of Insurance',
+      render: (item: SalesKPIEntry) => item.class_of_insurance_name || '—',
+    },
+    { key: 'assignee', header: 'Assignee', render: (item: SalesKPIEntry) => item.assignee_name },
+    {
       key: 'added_by_name',
       header: 'Added by',
       render: (item: SalesKPIEntry) => <AddedByCell entry={item} />,
     },
+    { key: 'date', header: 'Date', render: (item: SalesKPIEntry) => formatDate(item.date) },
   ];
 
   // ── Side panel helpers (unchanged from prior page) ───────────────────────

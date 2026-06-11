@@ -10,8 +10,8 @@
  *
  *  - Won:  asks ONLY for Converted Premium (required, > 0). The three workflow
  *          answers are forced to Yes by the backend, so they aren't shown.
- *  - Lost: asks the three Yes/No workflow questions plus an OPTIONAL Converted
- *          Premium.
+ *  - Lost: asks the three Yes/No workflow questions only (TED-538: the Converted
+ *          Premium field is hidden — a lost deal has no converted premium).
  *
  * The backend serializer validates the same constraints — keep the gates in
  * sync if you add a transition variant.
@@ -22,7 +22,7 @@ import { AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -123,12 +123,13 @@ export function SalesKPIStatusModal({
   if (!entry || !nextStatus) return null;
 
   // TED-533: Won asks only for Converted Premium (the three workflow answers
-  // are forced to Yes server-side). Lost asks the three questions plus an
-  // optional Converted Premium.
+  // are forced to Yes server-side). Lost asks the three Yes/No questions only.
+  // TED-538: a lost deal has no converted premium, so the premium field shows
+  // for Won only.
   const isWon = nextStatus === 'won';
   const isLost = nextStatus === 'lost';
   const needsQuestions = isLost;
-  const needsPremium = isWon || isLost;
+  const needsPremium = isWon;
 
   const allAnswered =
     sentForQuote !== null && quoteReceived !== null && submittedToClient !== null;
@@ -211,14 +212,11 @@ export function SalesKPIStatusModal({
 
           {needsPremium && (
             <div className="space-y-2">
-              <Label>Converted Premium (AED){isWon ? ' *' : ''}</Label>
-              <Input
-                type="number"
-                min={isWon ? '0.01' : '0'}
-                step="0.01"
+              <Label>Converted Premium (AED) *</Label>
+              <NumberInput
                 placeholder="0.00"
                 value={convertedPremium}
-                onChange={(e) => setConvertedPremium(e.target.value)}
+                onValueChange={setConvertedPremium}
                 autoFocus={!needsQuestions}
               />
             </div>

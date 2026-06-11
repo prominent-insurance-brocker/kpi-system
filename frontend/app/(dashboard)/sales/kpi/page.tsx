@@ -23,6 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -1356,11 +1357,8 @@ export default function SalesKPIPage() {
                                 ? 'New Business Premium Target'
                                 : 'Renewal Premium Target'}
                             </Label>
-                            <Input
+                            <NumberInput
                               id={key}
-                              type="number"
-                              min="0.01"
-                              step="0.01"
                               autoFocus
                               placeholder={
                                 tab === 'premium'
@@ -1368,10 +1366,10 @@ export default function SalesKPIPage() {
                                   : 'Enter renewal premium target…'
                               }
                               value={sheetInlineValues[key] ?? ''}
-                              onChange={(e) =>
+                              onValueChange={(v) =>
                                 setSheetInlineValues((prev) => ({
                                   ...prev,
-                                  [key]: e.target.value,
+                                  [key]: v,
                                 }))
                               }
                               onKeyDown={(e) => {
@@ -1629,13 +1627,10 @@ function EntryModal({
             </div>
             <div className="space-y-2">
               <Label>Potential Premium *</Label>
-              <Input
-                type="number"
-                min="0.01"
-                step={0.01}
+              <NumberInput
                 placeholder="0.00"
                 value={potentialPremium}
-                onChange={(e) => setPotentialPremium(e.target.value)}
+                onValueChange={setPotentialPremium}
                 required
               />
             </div>
@@ -1814,13 +1809,10 @@ function TargetModal({
                 {monthLabel}
               </span>
             </div>
-            <Input
-              type="number"
-              min="0.01"
-              step="0.01"
+            <NumberInput
               placeholder="e.g. 150.00"
               value={premiumTarget}
-              onChange={(e) => setPremiumTarget(e.target.value)}
+              onValueChange={setPremiumTarget}
             />
             <p className="text-xs text-muted-foreground">
               New business premium target for this month
@@ -1833,13 +1825,10 @@ function TargetModal({
                 {monthLabel}
               </span>
             </div>
-            <Input
-              type="number"
-              min="0.01"
-              step="0.01"
+            <NumberInput
               placeholder="e.g. 150.00"
               value={clientsAssigned}
-              onChange={(e) => setClientsAssigned(e.target.value)}
+              onValueChange={setClientsAssigned}
             />
             <p className="text-xs text-muted-foreground">
               Renewal premium target for this month

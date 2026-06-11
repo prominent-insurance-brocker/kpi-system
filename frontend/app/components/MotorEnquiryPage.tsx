@@ -689,11 +689,15 @@ export function MotorEnquiryPage({
     entry: MotorEnquiryEntry,
     newStatus: SuccessStatus | 'lost',
     revisions?: number,
+    quotesCompared?: number,
+    coverage?: string,
     convertedPremium?: string,
   ) => {
     const result = await updateMotorEnquiryStatus(apiSlug, entry.id, {
       status: newStatus,
       ...(revisions != null ? { revisions } : {}),
+      ...(quotesCompared != null ? { quotes_compared: quotesCompared } : {}),
+      ...(coverage !== undefined ? { class_of_enquiry: coverage } : {}),
       ...(convertedPremium ? { converted_premium: convertedPremium } : {}),
     });
     if (result.data) {
@@ -1256,15 +1260,35 @@ export function MotorEnquiryPage({
       {pendingStatus && (
         <EnquiryStatusModal
           entry={pendingStatus.entry}
-          newStatus={pendingStatus.newStatus}
-          newStatusLabel={statusLabelFor(pendingStatus.newStatus)}
           needsConvertedPremium={pendingStatus.newStatus !== 'lost'}
+          coverage={{
+            label: 'Class of Enquiry',
+            helper: 'Confirm whether the finalized enquiry is Comprehensive or TPL.',
+            initialValue: pendingStatus.entry.class_of_enquiry ?? '',
+            renderControl: (value, onChange) => (
+              <Select
+                value={value || '__none__'}
+                onValueChange={(v) => onChange(v === '__none__' ? '' : v)}
+              >
+                <SelectTrigger className="w-full shadow-none">
+                  <SelectValue placeholder="Select class" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select enquiry</SelectItem>
+                  <SelectItem value="comprehensive">Comprehensive</SelectItem>
+                  <SelectItem value="tpl">TPL</SelectItem>
+                </SelectContent>
+              </Select>
+            ),
+          }}
           onCancel={() => setPendingStatus(null)}
-          onConfirm={({ revisions, converted_premium }) =>
+          onConfirm={({ revisions, quotes_compared, coverage, converted_premium }) =>
             applyStatusChange(
               pendingStatus.entry,
               pendingStatus.newStatus,
               revisions,
+              quotes_compared,
+              coverage,
               converted_premium,
             )
           }

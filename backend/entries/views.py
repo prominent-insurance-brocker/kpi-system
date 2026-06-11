@@ -373,6 +373,7 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_quotes_compared = serializer.validated_data.get('quotes_compared')
         new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
@@ -382,10 +383,18 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
             entry.revisions = new_revisions
             update_fields.append('revisions')
 
-        # TED-440: persist the converted-premium amount captured by the
-        # StatusTransitionModal. Only meaningful on the success transition;
-        # ignored for Lost even if the client sent a value.
-        if new_converted_premium is not None and new_status != 'lost':
+        if new_quotes_compared is not None:
+            entry.quotes_compared = new_quotes_compared
+            update_fields.append('quotes_compared')
+
+        # TED-530: confirm/adjust the class of insurance from the closing modal.
+        if 'class_of_insurance' in serializer.validated_data:
+            entry.class_of_insurance = serializer.validated_data['class_of_insurance']
+            update_fields.append('class_of_insurance')
+
+        # TED-440/TED-530: persist the converted-premium captured by the
+        # confirmation modal on every closing transition, including Lost.
+        if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
@@ -481,6 +490,7 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_quotes_compared = serializer.validated_data.get('quotes_compared')
         new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
@@ -490,10 +500,18 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
             entry.revisions = new_revisions
             update_fields.append('revisions')
 
-        # TED-440: persist the converted-premium amount captured by the
-        # StatusTransitionModal. Only meaningful on the success transition;
-        # ignored for Lost even if the client sent a value.
-        if new_converted_premium is not None and new_status != 'lost':
+        if new_quotes_compared is not None:
+            entry.quotes_compared = new_quotes_compared
+            update_fields.append('quotes_compared')
+
+        # TED-530: confirm/adjust the class of insurance from the closing modal.
+        if 'class_of_insurance' in serializer.validated_data:
+            entry.class_of_insurance = serializer.validated_data['class_of_insurance']
+            update_fields.append('class_of_insurance')
+
+        # TED-440/TED-530: persist the converted-premium captured by the
+        # confirmation modal on every closing transition, including Lost.
+        if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
@@ -678,6 +696,7 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_quotes_compared = serializer.validated_data.get('quotes_compared')
         new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
@@ -687,10 +706,18 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
             entry.revisions = new_revisions
             update_fields.append('revisions')
 
-        # TED-440: persist the converted-premium amount captured by the
-        # StatusTransitionModal. Only meaningful on the success transition;
-        # ignored for Lost even if the client sent a value.
-        if new_converted_premium is not None and new_status != 'lost':
+        if new_quotes_compared is not None:
+            entry.quotes_compared = new_quotes_compared
+            update_fields.append('quotes_compared')
+
+        # TED-530: confirm/adjust the coverage type from the closing modal.
+        if 'class_of_enquiry' in serializer.validated_data:
+            entry.class_of_enquiry = serializer.validated_data['class_of_enquiry']
+            update_fields.append('class_of_enquiry')
+
+        # TED-440/TED-530: persist the converted-premium captured by the
+        # confirmation modal on every closing transition, including Lost.
+        if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
@@ -788,6 +815,7 @@ class MotorRenewalEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_quotes_compared = serializer.validated_data.get('quotes_compared')
         new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
@@ -797,10 +825,18 @@ class MotorRenewalEntryViewSet(BaseEntryViewSet):
             entry.revisions = new_revisions
             update_fields.append('revisions')
 
-        # TED-440: persist the converted-premium amount captured by the
-        # StatusTransitionModal. Only meaningful on the success transition;
-        # ignored for Lost even if the client sent a value.
-        if new_converted_premium is not None and new_status != 'lost':
+        if new_quotes_compared is not None:
+            entry.quotes_compared = new_quotes_compared
+            update_fields.append('quotes_compared')
+
+        # TED-530: confirm/adjust the coverage type from the closing modal.
+        if 'class_of_enquiry' in serializer.validated_data:
+            entry.class_of_enquiry = serializer.validated_data['class_of_enquiry']
+            update_fields.append('class_of_enquiry')
+
+        # TED-440/TED-530: persist the converted-premium captured by the
+        # confirmation modal on every closing transition, including Lost.
+        if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
@@ -1224,6 +1260,7 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_quotes_compared = serializer.validated_data.get('quotes_compared')
         new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
@@ -1233,10 +1270,18 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
             entry.revisions = new_revisions
             update_fields.append('revisions')
 
-        # TED-440: persist the converted-premium amount captured by the
-        # StatusTransitionModal. Only meaningful on the success transition;
-        # ignored for Lost even if the client sent a value.
-        if new_converted_premium is not None and new_status != 'lost':
+        if new_quotes_compared is not None:
+            entry.quotes_compared = new_quotes_compared
+            update_fields.append('quotes_compared')
+
+        # TED-530: confirm/adjust the coverage type from the closing modal.
+        if 'class_of_enquiry' in serializer.validated_data:
+            entry.class_of_enquiry = serializer.validated_data['class_of_enquiry']
+            update_fields.append('class_of_enquiry')
+
+        # TED-440/TED-530: persist the converted-premium captured by the
+        # confirmation modal on every closing transition, including Lost.
+        if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
@@ -1334,6 +1379,7 @@ class MotorFleetRenewalEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_quotes_compared = serializer.validated_data.get('quotes_compared')
         new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
@@ -1343,10 +1389,18 @@ class MotorFleetRenewalEntryViewSet(BaseEntryViewSet):
             entry.revisions = new_revisions
             update_fields.append('revisions')
 
-        # TED-440: persist the converted-premium amount captured by the
-        # StatusTransitionModal. Only meaningful on the success transition;
-        # ignored for Lost even if the client sent a value.
-        if new_converted_premium is not None and new_status != 'lost':
+        if new_quotes_compared is not None:
+            entry.quotes_compared = new_quotes_compared
+            update_fields.append('quotes_compared')
+
+        # TED-530: confirm/adjust the coverage type from the closing modal.
+        if 'class_of_enquiry' in serializer.validated_data:
+            entry.class_of_enquiry = serializer.validated_data['class_of_enquiry']
+            update_fields.append('class_of_enquiry')
+
+        # TED-440/TED-530: persist the converted-premium captured by the
+        # confirmation modal on every closing transition, including Lost.
+        if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 

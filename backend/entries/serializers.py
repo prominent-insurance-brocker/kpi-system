@@ -24,6 +24,7 @@ from .models import (
     TypeOfAccident,
     InsuranceCompany,
     ClassOfInsurance,
+    MOTOR_CLASS_OF_ENQUIRY_CHOICES,
     SalesKPIEntry,
     SalesKPIStatusTransition,
     SalesMonthlyTarget,
@@ -157,9 +158,13 @@ class GeneralNewEntrySerializer(BaseEntrySerializer):
 class GeneralNewStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=GeneralNewEntry.STATUS_CHOICES)
     revisions = serializers.IntegerField(min_value=0, required=False)
-    # TED-440: captured when transitioning to the success status (Converted /
-    # Retained). The frontend's StatusTransitionModal collects it; ignored by
-    # the viewset on Lost transitions even if present.
+    # TED-530: the confirmation modal also confirms/edits these while closing.
+    quotes_compared = serializers.IntegerField(min_value=0, required=False)
+    class_of_insurance = serializers.PrimaryKeyRelatedField(
+        queryset=ClassOfInsurance.objects.all(), required=False, allow_null=True,
+    )
+    # TED-440/TED-530: converted premium is confirmed by the modal on every
+    # closing transition (Converted / Retained / Lost) and persisted as final.
     converted_premium = serializers.DecimalField(
         max_digits=15, decimal_places=2, required=False, min_value=0,
     )
@@ -245,9 +250,13 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
 class GeneralRenewalStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=GeneralRenewalEntry.STATUS_CHOICES)
     revisions = serializers.IntegerField(min_value=0, required=False)
-    # TED-440: captured when transitioning to the success status (Converted /
-    # Retained). The frontend's StatusTransitionModal collects it; ignored by
-    # the viewset on Lost transitions even if present.
+    # TED-530: the confirmation modal also confirms/edits these while closing.
+    quotes_compared = serializers.IntegerField(min_value=0, required=False)
+    class_of_insurance = serializers.PrimaryKeyRelatedField(
+        queryset=ClassOfInsurance.objects.all(), required=False, allow_null=True,
+    )
+    # TED-440/TED-530: converted premium is confirmed by the modal on every
+    # closing transition (Converted / Retained / Lost) and persisted as final.
     converted_premium = serializers.DecimalField(
         max_digits=15, decimal_places=2, required=False, min_value=0,
     )
@@ -347,9 +356,13 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
 class MotorNewStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=MotorNewEntry.STATUS_CHOICES)
     revisions = serializers.IntegerField(min_value=0, required=False)
-    # TED-440: captured when transitioning to the success status (Converted /
-    # Retained). The frontend's StatusTransitionModal collects it; ignored by
-    # the viewset on Lost transitions even if present.
+    # TED-530: the confirmation modal also confirms/edits these while closing.
+    quotes_compared = serializers.IntegerField(min_value=0, required=False)
+    class_of_enquiry = serializers.ChoiceField(
+        choices=MOTOR_CLASS_OF_ENQUIRY_CHOICES, required=False, allow_blank=True,
+    )
+    # TED-440/TED-530: converted premium is confirmed by the modal on every
+    # closing transition (Converted / Retained / Lost) and persisted as final.
     converted_premium = serializers.DecimalField(
         max_digits=15, decimal_places=2, required=False, min_value=0,
     )
@@ -433,9 +446,13 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
 class MotorRenewalStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=MotorRenewalEntry.STATUS_CHOICES)
     revisions = serializers.IntegerField(min_value=0, required=False)
-    # TED-440: captured when transitioning to the success status (Converted /
-    # Retained). The frontend's StatusTransitionModal collects it; ignored by
-    # the viewset on Lost transitions even if present.
+    # TED-530: the confirmation modal also confirms/edits these while closing.
+    quotes_compared = serializers.IntegerField(min_value=0, required=False)
+    class_of_enquiry = serializers.ChoiceField(
+        choices=MOTOR_CLASS_OF_ENQUIRY_CHOICES, required=False, allow_blank=True,
+    )
+    # TED-440/TED-530: converted premium is confirmed by the modal on every
+    # closing transition (Converted / Retained / Lost) and persisted as final.
     converted_premium = serializers.DecimalField(
         max_digits=15, decimal_places=2, required=False, min_value=0,
     )
@@ -782,9 +799,13 @@ class MotorFleetNewEntrySerializer(BaseEntrySerializer):
 class MotorFleetNewStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=MotorFleetNewEntry.STATUS_CHOICES)
     revisions = serializers.IntegerField(min_value=0, required=False)
-    # TED-440: captured when transitioning to the success status (Converted /
-    # Retained). The frontend's StatusTransitionModal collects it; ignored by
-    # the viewset on Lost transitions even if present.
+    # TED-530: the confirmation modal also confirms/edits these while closing.
+    quotes_compared = serializers.IntegerField(min_value=0, required=False)
+    class_of_enquiry = serializers.ChoiceField(
+        choices=MOTOR_CLASS_OF_ENQUIRY_CHOICES, required=False, allow_blank=True,
+    )
+    # TED-440/TED-530: converted premium is confirmed by the modal on every
+    # closing transition (Converted / Retained / Lost) and persisted as final.
     converted_premium = serializers.DecimalField(
         max_digits=15, decimal_places=2, required=False, min_value=0,
     )
@@ -868,9 +889,13 @@ class MotorFleetRenewalEntrySerializer(BaseEntrySerializer):
 class MotorFleetRenewalStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=MotorFleetRenewalEntry.STATUS_CHOICES)
     revisions = serializers.IntegerField(min_value=0, required=False)
-    # TED-440: captured when transitioning to the success status (Converted /
-    # Retained). The frontend's StatusTransitionModal collects it; ignored by
-    # the viewset on Lost transitions even if present.
+    # TED-530: the confirmation modal also confirms/edits these while closing.
+    quotes_compared = serializers.IntegerField(min_value=0, required=False)
+    class_of_enquiry = serializers.ChoiceField(
+        choices=MOTOR_CLASS_OF_ENQUIRY_CHOICES, required=False, allow_blank=True,
+    )
+    # TED-440/TED-530: converted premium is confirmed by the modal on every
+    # closing transition (Converted / Retained / Lost) and persisted as final.
     converted_premium = serializers.DecimalField(
         max_digits=15, decimal_places=2, required=False, min_value=0,
     )

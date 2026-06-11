@@ -451,11 +451,15 @@ export async function getMotorEnquiryStats(
 export async function updateMotorEnquiryStatus(
   module: MotorEnquiryModule,
   id: number,
-  // TED-440: converted_premium is captured by the StatusTransitionModal when
-  // the enquiry closes as Converted / Retained. Backend ignores it for Lost.
+  // TED-530: the confirmation modal confirms/edits all of these while closing.
+  // class_of_enquiry is used by the Motor modules, class_of_insurance by
+  // general-new; converted_premium is now saved on every transition incl. Lost.
   payload: {
     status: 'converted' | 'retained' | 'lost';
     revisions?: number;
+    quotes_compared?: number;
+    class_of_enquiry?: string;
+    class_of_insurance?: number | null;
     converted_premium?: string | number;
   }
 ): Promise<ApiResponse<MotorEnquiryEntry>> {
@@ -618,10 +622,12 @@ export async function getGeneralRenewalStats(
 
 export async function updateGeneralRenewalStatus(
   id: number,
-  // TED-440: converted_premium captured by the StatusTransitionModal.
+  // TED-530: the confirmation modal confirms/edits all of these while closing.
   payload: {
     status: 'retained' | 'lost';
     revisions?: number;
+    quotes_compared?: number;
+    class_of_insurance?: number | null;
     converted_premium?: string | number;
   }
 ): Promise<ApiResponse<GeneralRenewalEntry>> {

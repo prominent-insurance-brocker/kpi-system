@@ -621,15 +621,34 @@ export function GeneralNewEnquiryPage() {
     }
   };
 
+  // TED-530: page-scoped fetcher so the closing modal's Class-of-Insurance
+  // dropdown can page/search the same lookup the add/edit form uses.
+  const coverageFetchPage = useCallback(
+    async ({ search, page }: { search: string; page: number }) => {
+      const res = await getClassOfInsurancePage({ search, page });
+      return {
+        results: res.data?.results ?? [],
+        hasMore: res.data?.has_more ?? false,
+      };
+    },
+    [],
+  );
+
   const applyStatusChange = async (
     entry: MotorEnquiryEntry,
     newStatus: SuccessStatus | 'lost',
     revisions?: number,
+    quotesCompared?: number,
+    coverage?: string,
     convertedPremium?: string,
   ) => {
     const result = await updateMotorEnquiryStatus(apiSlug, entry.id, {
       status: newStatus,
       ...(revisions != null ? { revisions } : {}),
+      ...(quotesCompared != null ? { quotes_compared: quotesCompared } : {}),
+      ...(coverage !== undefined
+        ? { class_of_insurance: coverage ? Number(coverage) : null }
+        : {}),
       ...(convertedPremium ? { converted_premium: convertedPremium } : {}),
     });
     if (result.data) {
@@ -1186,15 +1205,41 @@ export function GeneralNewEnquiryPage() {
       {pendingStatus && (
         <EnquiryStatusModal
           entry={pendingStatus.entry}
-          newStatus={pendingStatus.newStatus}
-          newStatusLabel={statusLabelFor(pendingStatus.newStatus)}
           needsConvertedPremium={pendingStatus.newStatus !== 'lost'}
+          coverage={{
+            label: 'Class of Insurance',
+            helper: 'Confirm the class of insurance for this enquiry.',
+            initialValue:
+              typeof pendingStatus.entry.class_of_insurance === 'number'
+                ? String(pendingStatus.entry.class_of_insurance)
+                : '',
+            renderControl: (value, onChange) => (
+              <SearchableSelect
+                value={value || null}
+                onValueChange={(v) => onChange(v ?? '')}
+                placeholder="Select class"
+                emptyLabel="No classes found"
+                clearLabel="None"
+                selectedLabel={
+                  (pendingStatus.entry.class_of_insurance_display as
+                    | string
+                    | null
+                    | undefined) ?? null
+                }
+                getOptionValue={(c) => String(c.id)}
+                getOptionLabel={(c) => c.name}
+                fetchPage={coverageFetchPage}
+              />
+            ),
+          }}
           onCancel={() => setPendingStatus(null)}
-          onConfirm={({ revisions, converted_premium }) =>
+          onConfirm={({ revisions, quotes_compared, coverage, converted_premium }) =>
             applyStatusChange(
               pendingStatus.entry,
               pendingStatus.newStatus,
               revisions,
+              quotes_compared,
+              coverage,
               converted_premium,
             )
           }

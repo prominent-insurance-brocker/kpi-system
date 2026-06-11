@@ -1668,7 +1668,7 @@ function EnquiryForm({
               <SelectValue placeholder="Select class" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__none__">—</SelectItem>
+              <SelectItem value="__none__">Select enquiry</SelectItem>
               <SelectItem value="comprehensive">Comprehensive</SelectItem>
               <SelectItem value="tpl">TPL</SelectItem>
             </SelectContent>

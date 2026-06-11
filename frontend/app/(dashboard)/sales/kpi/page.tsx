@@ -66,6 +66,7 @@ import { formatPremium } from '@/app/lib/number';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { useAuth } from '@/app/context/AuthContext';
+import { canModifyEntry } from '@/app/lib/permissions';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import {
   AddedByCell,
@@ -639,7 +640,7 @@ export default function SalesKPIPage() {
       key: 'status',
       header: 'Status',
       render: (item: SalesKPIEntry) =>
-        item.is_terminal || item.allowed_transitions.length === 0 ? (
+        item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by) ? (
           <span
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE_CLASSES[item.status]}`}
           >
@@ -1178,7 +1179,8 @@ export default function SalesKPIPage() {
                   canEdit={(entry) =>
                     entry.is_editable &&
                     entry.status !== 'won' &&
-                    entry.status !== 'lost'
+                    entry.status !== 'lost' &&
+                    canModifyEntry(user, entry.added_by)
                   }
                   canDelete={(entry) =>
                     entry.added_by === currentUserId &&

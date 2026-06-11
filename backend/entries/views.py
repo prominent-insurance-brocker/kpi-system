@@ -295,6 +295,26 @@ class BaseEntryViewSet(viewsets.ModelViewSet):
         ):
             raise PermissionDenied('HOD users cannot create, modify, or delete entries.')
 
+    def check_object_permissions(self, request, obj):
+        """Admins (is_staff) and HODs are oversight roles: on entries they did
+        NOT create they are view-only — they cannot change the entry's status,
+        though they can still add comments. The creator keeps full control.
+
+        This runs for every action that calls get_object(), including the
+        per-module `update-status` @action. Edit/delete ownership is enforced
+        separately in update()/destroy(); regular (non-oversight) users are
+        unaffected here.
+        """
+        super().check_object_permissions(request, obj)
+        if (
+            self.action == 'update_status'
+            and (request.user.is_staff or user_is_hod(request.user))
+            and obj.added_by_id != request.user.id
+        ):
+            raise PermissionDenied(
+                'Admins and HODs can only change the status of entries they created.'
+            )
+
     def perform_create(self, serializer):
         """Always create as the requesting user. Admins cannot create on behalf of others."""
         serializer.save(added_by=self.request.user)

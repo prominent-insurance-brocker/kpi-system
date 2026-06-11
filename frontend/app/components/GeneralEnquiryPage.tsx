@@ -70,6 +70,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
+import { canModifyEntry } from '@/app/lib/permissions';
 import { formatDate } from '@/app/lib/date';
 import { formatPremium, formatNumber } from '@/app/lib/number';
 import { formatTatFromMinutes } from '@/app/lib/tat';
@@ -629,7 +630,7 @@ export function GeneralEnquiryPage() {
       key: 'status',
       header: 'Status',
       render: (item: GeneralRenewalEntry) =>
-        item.is_terminal || item.allowed_transitions.length === 0 ? (
+        item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by) ? (
           <StatusBadge status={item.status} label={statusLabelFor(item.status)} />
         ) : (
           <Select
@@ -1109,7 +1110,7 @@ export function GeneralEnquiryPage() {
                     setIsModalOpen(true);
                   }}
                   onDelete={handleDelete}
-                  canEdit={(entry) => entry.status === 'new' && entry.is_editable}
+                  canEdit={(entry) => entry.status === 'new' && entry.is_editable && canModifyEntry(user, entry.added_by)}
                   canDelete={(entry) =>
                     entry.added_by === currentUserId && entry.status === 'new'
                   }

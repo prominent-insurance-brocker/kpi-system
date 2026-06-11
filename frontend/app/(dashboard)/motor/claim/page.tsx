@@ -44,6 +44,7 @@ import {
   type ModuleUser,
 } from '@/app/components/KpiModulePage';
 import { useAuth } from '@/app/context/AuthContext';
+import { canModifyEntry } from '@/app/lib/permissions';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate } from '@/app/lib/date';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
@@ -429,7 +430,7 @@ export default function MotorClaimPage() {
       key: 'status',
       header: 'Status',
       render: (item: MotorClaimEntry) => {
-        if (item.is_terminal || item.allowed_transitions.length === 0) {
+        if (item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by)) {
           return <StatusBadge status={item.status} />;
         }
         return (
@@ -839,7 +840,7 @@ export default function MotorClaimPage() {
                   setIsModalOpen(true);
                 }}
                 onDelete={handleDelete}
-                canEdit={(entry) => entry.is_editable}
+                canEdit={(entry) => entry.is_editable && canModifyEntry(user, entry.added_by)}
                 canDelete={(entry) =>
                   entry.added_by === currentUserId && entry.status === 'claims_opened'
                 }

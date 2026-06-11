@@ -28,6 +28,7 @@ import {
 import { DataTable, Tooltip } from '@/app/components/DataTable';
 import { fetchApi, getUsersForModule } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
+import { canModifyEntry } from '@/app/lib/permissions';
 import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users, Info } from 'lucide-react';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
@@ -620,7 +621,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
   navStickyTop?: string;
   tableMaxHeight?: string;
 }) {
-  const { isHOD } = useAuth();
+  const { isHOD, user } = useAuth();
   const isHodUser = isHOD();
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -833,7 +834,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
 
               return entries.map((entry, eIdx) => {
                 const statusType: 'submitted' | 'not_submitted' | 'upcoming' = 'submitted';
-                const canEditEntry = entry.is_editable;
+                const canEditEntry = entry.is_editable && canModifyEntry(user, entry.added_by);
                 const canDeleteEntry = entry.added_by === currentUserId;
                 const showActions = canEditEntry || canDeleteEntry;
                 const entryRowBg = isSun
@@ -1373,7 +1374,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
           onPageSizeChange={(s) => updateParams({ pageSize: s, page: 1 })}
           onEdit={openEditModal}
           onDelete={handleDelete}
-          canEdit={(entry) => entry.is_editable}
+          canEdit={(entry) => entry.is_editable && canModifyEntry(user, entry.added_by)}
           canDelete={(entry) => entry.added_by === currentUserId}
           isLoading={dataLoading}
           height="h-full !border-0 !rounded-none"

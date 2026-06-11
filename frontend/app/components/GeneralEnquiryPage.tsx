@@ -641,6 +641,25 @@ export function GeneralEnquiryPage() {
         ),
     },
     {
+      key: 'notes',
+      header: 'Notes',
+      render: (item: GeneralRenewalEntry) => (
+        <button
+          type="button"
+          onClick={() => setPanelEntry(item)}
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-[#F3F3F3]"
+          aria-label="View remarks"
+        >
+          <FileText
+            className={
+              'h-4 w-4 ' +
+              (Number(item.remark_count) > 0 ? 'text-[#6366F1]' : 'text-[#71717A]')
+            }
+          />
+        </button>
+      ),
+    },
+    {
       key: 'class_of_insurance',
       header: 'Class of Insurance',
       render: (item: GeneralRenewalEntry) =>
@@ -730,25 +749,6 @@ export function GeneralEnquiryPage() {
       key: 'added_at',
       header: 'Added on',
       render: (item: GeneralRenewalEntry) => formatDate(item.added_at.split('T')[0]),
-    },
-    {
-      key: 'notes',
-      header: 'Notes',
-      render: (item: GeneralRenewalEntry) => (
-        <button
-          type="button"
-          onClick={() => setPanelEntry(item)}
-          className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-[#F3F3F3]"
-          aria-label="View remarks"
-        >
-          <FileText
-            className={
-              'h-4 w-4 ' +
-              (Number(item.remark_count) > 0 ? 'text-[#6366F1]' : 'text-[#71717A]')
-            }
-          />
-        </button>
-      ),
     },
   ];
 

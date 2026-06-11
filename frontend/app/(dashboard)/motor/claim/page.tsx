@@ -457,6 +457,23 @@ export default function MotorClaimPage() {
       },
     },
     {
+      key: 'remarks',
+      header: 'Remarks',
+      render: (item: MotorClaimEntry) => (
+        <button
+          type="button"
+          aria-label="View remarks"
+          className={
+            'p-1 rounded hover:bg-zinc-100 ' +
+            (item.remark_count > 0 ? 'text-[#6366F1]' : 'text-zinc-700')
+          }
+          onClick={() => setPanelEntry(item)}
+        >
+          <FileText className="h-4 w-4" />
+        </button>
+      ),
+    },
+    {
       key: 'added_by_name',
       header: 'Added by',
       render: (item: MotorClaimEntry) => <AddedByCell entry={item} />,
@@ -492,23 +509,6 @@ export default function MotorClaimPage() {
       header: 'Added on',
       render: (item: MotorClaimEntry) =>
         formatDate(item.added_at.split('T')[0]),
-    },
-    {
-      key: 'remarks',
-      header: 'Remarks',
-      render: (item: MotorClaimEntry) => (
-        <button
-          type="button"
-          aria-label="View remarks"
-          className={
-            'p-1 rounded hover:bg-zinc-100 ' +
-            (item.remark_count > 0 ? 'text-[#6366F1]' : 'text-zinc-700')
-          }
-          onClick={() => setPanelEntry(item)}
-        >
-          <FileText className="h-4 w-4" />
-        </button>
-      ),
     },
   ];
 

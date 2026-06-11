@@ -72,6 +72,7 @@ import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
 import { formatDate } from '@/app/lib/date';
 import { formatPremium, formatNumber } from '@/app/lib/number';
+import { formatTatFromMinutes } from '@/app/lib/tat';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import {
@@ -134,15 +135,6 @@ function StatusBadge({
       {label}
     </span>
   );
-}
-
-function formatTatFromMinutes(minutes: number | null | undefined): string {
-  if (minutes == null) return '—';
-  if (minutes < 60) return `${Math.round(minutes)}m`;
-  const hours = minutes / 60;
-  if (hours < 24) return `${hours.toFixed(1)}h`;
-  const days = hours / 24;
-  return `${days.toFixed(1)}d`;
 }
 
 function formatAccuracy(pct: number | null | undefined): string {

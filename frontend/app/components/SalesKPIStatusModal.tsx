@@ -1,13 +1,17 @@
 'use client';
 
 /**
- * TED-447 status transition modal for Sales KPI tickets.
+ * TED-447 / TED-533 status transition modal for Sales KPI tickets.
  *
- * Opens whenever the user changes a ticket's status via the inline select on
- * the Enquiries table. All transitions (lead/in_progress → in_progress/won/
- * lost) show an "action cannot be reversed" warning banner. Transitions into
- * a terminal state (won or lost) additionally require the three yes/no
- * workflow flags; "won" also requires a Converted Premium amount.
+ * Opened only for the two terminal transitions (Won / Lost) — moves among the
+ * non-terminal stages (Lead / Awaiting Quote / Shared with Client) are applied
+ * inline on the page with no popup. Both terminal moves are irreversible, so
+ * the warning banner stays.
+ *
+ *  - Won:  asks ONLY for Converted Premium (required, > 0). The three workflow
+ *          answers are forced to Yes by the backend, so they aren't shown.
+ *  - Lost: asks the three Yes/No workflow questions plus an OPTIONAL Converted
+ *          Premium.
  *
  * The backend serializer validates the same constraints — keep the gates in
  * sync if you add a transition variant.
@@ -86,7 +90,8 @@ export interface SalesKPIStatusModalProps {
 
 const STATUS_LABEL: Record<SalesKPIStatus, string> = {
   lead: 'Lead',
-  in_progress: 'In Progress',
+  awaiting_quote: 'Awaiting Quote',
+  shared_with_client: 'Shared with Client',
   won: 'Won',
   lost: 'Lost',
 };
@@ -117,15 +122,21 @@ export function SalesKPIStatusModal({
 
   if (!entry || !nextStatus) return null;
 
-  // Terminal transitions require the three workflow answers; 'won' also
-  // requires a positive converted premium.
-  const needsQuestions = nextStatus === 'won' || nextStatus === 'lost';
-  const needsPremium = nextStatus === 'won';
+  // TED-533: Won asks only for Converted Premium (the three workflow answers
+  // are forced to Yes server-side). Lost asks the three questions plus an
+  // optional Converted Premium.
+  const isWon = nextStatus === 'won';
+  const isLost = nextStatus === 'lost';
+  const needsQuestions = isLost;
+  const needsPremium = isWon || isLost;
 
   const allAnswered =
     sentForQuote !== null && quoteReceived !== null && submittedToClient !== null;
-  const premiumValid =
-    !needsPremium || (convertedPremium.trim() !== '' && Number(convertedPremium) > 0);
+  const premiumNum = Number(convertedPremium);
+  const premiumValid = isWon
+    ? convertedPremium.trim() !== '' && Number.isFinite(premiumNum) && premiumNum > 0
+    // Lost: optional — blank is fine; if entered, must be a non-negative number.
+    : convertedPremium.trim() === '' || (Number.isFinite(premiumNum) && premiumNum >= 0);
   const canSubmit = (!needsQuestions || allAnswered) && premiumValid && !isSubmitting;
 
   const handleConfirm = async () => {
@@ -139,7 +150,9 @@ export function SalesKPIStatusModal({
       payload.quote_received = quoteReceived === 'yes';
       payload.submitted_to_client = submittedToClient === 'yes';
     }
-    if (needsPremium) {
+    // Won always sends a (required, > 0) premium; Lost sends one only when the
+    // optional field was filled.
+    if (convertedPremium.trim() !== '') {
       payload.converted_premium = convertedPremium.trim();
     }
 
@@ -198,15 +211,15 @@ export function SalesKPIStatusModal({
 
           {needsPremium && (
             <div className="space-y-2">
-              <Label>Converted Premium (AED) *</Label>
+              <Label>Converted Premium (AED){isWon ? ' *' : ''}</Label>
               <Input
                 type="number"
-                min="0.01"
+                min={isWon ? '0.01' : '0'}
                 step="0.01"
                 placeholder="0.00"
                 value={convertedPremium}
                 onChange={(e) => setConvertedPremium(e.target.value)}
-                autoFocus
+                autoFocus={!needsQuestions}
               />
             </div>
           )}

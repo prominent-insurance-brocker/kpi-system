@@ -1066,7 +1066,20 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
         entry.status = new_status
         update_fields = ['status', 'updated_at']
 
-        if new_status in SalesKPIEntry.TERMINAL_STATUSES:
+        if new_status == SalesKPIEntry.STATUS_WON:
+            # TED-533: Won no longer asks the three questions — store all three
+            # as Yes automatically. Converted Premium is required (validated).
+            entry.sent_for_quote = True
+            entry.quote_received = True
+            entry.submitted_to_client = True
+            entry.converted_premium = serializer.validated_data['converted_premium']
+            entry.status_changed_at = timezone.now()
+            update_fields.extend([
+                'sent_for_quote', 'quote_received', 'submitted_to_client',
+                'converted_premium', 'status_changed_at',
+            ])
+        elif new_status == SalesKPIEntry.STATUS_LOST:
+            # TED-533: Lost asks the three questions; Converted Premium optional.
             entry.sent_for_quote = serializer.validated_data['sent_for_quote']
             entry.quote_received = serializer.validated_data['quote_received']
             entry.submitted_to_client = serializer.validated_data['submitted_to_client']
@@ -1075,9 +1088,12 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
                 'sent_for_quote', 'quote_received', 'submitted_to_client',
                 'status_changed_at',
             ])
-            if new_status == SalesKPIEntry.STATUS_WON:
-                entry.converted_premium = serializer.validated_data['converted_premium']
+            converted_premium = serializer.validated_data.get('converted_premium')
+            if converted_premium is not None:
+                entry.converted_premium = converted_premium
                 update_fields.append('converted_premium')
+        # else: a non-terminal move (Lead / Awaiting Quote / Shared with Client)
+        # — only `status` changes; no workflow answers, no status_changed_at.
 
         entry.save(update_fields=update_fields)
 
@@ -1105,7 +1121,9 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
 
         counts = dict(queryset.values_list('status').annotate(n=Count('id')))
         lead = counts.get('lead', 0)
-        in_progress = counts.get('in_progress', 0)
+        # TED-533: the single "In Progress" dashboard card now rolls up the two
+        # non-terminal sub-stages (Awaiting Quote + Shared with Client).
+        in_progress = counts.get('awaiting_quote', 0) + counts.get('shared_with_client', 0)
         won = counts.get('won', 0)
         lost = counts.get('lost', 0)
         total = lead + in_progress + won + lost

@@ -1103,29 +1103,39 @@ class SalesKPIEntry(BaseEntry):
 
     Replaced the original per-day KPI aggregate model in migration 0036
     (TED-446). Each row represents a single sales enquiry tracked through:
-        lead → in_progress → won / lost
+        lead → awaiting_quote / shared_with_client → won / lost
+    The three non-terminal stages move freely in any direction (TED-533); Won
+    and Lost are terminal.
+
     The three "Sent for quote" / "Quote received" / "Submitted to client"
-    booleans are captured at the time of the Won/Lost transition via the
-    `update_status` endpoint (TED-447 workflow). `converted_premium` is set
-    only when the transition is to Won.
+    booleans are captured at the Won/Lost transition via the `update_status`
+    endpoint. On a Won transition they are auto-set to True (TED-533 — the user
+    is no longer asked); on Lost the user answers them. `converted_premium` is
+    captured on Won (required) and optionally on Lost.
     """
     STATUS_LEAD = 'lead'
-    STATUS_IN_PROGRESS = 'in_progress'
+    STATUS_AWAITING_QUOTE = 'awaiting_quote'
+    STATUS_SHARED_WITH_CLIENT = 'shared_with_client'
     STATUS_WON = 'won'
     STATUS_LOST = 'lost'
 
     STATUS_CHOICES = [
         (STATUS_LEAD, 'Lead'),
-        (STATUS_IN_PROGRESS, 'In Progress'),
+        (STATUS_AWAITING_QUOTE, 'Awaiting Quote'),
+        (STATUS_SHARED_WITH_CLIENT, 'Shared with Client'),
         (STATUS_WON, 'Won'),
         (STATUS_LOST, 'Lost'),
     ]
 
     TERMINAL_STATUSES = {STATUS_WON, STATUS_LOST}
 
+    # TED-533: the three non-terminal stages (Lead / Awaiting Quote / Shared
+    # with Client) can move to one another in any direction — the frontend
+    # applies these directly with no confirmation popup. Won/Lost are terminal.
     TRANSITIONS = {
-        STATUS_LEAD: [STATUS_IN_PROGRESS, STATUS_WON, STATUS_LOST],
-        STATUS_IN_PROGRESS: [STATUS_WON, STATUS_LOST],
+        STATUS_LEAD: [STATUS_AWAITING_QUOTE, STATUS_SHARED_WITH_CLIENT, STATUS_WON, STATUS_LOST],
+        STATUS_AWAITING_QUOTE: [STATUS_LEAD, STATUS_SHARED_WITH_CLIENT, STATUS_WON, STATUS_LOST],
+        STATUS_SHARED_WITH_CLIENT: [STATUS_LEAD, STATUS_AWAITING_QUOTE, STATUS_WON, STATUS_LOST],
         STATUS_WON: [],
         STATUS_LOST: [],
     }
@@ -1159,7 +1169,8 @@ class SalesKPIEntry(BaseEntry):
     status_changed_at = models.DateTimeField(null=True, blank=True)
 
     # TED-447 workflow answers captured when the enquiry is closed (Won/Lost).
-    # Nullable while the enquiry is still Lead / In Progress.
+    # On Won they are forced to True (TED-533); on Lost the user supplies them.
+    # Nullable while the enquiry is still Lead / Awaiting Quote / Shared with Client.
     sent_for_quote = models.BooleanField(null=True, blank=True)
     quote_received = models.BooleanField(null=True, blank=True)
     submitted_to_client = models.BooleanField(null=True, blank=True)

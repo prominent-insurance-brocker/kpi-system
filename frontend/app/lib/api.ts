@@ -919,7 +919,14 @@ export async function updateMotorClaimNextCallDate(
 
 // ─── Sales KPI (per-ticket revamp, TED-446) ──────────────────────────────────
 
-export type SalesKPIStatus = 'lead' | 'in_progress' | 'won' | 'lost';
+// TED-533: the single 'in_progress' stage was split into 'awaiting_quote' and
+// 'shared_with_client'. The three non-terminal stages are freely interchangeable.
+export type SalesKPIStatus =
+  | 'lead'
+  | 'awaiting_quote'
+  | 'shared_with_client'
+  | 'won'
+  | 'lost';
 export type SalesKPIEntryType = 'new' | 'renewal';
 
 export interface SalesKPIStatusTransition {
@@ -946,11 +953,12 @@ export interface SalesKPIEntry {
   status: SalesKPIStatus;
   status_display: string;
   status_changed_at: string | null;
-  // TED-447 workflow flags, captured on transition out of in_progress.
+  // Workflow flags captured when the deal closes. TED-533: forced to true on
+  // 'won' (not asked); supplied by the user on 'lost'.
   sent_for_quote: boolean | null;
   quote_received: boolean | null;
   submitted_to_client: boolean | null;
-  // Set when status flips to 'won'.
+  // Captured on 'won' (required) and optionally on 'lost' (TED-533).
   converted_premium: string | null;
   allowed_transitions: SalesKPIStatus[];
   is_terminal: boolean;
@@ -972,6 +980,8 @@ export interface SalesKPIEntry {
 export interface SalesKPIStats {
   total: number;
   lead: number;
+  // TED-533: combined count of the two non-terminal sub-stages
+  // (awaiting_quote + shared_with_client).
   in_progress: number;
   won: number;
   lost: number;
@@ -993,9 +1003,10 @@ export async function getSalesKPIStats(params: {
   );
 }
 
-// Payload mirrors the backend SalesKPIStatusUpdateSerializer. The three
-// booleans are required for any transition into 'won' or 'lost' (TED-447).
-// `converted_premium` is required only for the 'won' transition.
+// Payload mirrors the backend SalesKPIStatusUpdateSerializer (TED-533).
+// Non-terminal moves send only `status`. 'won' sends `converted_premium`
+// (required; the three booleans are forced true server-side). 'lost' sends the
+// three booleans plus an optional `converted_premium`.
 export interface SalesKPIStatusUpdatePayload {
   status: SalesKPIStatus;
   sent_for_quote?: boolean;

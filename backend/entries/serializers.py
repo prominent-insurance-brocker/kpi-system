@@ -628,19 +628,22 @@ class SalesKPIEntrySerializer(BaseEntrySerializer):
 
 
 class SalesKPIStatusUpdateSerializer(serializers.Serializer):
-    """Validates the TED-447 workflow on a Sales KPI status change.
+    """Validates the TED-533 workflow on a Sales KPI status change.
 
-    Lead -> In Progress is allowed with no extra payload (just the generic
-    confirmation on the frontend). Any transition INTO Won or Lost requires
-    the three workflow booleans; transitions INTO Won additionally require
-    a converted_premium amount.
+    Moves among the three non-terminal stages (Lead / Awaiting Quote / Shared
+    with Client) need only the target `status`. Marking the enquiry **Won**
+    requires a positive `converted_premium` — the three workflow booleans are
+    auto-set to True by the viewset, so they are not required here. Marking it
+    **Lost** requires the three workflow booleans; its `converted_premium` is
+    optional.
     """
     status = serializers.ChoiceField(choices=SalesKPIEntry.STATUS_CHOICES)
     sent_for_quote = serializers.BooleanField(required=False)
     quote_received = serializers.BooleanField(required=False)
     submitted_to_client = serializers.BooleanField(required=False)
     converted_premium = serializers.DecimalField(
-        max_digits=15, decimal_places=2, required=False, min_value=0,
+        max_digits=15, decimal_places=2, required=False, allow_null=True,
+        min_value=0,
     )
 
     def validate_status(self, value):
@@ -658,16 +661,26 @@ class SalesKPIStatusUpdateSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         status = attrs.get('status')
-        if status in SalesKPIEntry.TERMINAL_STATUSES:
-            for f in ('sent_for_quote', 'quote_received', 'submitted_to_client'):
-                if f not in attrs:
-                    raise serializers.ValidationError(
-                        {f: 'Required when closing the enquiry as Won or Lost.'}
-                    )
-            if status == SalesKPIEntry.STATUS_WON and 'converted_premium' not in attrs:
+        # TED-533: Won no longer asks the three questions (forced to True in the
+        # viewset), so they are not required here — but a positive Converted
+        # Premium is. Lost still asks the three questions; its Converted Premium
+        # is optional.
+        if status == SalesKPIEntry.STATUS_WON:
+            premium = attrs.get('converted_premium')
+            if premium is None:
                 raise serializers.ValidationError(
                     {'converted_premium': 'Required when marking the enquiry as Won.'}
                 )
+            if premium <= 0:
+                raise serializers.ValidationError(
+                    {'converted_premium': 'Must be greater than 0 when marking the enquiry as Won.'}
+                )
+        elif status == SalesKPIEntry.STATUS_LOST:
+            for f in ('sent_for_quote', 'quote_received', 'submitted_to_client'):
+                if f not in attrs:
+                    raise serializers.ValidationError(
+                        {f: 'Required when marking the enquiry as Lost.'}
+                    )
         return attrs
 
 

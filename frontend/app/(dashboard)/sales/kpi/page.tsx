@@ -1,14 +1,16 @@
 'use client';
 
 /**
- * Sales KPI — per-ticket enquiry workflow (TED-446 + TED-447).
+ * Sales KPI — per-ticket enquiry workflow (TED-446 + TED-447 + TED-533).
  *
  * Replaces the original per-day KPI counter page. Each row is a single sales
  * enquiry ticket with customer_name + class_of_insurance + assignee +
  * potential_premium and a status state machine
- * (lead → in_progress → won/lost). Transitions out of `in_progress` go
- * through SalesKPIStatusModal (TED-447) which captures workflow flags and
- * Converted Premium for won.
+ * (lead ↔ awaiting_quote ↔ shared_with_client → won/lost). The three
+ * non-terminal stages change inline with no popup (TED-533); moves into
+ * won/lost open SalesKPIStatusModal — won asks only for Converted Premium
+ * (workflow flags auto-set to Yes), lost asks the three questions + optional
+ * premium.
  *
  * The Monthly Target side panel and Monthly Target progress card are
  * preserved unchanged in shape — they still drive premium / clients_assigned
@@ -75,6 +77,7 @@ import { SalesKPIStatusModal } from '@/app/components/SalesKPIStatusModal';
 import {
   fetchApi,
   getSalesKPIStats,
+  updateSalesKPIStatus,
   getUsersForModule,
   getUsersForModulePage,
   getActiveUsersPage,
@@ -102,7 +105,8 @@ interface SalesMonthlyTarget {
 
 const STATUS_OPTIONS: Array<{ value: SalesKPIStatus; label: string }> = [
   { value: 'lead', label: 'Lead' },
-  { value: 'in_progress', label: 'In Progress' },
+  { value: 'awaiting_quote', label: 'Awaiting Quote' },
+  { value: 'shared_with_client', label: 'Shared with Client' },
   { value: 'won', label: 'Won' },
   { value: 'lost', label: 'Lost' },
 ];
@@ -114,14 +118,16 @@ const TYPE_OPTIONS: Array<{ value: SalesKPIEntryType; label: string }> = [
 
 const STATUS_LABEL: Record<SalesKPIStatus, string> = {
   lead: 'Lead',
-  in_progress: 'In Progress',
+  awaiting_quote: 'Awaiting Quote',
+  shared_with_client: 'Shared with Client',
   won: 'Won',
   lost: 'Lost',
 };
 
 const STATUS_BADGE_CLASSES: Record<SalesKPIStatus, string> = {
   lead: 'bg-blue-100 text-blue-800',
-  in_progress: 'bg-amber-100 text-amber-800',
+  awaiting_quote: 'bg-amber-100 text-amber-800',
+  shared_with_client: 'bg-indigo-100 text-indigo-800',
   won: 'bg-green-100 text-green-800',
   lost: 'bg-red-100 text-red-800',
 };
@@ -602,9 +608,22 @@ export default function SalesKPIPage() {
     }
   };
 
-  const handleStatusChange = (entry: SalesKPIEntry, next: SalesKPIStatus) => {
-    setStatusModalEntry(entry);
-    setStatusModalNext(next);
+  const handleStatusChange = async (entry: SalesKPIEntry, next: SalesKPIStatus) => {
+    // TED-533: moves among the non-terminal stages (Lead / Awaiting Quote /
+    // Shared with Client) apply immediately with no popup. Closing the deal
+    // (Won / Lost) still opens the modal to capture the workflow data.
+    if (next === 'won' || next === 'lost') {
+      setStatusModalEntry(entry);
+      setStatusModalNext(next);
+      return;
+    }
+    const result = await updateSalesKPIStatus(entry.id, { status: next });
+    if (result.data) {
+      toast.success(`Moved to ${STATUS_LABEL[next]}`);
+      refreshAll();
+    } else {
+      toast.error(result.error || 'Failed to update status');
+    }
   };
 
   // ── Columns ───────────────────────────────────────────────────────────────

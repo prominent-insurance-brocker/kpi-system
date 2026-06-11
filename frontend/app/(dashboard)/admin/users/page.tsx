@@ -59,6 +59,12 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
+  // TED-521: Users-table filters ('all' = no filter).
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dailyEmailFilter, setDailyEmailFilter] = useState('all');
+  const [lastLoginFilter, setLastLoginFilter] = useState('all');
+
   // Alert dialog shown when the server blocks a delete (user has uploaded
   // data or is referenced as agent on someone else's entries).
   const [deleteBlocked, setDeleteBlocked] = useState<{
@@ -71,6 +77,10 @@ export default function UsersPage() {
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('page_size', String(pageSize));
+    if (roleFilter !== 'all') params.set('role_id', roleFilter);
+    if (statusFilter !== 'all') params.set('is_active', statusFilter);
+    if (dailyEmailFilter !== 'all') params.set('daily_email_enabled', dailyEmailFilter);
+    if (lastLoginFilter !== 'all') params.set('last_login', lastLoginFilter);
 
     const result = await getUsers(params);
     if (result.data) {
@@ -89,8 +99,13 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, roleFilter, statusFilter, dailyEmailFilter, lastLoginFilter]);
+
+  useEffect(() => {
     fetchRoles();
-  }, [page, pageSize]); // Re-fetch when page or pageSize changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSave = async (formData: Partial<UserAdmin>) => {
     setError('');
@@ -167,6 +182,20 @@ export default function UsersPage() {
       next ? 'Daily email enabled' : 'Daily email disabled',
     );
     fetchUsers();
+  };
+
+  const hasActiveFilters =
+    roleFilter !== 'all' ||
+    statusFilter !== 'all' ||
+    dailyEmailFilter !== 'all' ||
+    lastLoginFilter !== 'all';
+
+  const clearFilters = () => {
+    setRoleFilter('all');
+    setStatusFilter('all');
+    setDailyEmailFilter('all');
+    setLastLoginFilter('all');
+    setPage(1);
   };
 
   const columns = [
@@ -300,6 +329,63 @@ export default function UsersPage() {
         </Button>
       </div>
 
+      {/* TED-521: filter the user list by role, status, daily email, last login */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[180px] h-9 shadow-none">
+            <SelectValue placeholder="Role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Roles</SelectItem>
+            <SelectItem value="none">No Role</SelectItem>
+            {roles.map((role) => (
+              <SelectItem key={role.id} value={String(role.id)}>
+                {role.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[150px] h-9 shadow-none">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="true">Active</SelectItem>
+            <SelectItem value="false">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={dailyEmailFilter} onValueChange={(v) => { setDailyEmailFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[170px] h-9 shadow-none">
+            <SelectValue placeholder="Daily Email" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Daily Email</SelectItem>
+            <SelectItem value="true">Enabled</SelectItem>
+            <SelectItem value="false">Disabled</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={lastLoginFilter} onValueChange={(v) => { setLastLoginFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[160px] h-9 shadow-none">
+            <SelectValue placeholder="Last Login" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Any Last Login</SelectItem>
+            <SelectItem value="today">Today</SelectItem>
+            <SelectItem value="yesterday">Yesterday</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        )}
+      </div>
+
       <DataTable
         columns={columns}
         data={users}
@@ -312,7 +398,7 @@ export default function UsersPage() {
           setPage(1);
         }}
         isLoading={isLoading}
-        height="h-[calc(100vh-190px)]"
+        height="h-[calc(100vh-250px)]"
       />
 
       <Dialog

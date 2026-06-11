@@ -586,28 +586,6 @@ export default function SalesKPIPage() {
     { key: 'date', header: 'Date', render: (item: SalesKPIEntry) => formatDate(item.date) },
     { key: 'customer_name', header: 'Customer Name' },
     {
-      key: 'entry_type',
-      header: 'Type',
-      render: (item: SalesKPIEntry) => item.entry_type_display,
-    },
-    {
-      key: 'class_of_insurance',
-      header: 'Class of Insurance',
-      render: (item: SalesKPIEntry) => item.class_of_insurance_name || '—',
-    },
-    { key: 'assignee', header: 'Assignee', render: (item: SalesKPIEntry) => item.assignee_name },
-    {
-      key: 'potential_premium',
-      header: 'Potential Premium',
-      render: (item: SalesKPIEntry) => formatPremium(item.potential_premium),
-    },
-    {
-      key: 'converted_premium',
-      header: 'Converted Premium',
-      render: (item: SalesKPIEntry) =>
-        item.converted_premium != null ? formatPremium(item.converted_premium) : '—',
-    },
-    {
       key: 'status',
       header: 'Status',
       render: (item: SalesKPIEntry) =>
@@ -639,11 +617,6 @@ export default function SalesKPIPage() {
         ),
     },
     {
-      key: 'added_by_name',
-      header: 'Added by',
-      render: (item: SalesKPIEntry) => <AddedByCell entry={item} />,
-    },
-    {
       key: 'notes',
       header: 'Notes',
       render: (item: SalesKPIEntry) => (
@@ -661,6 +634,33 @@ export default function SalesKPIPage() {
           />
         </button>
       ),
+    },
+    {
+      key: 'entry_type',
+      header: 'Type',
+      render: (item: SalesKPIEntry) => item.entry_type_display,
+    },
+    {
+      key: 'class_of_insurance',
+      header: 'Class of Insurance',
+      render: (item: SalesKPIEntry) => item.class_of_insurance_name || '—',
+    },
+    { key: 'assignee', header: 'Assignee', render: (item: SalesKPIEntry) => item.assignee_name },
+    {
+      key: 'potential_premium',
+      header: 'Potential Premium',
+      render: (item: SalesKPIEntry) => formatPremium(item.potential_premium),
+    },
+    {
+      key: 'converted_premium',
+      header: 'Converted Premium',
+      render: (item: SalesKPIEntry) =>
+        item.converted_premium != null ? formatPremium(item.converted_premium) : '—',
+    },
+    {
+      key: 'added_by_name',
+      header: 'Added by',
+      render: (item: SalesKPIEntry) => <AddedByCell entry={item} />,
     },
   ];
 

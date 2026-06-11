@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DataTable } from '@/app/components/DataTable';
 import { fetchApi, getUsersForFilter } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
+import { canModifyEntry } from '@/app/lib/permissions';
 import { Plus } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
@@ -244,7 +245,7 @@ export default function MedicalClaimPage() {
       key: 'status',
       header: 'Status',
       render: (item: MedicalClaimEntry) => {
-        if (item.is_terminal || item.allowed_transitions.length === 0) {
+        if (item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by)) {
           return <StatusBadge status={item.status} />;
         }
         return (
@@ -334,7 +335,7 @@ export default function MedicalClaimPage() {
           </Card>
         </div>
       )}
-      <DataTable columns={columns} data={entries} totalCount={totalCount} page={page} pageSize={pageSize} onPageChange={(p) => updateFilters({ page: p })} onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })} onEdit={(entry) => { setEditingEntry(entry); setError(''); setIsModalOpen(true); }} onDelete={handleDelete} canEdit={(entry) => entry.is_editable} canDelete={(entry) => entry.added_by === currentUserId} isLoading={isLoading} />
+      <DataTable columns={columns} data={entries} totalCount={totalCount} page={page} pageSize={pageSize} onPageChange={(p) => updateFilters({ page: p })} onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })} onEdit={(entry) => { setEditingEntry(entry); setError(''); setIsModalOpen(true); }} onDelete={handleDelete} canEdit={(entry) => entry.is_editable && canModifyEntry(user, entry.added_by)} canDelete={(entry) => entry.added_by === currentUserId} isLoading={isLoading} />
       <Dialog open={isModalOpen} onOpenChange={() => { setIsModalOpen(false); setEditingEntry(null); setError(''); }}>
         <DialogContent className='p-0'>
           <DialogHeader className='border-b border-[#E4E4E4] p-4'><DialogTitle>{editingEntry ? 'Edit Entry' : 'Add New Entry'}</DialogTitle></DialogHeader>

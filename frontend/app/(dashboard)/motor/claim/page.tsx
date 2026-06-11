@@ -44,6 +44,7 @@ import {
   type ModuleUser,
 } from '@/app/components/KpiModulePage';
 import { useAuth } from '@/app/context/AuthContext';
+import { canModifyEntry } from '@/app/lib/permissions';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate } from '@/app/lib/date';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
@@ -429,7 +430,7 @@ export default function MotorClaimPage() {
       key: 'status',
       header: 'Status',
       render: (item: MotorClaimEntry) => {
-        if (item.is_terminal || item.allowed_transitions.length === 0) {
+        if (item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by)) {
           return <StatusBadge status={item.status} />;
         }
         return (
@@ -455,6 +456,23 @@ export default function MotorClaimPage() {
           </Select>
         );
       },
+    },
+    {
+      key: 'remarks',
+      header: 'Remarks',
+      render: (item: MotorClaimEntry) => (
+        <button
+          type="button"
+          aria-label="View remarks"
+          className={
+            'p-1 rounded hover:bg-zinc-100 ' +
+            (item.remark_count > 0 ? 'text-[#6366F1]' : 'text-zinc-700')
+          }
+          onClick={() => setPanelEntry(item)}
+        >
+          <FileText className="h-4 w-4" />
+        </button>
+      ),
     },
     {
       key: 'added_by_name',
@@ -492,23 +510,6 @@ export default function MotorClaimPage() {
       header: 'Added on',
       render: (item: MotorClaimEntry) =>
         formatDate(item.added_at.split('T')[0]),
-    },
-    {
-      key: 'remarks',
-      header: 'Remarks',
-      render: (item: MotorClaimEntry) => (
-        <button
-          type="button"
-          aria-label="View remarks"
-          className={
-            'p-1 rounded hover:bg-zinc-100 ' +
-            (item.remark_count > 0 ? 'text-[#6366F1]' : 'text-zinc-700')
-          }
-          onClick={() => setPanelEntry(item)}
-        >
-          <FileText className="h-4 w-4" />
-        </button>
-      ),
     },
   ];
 
@@ -839,7 +840,7 @@ export default function MotorClaimPage() {
                   setIsModalOpen(true);
                 }}
                 onDelete={handleDelete}
-                canEdit={(entry) => entry.is_editable}
+                canEdit={(entry) => entry.is_editable && canModifyEntry(user, entry.added_by)}
                 canDelete={(entry) =>
                   entry.added_by === currentUserId && entry.status === 'claims_opened'
                 }

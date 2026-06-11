@@ -309,6 +309,29 @@ class UserViewSet(viewsets.ModelViewSet):
                 db_models.Q(is_staff=True) |
                 db_models.Q(role__permissions__module=module)
             ).distinct()
+
+        # TED-521: admin Users-table filters.
+        role_id = self.request.query_params.get('role_id')
+        if role_id == 'none':
+            queryset = queryset.filter(role__isnull=True)
+        elif role_id and role_id.isdigit():
+            queryset = queryset.filter(role_id=role_id)
+
+        daily_email = self.request.query_params.get('daily_email_enabled')
+        if daily_email is not None:
+            queryset = queryset.filter(
+                daily_email_enabled=daily_email.lower() == 'true'
+            )
+
+        # "today" / "yesterday" compared on the server day (TIME_ZONE = UTC,
+        # matching how the rest of the app computes relative dates).
+        last_login = self.request.query_params.get('last_login')
+        if last_login in ('today', 'yesterday'):
+            target = timezone.localdate()
+            if last_login == 'yesterday':
+                target = target - timedelta(days=1)
+            queryset = queryset.filter(last_login__date=target)
+
         return queryset.order_by('-date_joined')
 
     @action(detail=True, methods=['post'])

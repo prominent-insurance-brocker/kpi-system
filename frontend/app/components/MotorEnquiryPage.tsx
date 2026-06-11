@@ -53,6 +53,7 @@ import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
+import { canModifyEntry } from '@/app/lib/permissions';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   AddedByCell,
@@ -65,6 +66,8 @@ import {
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate } from '@/app/lib/date';
+import { formatPremium, formatNumber } from '@/app/lib/number';
+import { formatTatFromMinutes } from '@/app/lib/tat';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import {
@@ -188,15 +191,6 @@ function StatusBadge({
   );
 }
 
-function formatTatFromMinutes(minutes: number | null | undefined): string {
-  if (minutes == null) return '—';
-  if (minutes < 60) return `${Math.round(minutes)}m`;
-  const hours = minutes / 60;
-  if (hours < 24) return `${hours.toFixed(1)}h`;
-  const days = hours / 24;
-  return `${days.toFixed(1)}d`;
-}
-
 function formatAccuracy(pct: number | null | undefined): string {
   if (pct == null) return '—';
   return `${pct.toFixed(1)}%`;
@@ -247,6 +241,8 @@ export function MotorEnquiryPage({
   const [agentId, setAgentId] = useState('');   // FK Source/Agent
   const [statusFilter, setStatusFilter] = useState('');
   const [clientName, setClientName] = useState('');
+  const [insuranceCompanyFilter, setInsuranceCompanyFilter] = useState('');
+  const [classOfEnquiryFilter, setClassOfEnquiryFilter] = useState('');
 
   // Dashboard filters (independent of enquiries filters to avoid coupling).
   const [dashFrom, setDashFrom] = useState('');
@@ -362,6 +358,8 @@ export function MotorEnquiryPage({
       if (agentId) qs.set('agent_id', agentId);
       if (statusFilter) qs.set('status', statusFilter);
       if (clientName) qs.set('client_name', clientName);
+      if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
+      if (classOfEnquiryFilter) qs.set('class_of_enquiry', classOfEnquiryFilter);
 
       const result = await fetchApi<{ results: MotorEnquiryEntry[]; count: number }>(
         `/api/entries/${apiSlug}/?${qs}`
@@ -371,7 +369,7 @@ export function MotorEnquiryPage({
     } finally {
       setIsLoading(false);
     }
-  }, [apiSlug, page, pageSize, dateFrom, dateTo, userId, agentId, statusFilter, clientName]);
+  }, [apiSlug, page, pageSize, dateFrom, dateTo, userId, agentId, statusFilter, clientName, insuranceCompanyFilter, classOfEnquiryFilter]);
 
   const fetchStats = useCallback(async () => {
     const result = await getMotorEnquiryStats(apiSlug, {
@@ -692,11 +690,15 @@ export function MotorEnquiryPage({
     entry: MotorEnquiryEntry,
     newStatus: SuccessStatus | 'lost',
     revisions?: number,
+    quotesCompared?: number,
+    coverage?: string,
     convertedPremium?: string,
   ) => {
     const result = await updateMotorEnquiryStatus(apiSlug, entry.id, {
       status: newStatus,
       ...(revisions != null ? { revisions } : {}),
+      ...(quotesCompared != null ? { quotes_compared: quotesCompared } : {}),
+      ...(coverage !== undefined ? { class_of_enquiry: coverage } : {}),
       ...(convertedPremium ? { converted_premium: convertedPremium } : {}),
     });
     if (result.data) {
@@ -720,7 +722,7 @@ export function MotorEnquiryPage({
       key: 'status',
       header: 'Status',
       render: (item: MotorEnquiryEntry) =>
-        item.is_terminal || item.allowed_transitions.length === 0 ? (
+        item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by) ? (
           <StatusBadge status={item.status} label={statusLabelFor(item.status)} />
         ) : (
           <Select
@@ -749,6 +751,25 @@ export function MotorEnquiryPage({
             </SelectContent>
           </Select>
         ),
+    },
+    {
+      key: 'notes',
+      header: 'Notes',
+      render: (item: MotorEnquiryEntry) => (
+        <button
+          type="button"
+          onClick={() => setPanelEntry(item)}
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-[#F3F3F3]"
+          aria-label="View remarks"
+        >
+          <FileText
+            className={
+              'h-4 w-4 ' +
+              (Number(item.remark_count) > 0 ? 'text-[#6366F1]' : 'text-[#71717A]')
+            }
+          />
+        </button>
+      ),
     },
     {
       key: 'class_of_enquiry',
@@ -826,7 +847,7 @@ export function MotorEnquiryPage({
         const raw = item.potential_premium as string | null | undefined;
         if (raw == null || raw === '') return '—';
         const n = Number(raw);
-        return Number.isFinite(n) ? n.toLocaleString() : raw;
+        return Number.isFinite(n) ? formatPremium(n) : raw;
       },
     },
     {
@@ -836,7 +857,7 @@ export function MotorEnquiryPage({
         const raw = item.converted_premium as string | null | undefined;
         if (raw == null || raw === '') return '—';
         const n = Number(raw);
-        return Number.isFinite(n) ? n.toLocaleString() : raw;
+        return Number.isFinite(n) ? formatPremium(n) : raw;
       },
     },
     {
@@ -844,29 +865,11 @@ export function MotorEnquiryPage({
       header: 'Added on',
       render: (item: MotorEnquiryEntry) => formatDate(item.added_at.split('T')[0]),
     },
-    {
-      key: 'notes',
-      header: 'Notes',
-      render: (item: MotorEnquiryEntry) => (
-        <button
-          type="button"
-          onClick={() => setPanelEntry(item)}
-          className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-[#F3F3F3]"
-          aria-label="View remarks"
-        >
-          <FileText
-            className={
-              'h-4 w-4 ' +
-              (Number(item.remark_count) > 0 ? 'text-[#6366F1]' : 'text-[#71717A]')
-            }
-          />
-        </button>
-      ),
-    },
   ];
 
   const hasActiveFilters =
-    !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName);
+    !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName ||
+      insuranceCompanyFilter || classOfEnquiryFilter);
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -1129,6 +1132,40 @@ export function MotorEnquiryPage({
                 },
                 options: config.options.map((o) => ({ value: o.value, label: o.label })),
               }}
+              extraSearchableFilters={[
+                {
+                  label: 'Insurance Company',
+                  value: insuranceCompanyFilter,
+                  onChange: (v) => {
+                    setInsuranceCompanyFilter(v);
+                    setPage(1);
+                  },
+                  placeholder: 'All Insurers',
+                  clearLabel: 'All Insurers',
+                  fetchPage: async ({ search, page }) => {
+                    const res = await getInsuranceCompaniesPage({ search, page });
+                    return {
+                      results: res.data?.results ?? [],
+                      hasMore: res.data?.has_more ?? false,
+                    };
+                  },
+                },
+              ]}
+              extraSelects={[
+                {
+                  label: 'Class of Enquiry',
+                  value: classOfEnquiryFilter,
+                  onChange: (v) => {
+                    setClassOfEnquiryFilter(v);
+                    setPage(1);
+                  },
+                  options: [
+                    { value: 'all', label: 'All Classes' },
+                    { value: 'comprehensive', label: 'Comprehensive' },
+                    { value: 'tpl', label: 'TPL' },
+                  ],
+                },
+              ]}
               hasActiveFilters={hasActiveFilters}
               onClear={() => {
                 setDateFrom('');
@@ -1137,6 +1174,8 @@ export function MotorEnquiryPage({
                 setAgentId('');
                 setStatusFilter('');
                 setClientName('');
+                setInsuranceCompanyFilter('');
+                setClassOfEnquiryFilter('');
                 setPage(1);
               }}
             />
@@ -1171,7 +1210,7 @@ export function MotorEnquiryPage({
                   setIsModalOpen(true);
                 }}
                 onDelete={handleDelete}
-                canEdit={(entry) => entry.status === 'new' && entry.is_editable}
+                canEdit={(entry) => entry.status === 'new' && entry.is_editable && canModifyEntry(user, entry.added_by)}
                 canDelete={(entry) =>
                   entry.added_by === currentUserId && entry.status === 'new'
                 }
@@ -1222,15 +1261,35 @@ export function MotorEnquiryPage({
       {pendingStatus && (
         <EnquiryStatusModal
           entry={pendingStatus.entry}
-          newStatus={pendingStatus.newStatus}
-          newStatusLabel={statusLabelFor(pendingStatus.newStatus)}
           needsConvertedPremium={pendingStatus.newStatus !== 'lost'}
+          coverage={{
+            label: 'Class of Enquiry',
+            helper: 'Confirm whether the finalized enquiry is Comprehensive or TPL.',
+            initialValue: pendingStatus.entry.class_of_enquiry ?? '',
+            renderControl: (value, onChange) => (
+              <Select
+                value={value || '__none__'}
+                onValueChange={(v) => onChange(v === '__none__' ? '' : v)}
+              >
+                <SelectTrigger className="w-full shadow-none">
+                  <SelectValue placeholder="Select class" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select enquiry</SelectItem>
+                  <SelectItem value="comprehensive">Comprehensive</SelectItem>
+                  <SelectItem value="tpl">TPL</SelectItem>
+                </SelectContent>
+              </Select>
+            ),
+          }}
           onCancel={() => setPendingStatus(null)}
-          onConfirm={({ revisions, converted_premium }) =>
+          onConfirm={({ revisions, quotes_compared, coverage, converted_premium }) =>
             applyStatusChange(
               pendingStatus.entry,
               pendingStatus.newStatus,
               revisions,
+              quotes_compared,
+              coverage,
               converted_premium,
             )
           }
@@ -1477,17 +1536,12 @@ function RatioCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold text-[#09090B]">
-          {success.toLocaleString()} / {total.toLocaleString()}
+          {formatNumber(success)} / {formatNumber(total)}
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">({pct.toFixed(1)}%)</div>
       </CardContent>
     </Card>
   );
-}
-
-function formatPremium(n: number | null | undefined): string {
-  if (n == null) return '0';
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 function StatCard({
@@ -1648,7 +1702,7 @@ function EnquiryForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label>Potential Premium</Label>
+          <Label>Potential Premium *</Label>
           <Input
             type="number"
             min={0}
@@ -1656,10 +1710,11 @@ function EnquiryForm({
             placeholder="0.00"
             value={potentialPremium}
             onChange={(e) => setPotentialPremium(e.target.value)}
+            required
           />
         </div>
         <div className="space-y-2">
-          <Label>Class of Enquiry</Label>
+          <Label>Class of Enquiry *</Label>
           <Select
             value={classOfEnquiry || '__none__'}
             onValueChange={(v) => setClassOfEnquiry(v === '__none__' ? '' : v)}
@@ -1668,7 +1723,7 @@ function EnquiryForm({
               <SelectValue placeholder="Select class" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__none__">—</SelectItem>
+              <SelectItem value="__none__">Select enquiry</SelectItem>
               <SelectItem value="comprehensive">Comprehensive</SelectItem>
               <SelectItem value="tpl">TPL</SelectItem>
             </SelectContent>
@@ -1677,7 +1732,7 @@ function EnquiryForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Insurance Company</Label>
+        <Label>Insurance Company *</Label>
         <SearchableSelect
           value={insurerId ? String(insurerId) : null}
           onValueChange={(v) => setInsurerId(v ? Number(v) : null)}
@@ -1722,7 +1777,7 @@ function EnquiryForm({
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting || !clientName || !chassisNo || !agentId}>
+        <Button type="submit" disabled={isSubmitting || !clientName || !chassisNo || !agentId || !potentialPremium.trim() || !classOfEnquiry || !insurerId}>
           {isSubmitting ? 'Saving…' : entry ? 'Update' : 'Add Enquiry'}
         </Button>
       </DialogFooter>
@@ -1802,7 +1857,7 @@ function ClientRetentionTargetCard({
       <div className="space-y-1">
         <div>
           <div className="flex items-baseline justify-between">
-            <span className="text-xl font-bold">{actuals.toLocaleString()}</span>
+            <span className="text-xl font-bold">{formatNumber(actuals)}</span>
             <span className="text-sm text-muted-foreground">Client Retention</span>
           </div>
           <div className="relative">
@@ -1831,7 +1886,7 @@ function ClientRetentionTargetCard({
               >
                 <span className="text-blue-500 leading-none">▲</span>
                 <span className="text-muted-foreground">
-                  {Math.round(clientsTarget).toLocaleString()}
+                  {formatNumber(Math.round(clientsTarget))}
                 </span>
               </div>
             )}

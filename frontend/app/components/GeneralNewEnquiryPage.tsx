@@ -57,6 +57,7 @@ import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
+import { canModifyEntry } from '@/app/lib/permissions';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   AddedByCell,
@@ -69,6 +70,8 @@ import {
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate } from '@/app/lib/date';
+import { formatPremium, formatNumber } from '@/app/lib/number';
+import { formatTatFromMinutes } from '@/app/lib/tat';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import {
@@ -189,15 +192,6 @@ function StatusBadge({
   );
 }
 
-function formatTatFromMinutes(minutes: number | null | undefined): string {
-  if (minutes == null) return '—';
-  if (minutes < 60) return `${Math.round(minutes)}m`;
-  const hours = minutes / 60;
-  if (hours < 24) return `${hours.toFixed(1)}h`;
-  const days = hours / 24;
-  return `${days.toFixed(1)}d`;
-}
-
 function formatAccuracy(pct: number | null | undefined): string {
   if (pct == null) return '—';
   return `${pct.toFixed(1)}%`;
@@ -241,6 +235,8 @@ export function GeneralNewEnquiryPage() {
   const [agentId, setAgentId] = useState('');   // FK Source/Agent
   const [statusFilter, setStatusFilter] = useState('');
   const [clientName, setClientName] = useState('');
+  const [insuranceCompanyFilter, setInsuranceCompanyFilter] = useState('');
+  const [classOfInsuranceFilter, setClassOfInsuranceFilter] = useState('');
 
   // Dashboard filters (independent of enquiries filters to avoid coupling).
   const [dashFrom, setDashFrom] = useState('');
@@ -332,6 +328,8 @@ export function GeneralNewEnquiryPage() {
       if (agentId) qs.set('agent_id', agentId);
       if (statusFilter) qs.set('status', statusFilter);
       if (clientName) qs.set('client_name', clientName);
+      if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
+      if (classOfInsuranceFilter) qs.set('class_of_insurance', classOfInsuranceFilter);
 
       const result = await fetchApi<{ results: MotorEnquiryEntry[]; count: number }>(
         `/api/entries/${apiSlug}/?${qs}`
@@ -341,7 +339,7 @@ export function GeneralNewEnquiryPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [apiSlug, page, pageSize, dateFrom, dateTo, userId, agentId, statusFilter, clientName]);
+  }, [apiSlug, page, pageSize, dateFrom, dateTo, userId, agentId, statusFilter, clientName, insuranceCompanyFilter, classOfInsuranceFilter]);
 
   const fetchStats = useCallback(async () => {
     const result = await getMotorEnquiryStats(apiSlug, {
@@ -624,15 +622,34 @@ export function GeneralNewEnquiryPage() {
     }
   };
 
+  // TED-530: page-scoped fetcher so the closing modal's Class-of-Insurance
+  // dropdown can page/search the same lookup the add/edit form uses.
+  const coverageFetchPage = useCallback(
+    async ({ search, page }: { search: string; page: number }) => {
+      const res = await getClassOfInsurancePage({ search, page });
+      return {
+        results: res.data?.results ?? [],
+        hasMore: res.data?.has_more ?? false,
+      };
+    },
+    [],
+  );
+
   const applyStatusChange = async (
     entry: MotorEnquiryEntry,
     newStatus: SuccessStatus | 'lost',
     revisions?: number,
+    quotesCompared?: number,
+    coverage?: string,
     convertedPremium?: string,
   ) => {
     const result = await updateMotorEnquiryStatus(apiSlug, entry.id, {
       status: newStatus,
       ...(revisions != null ? { revisions } : {}),
+      ...(quotesCompared != null ? { quotes_compared: quotesCompared } : {}),
+      ...(coverage !== undefined
+        ? { class_of_insurance: coverage ? Number(coverage) : null }
+        : {}),
       ...(convertedPremium ? { converted_premium: convertedPremium } : {}),
     });
     if (result.data) {
@@ -656,7 +673,7 @@ export function GeneralNewEnquiryPage() {
       key: 'status',
       header: 'Status',
       render: (item: MotorEnquiryEntry) =>
-        item.is_terminal || item.allowed_transitions.length === 0 ? (
+        item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by) ? (
           <StatusBadge status={item.status} label={statusLabelFor(item.status)} />
         ) : (
           <Select
@@ -685,6 +702,25 @@ export function GeneralNewEnquiryPage() {
             </SelectContent>
           </Select>
         ),
+    },
+    {
+      key: 'notes',
+      header: 'Notes',
+      render: (item: MotorEnquiryEntry) => (
+        <button
+          type="button"
+          onClick={() => setPanelEntry(item)}
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-[#F3F3F3]"
+          aria-label="View remarks"
+        >
+          <FileText
+            className={
+              'h-4 w-4 ' +
+              (Number(item.remark_count) > 0 ? 'text-[#6366F1]' : 'text-[#71717A]')
+            }
+          />
+        </button>
+      ),
     },
     {
       key: 'class_of_insurance',
@@ -761,7 +797,7 @@ export function GeneralNewEnquiryPage() {
         const raw = item.potential_premium as string | null | undefined;
         if (raw == null || raw === '') return '—';
         const n = Number(raw);
-        return Number.isFinite(n) ? n.toLocaleString() : raw;
+        return Number.isFinite(n) ? formatPremium(n) : raw;
       },
     },
     {
@@ -771,7 +807,7 @@ export function GeneralNewEnquiryPage() {
         const raw = item.converted_premium as string | null | undefined;
         if (raw == null || raw === '') return '—';
         const n = Number(raw);
-        return Number.isFinite(n) ? n.toLocaleString() : raw;
+        return Number.isFinite(n) ? formatPremium(n) : raw;
       },
     },
     {
@@ -779,29 +815,11 @@ export function GeneralNewEnquiryPage() {
       header: 'Added on',
       render: (item: MotorEnquiryEntry) => formatDate(item.added_at.split('T')[0]),
     },
-    {
-      key: 'notes',
-      header: 'Notes',
-      render: (item: MotorEnquiryEntry) => (
-        <button
-          type="button"
-          onClick={() => setPanelEntry(item)}
-          className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-[#F3F3F3]"
-          aria-label="View remarks"
-        >
-          <FileText
-            className={
-              'h-4 w-4 ' +
-              (Number(item.remark_count) > 0 ? 'text-[#6366F1]' : 'text-[#71717A]')
-            }
-          />
-        </button>
-      ),
-    },
   ];
 
   const hasActiveFilters =
-    !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName);
+    !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName ||
+      insuranceCompanyFilter || classOfInsuranceFilter);
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -1057,6 +1075,42 @@ export function GeneralNewEnquiryPage() {
                 },
                 options: config.options.map((o) => ({ value: o.value, label: o.label })),
               }}
+              extraSearchableFilters={[
+                {
+                  label: 'Insurance Company',
+                  value: insuranceCompanyFilter,
+                  onChange: (v) => {
+                    setInsuranceCompanyFilter(v);
+                    setPage(1);
+                  },
+                  placeholder: 'All Insurers',
+                  clearLabel: 'All Insurers',
+                  fetchPage: async ({ search, page }) => {
+                    const res = await getInsuranceCompaniesPage({ search, page });
+                    return {
+                      results: res.data?.results ?? [],
+                      hasMore: res.data?.has_more ?? false,
+                    };
+                  },
+                },
+                {
+                  label: 'Class of Insurance',
+                  value: classOfInsuranceFilter,
+                  onChange: (v) => {
+                    setClassOfInsuranceFilter(v);
+                    setPage(1);
+                  },
+                  placeholder: 'All Classes',
+                  clearLabel: 'All Classes',
+                  fetchPage: async ({ search, page }) => {
+                    const res = await getClassOfInsurancePage({ search, page });
+                    return {
+                      results: res.data?.results ?? [],
+                      hasMore: res.data?.has_more ?? false,
+                    };
+                  },
+                },
+              ]}
               hasActiveFilters={hasActiveFilters}
               onClear={() => {
                 setDateFrom('');
@@ -1065,6 +1119,8 @@ export function GeneralNewEnquiryPage() {
                 setAgentId('');
                 setStatusFilter('');
                 setClientName('');
+                setInsuranceCompanyFilter('');
+                setClassOfInsuranceFilter('');
                 setPage(1);
               }}
             />
@@ -1099,7 +1155,7 @@ export function GeneralNewEnquiryPage() {
                   setIsModalOpen(true);
                 }}
                 onDelete={handleDelete}
-                canEdit={(entry) => entry.status === 'new' && entry.is_editable}
+                canEdit={(entry) => entry.status === 'new' && entry.is_editable && canModifyEntry(user, entry.added_by)}
                 canDelete={(entry) =>
                   entry.added_by === currentUserId && entry.status === 'new'
                 }
@@ -1150,15 +1206,41 @@ export function GeneralNewEnquiryPage() {
       {pendingStatus && (
         <EnquiryStatusModal
           entry={pendingStatus.entry}
-          newStatus={pendingStatus.newStatus}
-          newStatusLabel={statusLabelFor(pendingStatus.newStatus)}
           needsConvertedPremium={pendingStatus.newStatus !== 'lost'}
+          coverage={{
+            label: 'Class of Insurance',
+            helper: 'Confirm the class of insurance for this enquiry.',
+            initialValue:
+              typeof pendingStatus.entry.class_of_insurance === 'number'
+                ? String(pendingStatus.entry.class_of_insurance)
+                : '',
+            renderControl: (value, onChange) => (
+              <SearchableSelect
+                value={value || null}
+                onValueChange={(v) => onChange(v ?? '')}
+                placeholder="Select class"
+                emptyLabel="No classes found"
+                clearLabel="None"
+                selectedLabel={
+                  (pendingStatus.entry.class_of_insurance_display as
+                    | string
+                    | null
+                    | undefined) ?? null
+                }
+                getOptionValue={(c) => String(c.id)}
+                getOptionLabel={(c) => c.name}
+                fetchPage={coverageFetchPage}
+              />
+            ),
+          }}
           onCancel={() => setPendingStatus(null)}
-          onConfirm={({ revisions, converted_premium }) =>
+          onConfirm={({ revisions, quotes_compared, coverage, converted_premium }) =>
             applyStatusChange(
               pendingStatus.entry,
               pendingStatus.newStatus,
               revisions,
+              quotes_compared,
+              coverage,
               converted_premium,
             )
           }
@@ -1374,17 +1456,12 @@ function RatioCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold text-[#09090B]">
-          {success.toLocaleString()} / {total.toLocaleString()}
+          {formatNumber(success)} / {formatNumber(total)}
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">({pct.toFixed(1)}%)</div>
       </CardContent>
     </Card>
   );
-}
-
-function formatPremium(n: number | null | undefined): string {
-  if (n == null) return '0';
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 function StatCard({
@@ -1659,7 +1736,7 @@ function ClientRetentionTargetCard({
       <div className="space-y-1">
         <div>
           <div className="flex items-baseline justify-between">
-            <span className="text-xl font-bold">{actuals.toLocaleString()}</span>
+            <span className="text-xl font-bold">{formatNumber(actuals)}</span>
             <span className="text-sm text-muted-foreground">Client Retention</span>
           </div>
           <div className="relative">
@@ -1688,7 +1765,7 @@ function ClientRetentionTargetCard({
               >
                 <span className="text-blue-500 leading-none">▲</span>
                 <span className="text-muted-foreground">
-                  {Math.round(clientsTarget).toLocaleString()}
+                  {formatNumber(Math.round(clientsTarget))}
                 </span>
               </div>
             )}

@@ -80,7 +80,7 @@ from .serializers import (
 )
 from .filters import (
     EntryFilter, ClaimEntryFilter, MotorEnquiryFilter, MotorClaimEntryFilter,
-    SalesKPIEntryFilter,
+    SalesKPIEntryFilter, GeneralEnquiryFilter,
 )
 from roles.permissions import IsAdminUser, user_is_hod
 
@@ -275,15 +275,45 @@ class BaseEntryViewSet(viewsets.ModelViewSet):
         return queryset
 
     def check_permissions(self, request):
-        """Reject writes from HOD users before any view dispatch.
+        """Reject most writes from HOD users before any view dispatch.
 
         Covers POST (create), PATCH/PUT (update + custom @action mutations like
-        update-status, update-revisions, update-next-call-date), and DELETE.
-        Reads pass through to the normal HasModulePermission flow.
+        update-revisions, update-next-call-date), and DELETE. Reads pass through
+        to the normal HasModulePermission flow.
+
+        Exception: HOD/oversight roles MAY change an entry's status via the
+        `update-status` action — they oversee the workflow — even though they
+        still cannot create, edit, or delete the entry itself. (Super-admins and
+        data_visibility='all' roles are never HOD, so their status changes
+        already pass through here.)
         """
         super().check_permissions(request)
-        if request.method in _WRITE_METHODS and user_is_hod(request.user):
+        if (
+            request.method in _WRITE_METHODS
+            and self.action != 'update_status'
+            and user_is_hod(request.user)
+        ):
             raise PermissionDenied('HOD users cannot create, modify, or delete entries.')
+
+    def check_object_permissions(self, request, obj):
+        """Admins (is_staff) and HODs are oversight roles: on entries they did
+        NOT create they are view-only — they cannot change the entry's status,
+        though they can still add comments. The creator keeps full control.
+
+        This runs for every action that calls get_object(), including the
+        per-module `update-status` @action. Edit/delete ownership is enforced
+        separately in update()/destroy(); regular (non-oversight) users are
+        unaffected here.
+        """
+        super().check_object_permissions(request, obj)
+        if (
+            self.action == 'update_status'
+            and (request.user.is_staff or user_is_hod(request.user))
+            and obj.added_by_id != request.user.id
+        ):
+            raise PermissionDenied(
+                'Admins and HODs can only change the status of entries they created.'
+            )
 
     def perform_create(self, serializer):
         """Always create as the requesting user. Admins cannot create on behalf of others."""
@@ -324,7 +354,7 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
     queryset = GeneralNewEntry.objects.all()
     serializer_class = GeneralNewEntrySerializer
     module_key = 'general_new'
-    filterset_class = MotorEnquiryFilter
+    filterset_class = GeneralEnquiryFilter
 
     def get_queryset(self):
         return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
@@ -363,6 +393,7 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_quotes_compared = serializer.validated_data.get('quotes_compared')
         new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
@@ -372,10 +403,18 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
             entry.revisions = new_revisions
             update_fields.append('revisions')
 
-        # TED-440: persist the converted-premium amount captured by the
-        # StatusTransitionModal. Only meaningful on the success transition;
-        # ignored for Lost even if the client sent a value.
-        if new_converted_premium is not None and new_status != 'lost':
+        if new_quotes_compared is not None:
+            entry.quotes_compared = new_quotes_compared
+            update_fields.append('quotes_compared')
+
+        # TED-530: confirm/adjust the class of insurance from the closing modal.
+        if 'class_of_insurance' in serializer.validated_data:
+            entry.class_of_insurance = serializer.validated_data['class_of_insurance']
+            update_fields.append('class_of_insurance')
+
+        # TED-440/TED-530: persist the converted-premium captured by the
+        # confirmation modal on every closing transition, including Lost.
+        if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
@@ -432,7 +471,7 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
     queryset = GeneralRenewalEntry.objects.all()
     serializer_class = GeneralRenewalEntrySerializer
     module_key = 'general_renewal'
-    filterset_class = MotorEnquiryFilter
+    filterset_class = GeneralEnquiryFilter
 
     def get_queryset(self):
         return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
@@ -471,6 +510,7 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_quotes_compared = serializer.validated_data.get('quotes_compared')
         new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
@@ -480,10 +520,18 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
             entry.revisions = new_revisions
             update_fields.append('revisions')
 
-        # TED-440: persist the converted-premium amount captured by the
-        # StatusTransitionModal. Only meaningful on the success transition;
-        # ignored for Lost even if the client sent a value.
-        if new_converted_premium is not None and new_status != 'lost':
+        if new_quotes_compared is not None:
+            entry.quotes_compared = new_quotes_compared
+            update_fields.append('quotes_compared')
+
+        # TED-530: confirm/adjust the class of insurance from the closing modal.
+        if 'class_of_insurance' in serializer.validated_data:
+            entry.class_of_insurance = serializer.validated_data['class_of_insurance']
+            update_fields.append('class_of_insurance')
+
+        # TED-440/TED-530: persist the converted-premium captured by the
+        # confirmation modal on every closing transition, including Lost.
+        if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
@@ -668,6 +716,7 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_quotes_compared = serializer.validated_data.get('quotes_compared')
         new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
@@ -677,10 +726,18 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
             entry.revisions = new_revisions
             update_fields.append('revisions')
 
-        # TED-440: persist the converted-premium amount captured by the
-        # StatusTransitionModal. Only meaningful on the success transition;
-        # ignored for Lost even if the client sent a value.
-        if new_converted_premium is not None and new_status != 'lost':
+        if new_quotes_compared is not None:
+            entry.quotes_compared = new_quotes_compared
+            update_fields.append('quotes_compared')
+
+        # TED-530: confirm/adjust the coverage type from the closing modal.
+        if 'class_of_enquiry' in serializer.validated_data:
+            entry.class_of_enquiry = serializer.validated_data['class_of_enquiry']
+            update_fields.append('class_of_enquiry')
+
+        # TED-440/TED-530: persist the converted-premium captured by the
+        # confirmation modal on every closing transition, including Lost.
+        if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
@@ -778,6 +835,7 @@ class MotorRenewalEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_quotes_compared = serializer.validated_data.get('quotes_compared')
         new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
@@ -787,10 +845,18 @@ class MotorRenewalEntryViewSet(BaseEntryViewSet):
             entry.revisions = new_revisions
             update_fields.append('revisions')
 
-        # TED-440: persist the converted-premium amount captured by the
-        # StatusTransitionModal. Only meaningful on the success transition;
-        # ignored for Lost even if the client sent a value.
-        if new_converted_premium is not None and new_status != 'lost':
+        if new_quotes_compared is not None:
+            entry.quotes_compared = new_quotes_compared
+            update_fields.append('quotes_compared')
+
+        # TED-530: confirm/adjust the coverage type from the closing modal.
+        if 'class_of_enquiry' in serializer.validated_data:
+            entry.class_of_enquiry = serializer.validated_data['class_of_enquiry']
+            update_fields.append('class_of_enquiry')
+
+        # TED-440/TED-530: persist the converted-premium captured by the
+        # confirmation modal on every closing transition, including Lost.
+        if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
@@ -1056,7 +1122,20 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
         entry.status = new_status
         update_fields = ['status', 'updated_at']
 
-        if new_status in SalesKPIEntry.TERMINAL_STATUSES:
+        if new_status == SalesKPIEntry.STATUS_WON:
+            # TED-533: Won no longer asks the three questions — store all three
+            # as Yes automatically. Converted Premium is required (validated).
+            entry.sent_for_quote = True
+            entry.quote_received = True
+            entry.submitted_to_client = True
+            entry.converted_premium = serializer.validated_data['converted_premium']
+            entry.status_changed_at = timezone.now()
+            update_fields.extend([
+                'sent_for_quote', 'quote_received', 'submitted_to_client',
+                'converted_premium', 'status_changed_at',
+            ])
+        elif new_status == SalesKPIEntry.STATUS_LOST:
+            # TED-533: Lost asks the three questions; Converted Premium optional.
             entry.sent_for_quote = serializer.validated_data['sent_for_quote']
             entry.quote_received = serializer.validated_data['quote_received']
             entry.submitted_to_client = serializer.validated_data['submitted_to_client']
@@ -1065,9 +1144,12 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
                 'sent_for_quote', 'quote_received', 'submitted_to_client',
                 'status_changed_at',
             ])
-            if new_status == SalesKPIEntry.STATUS_WON:
-                entry.converted_premium = serializer.validated_data['converted_premium']
+            converted_premium = serializer.validated_data.get('converted_premium')
+            if converted_premium is not None:
+                entry.converted_premium = converted_premium
                 update_fields.append('converted_premium')
+        # else: a non-terminal move (Lead / Awaiting Quote / Shared with Client)
+        # — only `status` changes; no workflow answers, no status_changed_at.
 
         entry.save(update_fields=update_fields)
 
@@ -1095,7 +1177,12 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
 
         counts = dict(queryset.values_list('status').annotate(n=Count('id')))
         lead = counts.get('lead', 0)
-        in_progress = counts.get('in_progress', 0)
+        # TED-540: the dashboard shows the two non-terminal sub-stages as their
+        # own cards (Awaiting Quote, Shared with Client). `in_progress` is kept
+        # as their rollup for back-compat.
+        awaiting_quote = counts.get('awaiting_quote', 0)
+        shared_with_client = counts.get('shared_with_client', 0)
+        in_progress = awaiting_quote + shared_with_client
         won = counts.get('won', 0)
         lost = counts.get('lost', 0)
         total = lead + in_progress + won + lost
@@ -1116,6 +1203,8 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
         return Response({
             'total': total,
             'lead': lead,
+            'awaiting_quote': awaiting_quote,
+            'shared_with_client': shared_with_client,
             'in_progress': in_progress,
             'won': won,
             'lost': lost,
@@ -1196,6 +1285,7 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_quotes_compared = serializer.validated_data.get('quotes_compared')
         new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
@@ -1205,10 +1295,18 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
             entry.revisions = new_revisions
             update_fields.append('revisions')
 
-        # TED-440: persist the converted-premium amount captured by the
-        # StatusTransitionModal. Only meaningful on the success transition;
-        # ignored for Lost even if the client sent a value.
-        if new_converted_premium is not None and new_status != 'lost':
+        if new_quotes_compared is not None:
+            entry.quotes_compared = new_quotes_compared
+            update_fields.append('quotes_compared')
+
+        # TED-530: confirm/adjust the coverage type from the closing modal.
+        if 'class_of_enquiry' in serializer.validated_data:
+            entry.class_of_enquiry = serializer.validated_data['class_of_enquiry']
+            update_fields.append('class_of_enquiry')
+
+        # TED-440/TED-530: persist the converted-premium captured by the
+        # confirmation modal on every closing transition, including Lost.
+        if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
@@ -1306,6 +1404,7 @@ class MotorFleetRenewalEntryViewSet(BaseEntryViewSet):
         old_status = entry.status
         new_status = serializer.validated_data['status']
         new_revisions = serializer.validated_data.get('revisions')
+        new_quotes_compared = serializer.validated_data.get('quotes_compared')
         new_converted_premium = serializer.validated_data.get('converted_premium')
 
         entry.status = new_status
@@ -1315,10 +1414,18 @@ class MotorFleetRenewalEntryViewSet(BaseEntryViewSet):
             entry.revisions = new_revisions
             update_fields.append('revisions')
 
-        # TED-440: persist the converted-premium amount captured by the
-        # StatusTransitionModal. Only meaningful on the success transition;
-        # ignored for Lost even if the client sent a value.
-        if new_converted_premium is not None and new_status != 'lost':
+        if new_quotes_compared is not None:
+            entry.quotes_compared = new_quotes_compared
+            update_fields.append('quotes_compared')
+
+        # TED-530: confirm/adjust the coverage type from the closing modal.
+        if 'class_of_enquiry' in serializer.validated_data:
+            entry.class_of_enquiry = serializer.validated_data['class_of_enquiry']
+            update_fields.append('class_of_enquiry')
+
+        # TED-440/TED-530: persist the converted-premium captured by the
+        # confirmation modal on every closing transition, including Lost.
+        if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 

@@ -1,14 +1,16 @@
 'use client';
 
 /**
- * Sales KPI — per-ticket enquiry workflow (TED-446 + TED-447).
+ * Sales KPI — per-ticket enquiry workflow (TED-446 + TED-447 + TED-533).
  *
  * Replaces the original per-day KPI counter page. Each row is a single sales
  * enquiry ticket with customer_name + class_of_insurance + assignee +
  * potential_premium and a status state machine
- * (lead → in_progress → won/lost). Transitions out of `in_progress` go
- * through SalesKPIStatusModal (TED-447) which captures workflow flags and
- * Converted Premium for won.
+ * (lead ↔ awaiting_quote ↔ shared_with_client → won/lost). The three
+ * non-terminal stages change inline with no popup (TED-533); moves into
+ * won/lost open SalesKPIStatusModal — won asks only for Converted Premium
+ * (workflow flags auto-set to Yes), lost asks the three questions + optional
+ * premium.
  *
  * The Monthly Target side panel and Monthly Target progress card are
  * preserved unchanged in shape — they still drive premium / clients_assigned
@@ -21,6 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -59,9 +62,11 @@ import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate } from '@/app/lib/date';
+import { formatPremium } from '@/app/lib/number';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { useAuth } from '@/app/context/AuthContext';
+import { canModifyEntry } from '@/app/lib/permissions';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import {
   AddedByCell,
@@ -74,6 +79,7 @@ import { SalesKPIStatusModal } from '@/app/components/SalesKPIStatusModal';
 import {
   fetchApi,
   getSalesKPIStats,
+  updateSalesKPIStatus,
   getUsersForModule,
   getUsersForModulePage,
   getActiveUsersPage,
@@ -101,7 +107,8 @@ interface SalesMonthlyTarget {
 
 const STATUS_OPTIONS: Array<{ value: SalesKPIStatus; label: string }> = [
   { value: 'lead', label: 'Lead' },
-  { value: 'in_progress', label: 'In Progress' },
+  { value: 'awaiting_quote', label: 'Awaiting Quote' },
+  { value: 'shared_with_client', label: 'Shared with Client' },
   { value: 'won', label: 'Won' },
   { value: 'lost', label: 'Lost' },
 ];
@@ -113,27 +120,19 @@ const TYPE_OPTIONS: Array<{ value: SalesKPIEntryType; label: string }> = [
 
 const STATUS_LABEL: Record<SalesKPIStatus, string> = {
   lead: 'Lead',
-  in_progress: 'In Progress',
+  awaiting_quote: 'Awaiting Quote',
+  shared_with_client: 'Shared with Client',
   won: 'Won',
   lost: 'Lost',
 };
 
 const STATUS_BADGE_CLASSES: Record<SalesKPIStatus, string> = {
   lead: 'bg-blue-100 text-blue-800',
-  in_progress: 'bg-amber-100 text-amber-800',
+  awaiting_quote: 'bg-amber-100 text-amber-800',
+  shared_with_client: 'bg-indigo-100 text-indigo-800',
   won: 'bg-green-100 text-green-800',
   lost: 'bg-red-100 text-red-800',
 };
-
-function formatPremium(val: number | string | null | undefined): string {
-  if (val == null || val === '') return '0.00';
-  const n = Number(val);
-  if (!Number.isFinite(n)) return '0.00';
-  return n.toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 function toLocalDateString(d: Date): string {
   const y = d.getFullYear();
@@ -327,6 +326,34 @@ export default function SalesKPIPage() {
   // row is on screen, since the backend's perform_create always binds new
   // rows to request.user and team aggregates have no id to PATCH against.
   const isOwnTargetView = !isAggregator || cardView === 'my';
+
+  // TED-520: searchable view selector (My Deals / Team Deals / a specific user)
+  // for the Monthly Target card and side panel — same UX as the searchable
+  // filter dropdowns. Options come from the in-memory moduleUsers list.
+  const viewFetchPage = useCallback(
+    async ({ search }: { search: string; page: number }) => {
+      const opts: { id: string; label: string }[] = [];
+      if (user?.is_staff) opts.push({ id: 'my', label: 'My Deals' });
+      opts.push({ id: 'team', label: 'Team Deals' });
+      for (const u of moduleUsers) {
+        if (u.id === currentUserId) continue;
+        opts.push({ id: String(u.id), label: u.full_name || u.email });
+      }
+      const q = search.trim().toLowerCase();
+      return {
+        results: q ? opts.filter((o) => o.label.toLowerCase().includes(q)) : opts,
+        hasMore: false,
+      };
+    },
+    [user?.is_staff, moduleUsers, currentUserId],
+  );
+
+  const viewSelectedLabel = (() => {
+    if (cardView === 'my') return 'My Deals';
+    if (cardView === 'team') return 'Team Deals';
+    const u = moduleUsers.find((m) => String(m.id) === cardView);
+    return u ? u.full_name || u.email : null;
+  })();
 
   const fetchCardData = useCallback(async () => {
     if (!currentUserId) return;
@@ -583,44 +610,37 @@ export default function SalesKPIPage() {
     }
   };
 
-  const handleStatusChange = (entry: SalesKPIEntry, next: SalesKPIStatus) => {
-    setStatusModalEntry(entry);
-    setStatusModalNext(next);
+  const handleStatusChange = async (entry: SalesKPIEntry, next: SalesKPIStatus) => {
+    // TED-533: moves among the non-terminal stages (Lead / Awaiting Quote /
+    // Shared with Client) apply immediately with no popup. Closing the deal
+    // (Won / Lost) still opens the modal to capture the workflow data.
+    if (next === 'won' || next === 'lost') {
+      setStatusModalEntry(entry);
+      setStatusModalNext(next);
+      return;
+    }
+    const result = await updateSalesKPIStatus(entry.id, { status: next });
+    if (result.data) {
+      toast.success(`Moved to ${STATUS_LABEL[next]}`);
+      refreshAll();
+    } else {
+      toast.error(result.error || 'Failed to update status');
+    }
   };
 
   // ── Columns ───────────────────────────────────────────────────────────────
 
+  // TED-543: Sales table column order — ID, Customer Name, Status, Notes,
+  // Potential Premium, Converted Premium, then the remaining columns as before,
+  // with Date moved to the end.
   const columns = [
     { key: 'pib_id', header: 'ID', render: (item: SalesKPIEntry) => item.pib_id },
-    { key: 'date', header: 'Date', render: (item: SalesKPIEntry) => formatDate(item.date) },
     { key: 'customer_name', header: 'Customer Name' },
-    {
-      key: 'entry_type',
-      header: 'Type',
-      render: (item: SalesKPIEntry) => item.entry_type_display,
-    },
-    {
-      key: 'class_of_insurance',
-      header: 'Class of Insurance',
-      render: (item: SalesKPIEntry) => item.class_of_insurance_name || '—',
-    },
-    { key: 'assignee', header: 'Assignee', render: (item: SalesKPIEntry) => item.assignee_name },
-    {
-      key: 'potential_premium',
-      header: 'Potential Premium',
-      render: (item: SalesKPIEntry) => formatPremium(item.potential_premium),
-    },
-    {
-      key: 'converted_premium',
-      header: 'Converted Premium',
-      render: (item: SalesKPIEntry) =>
-        item.converted_premium != null ? formatPremium(item.converted_premium) : '—',
-    },
     {
       key: 'status',
       header: 'Status',
       render: (item: SalesKPIEntry) =>
-        item.is_terminal || item.allowed_transitions.length === 0 ? (
+        item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by) ? (
           <span
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE_CLASSES[item.status]}`}
           >
@@ -631,26 +651,30 @@ export default function SalesKPIPage() {
             value={item.status}
             onValueChange={(v) => handleStatusChange(item, v as SalesKPIStatus)}
           >
-            <SelectTrigger className="h-8 w-[140px] text-xs shadow-none">
+            <SelectTrigger className="h-8 w-[180px] text-xs shadow-none">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={item.status} disabled>
-                {STATUS_LABEL[item.status]}
-              </SelectItem>
-              {item.allowed_transitions.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {STATUS_LABEL[s]}
+              {/* TED-542: always render the five stages in the fixed pipeline
+                  order (Lead → Awaiting Quote → Shared with Client → Won →
+                  Lost), regardless of the current status. The current status
+                  stays in its canonical position (disabled); any status that
+                  isn't a valid transition is disabled too. */}
+              {STATUS_OPTIONS.map((opt) => (
+                <SelectItem
+                  key={opt.value}
+                  value={opt.value}
+                  disabled={
+                    opt.value === item.status ||
+                    !item.allowed_transitions.includes(opt.value)
+                  }
+                >
+                  {opt.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         ),
-    },
-    {
-      key: 'added_by_name',
-      header: 'Added by',
-      render: (item: SalesKPIEntry) => <AddedByCell entry={item} />,
     },
     {
       key: 'notes',
@@ -671,6 +695,34 @@ export default function SalesKPIPage() {
         </button>
       ),
     },
+    {
+      key: 'potential_premium',
+      header: 'Potential Premium',
+      render: (item: SalesKPIEntry) => formatPremium(item.potential_premium),
+    },
+    {
+      key: 'converted_premium',
+      header: 'Converted Premium',
+      render: (item: SalesKPIEntry) =>
+        item.converted_premium != null ? formatPremium(item.converted_premium) : '—',
+    },
+    {
+      key: 'entry_type',
+      header: 'Type',
+      render: (item: SalesKPIEntry) => item.entry_type_display,
+    },
+    {
+      key: 'class_of_insurance',
+      header: 'Class of Insurance',
+      render: (item: SalesKPIEntry) => item.class_of_insurance_name || '—',
+    },
+    { key: 'assignee', header: 'Assignee', render: (item: SalesKPIEntry) => item.assignee_name },
+    {
+      key: 'added_by_name',
+      header: 'Added by',
+      render: (item: SalesKPIEntry) => <AddedByCell entry={item} />,
+    },
+    { key: 'date', header: 'Date', render: (item: SalesKPIEntry) => formatDate(item.date) },
   ];
 
   // ── Side panel helpers (unchanged from prior page) ───────────────────────
@@ -770,22 +822,17 @@ export default function SalesKPIPage() {
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Monthly Target</h2>
             {isAggregator && (
-              <Select value={cardView} onValueChange={setCardView}>
-                <SelectTrigger className="w-[140px] shadow-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {user?.is_staff && <SelectItem value="my">My Deals</SelectItem>}
-                  <SelectItem value="team">Team Deals</SelectItem>
-                  {moduleUsers
-                    .filter((u) => u.id !== currentUserId)
-                    .map((u) => (
-                      <SelectItem key={u.id} value={String(u.id)}>
-                        {u.full_name || u.email}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect<{ id: string; label: string }>
+                value={cardView}
+                onValueChange={setCardView}
+                fetchPage={viewFetchPage}
+                getOptionValue={(o) => o.id}
+                getOptionLabel={(o) => o.label}
+                selectedLabel={viewSelectedLabel}
+                placeholder="Select view"
+                emptyLabel="No users found"
+                triggerClassName="w-[140px] shadow-none"
+              />
             )}
           </div>
           <div className="grid grid-cols-2 gap-6">
@@ -958,10 +1005,11 @@ export default function SalesKPIPage() {
               hasActiveFilters={!!(dashFrom || dashTo || dashUserId)}
               onClear={() => { setDashFrom(''); setDashTo(''); setDashUserId(''); }}
             />
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <StatCard title="Total Enquiries" value={stats?.total ?? 0} />
               <StatCard title="Lead" value={stats?.lead ?? 0} accent="text-blue-600" />
-              <StatCard title="In Progress" value={stats?.in_progress ?? 0} accent="text-amber-600" />
+              <StatCard title="Awaiting Quote" value={stats?.awaiting_quote ?? 0} accent="text-amber-600" />
+              <StatCard title="Shared with Client" value={stats?.shared_with_client ?? 0} accent="text-indigo-600" />
               <StatCard title="Won" value={stats?.won ?? 0} accent="text-green-600" />
               <StatCard title="Lost" value={stats?.lost ?? 0} accent="text-gray-600" />
             </div>
@@ -1131,7 +1179,8 @@ export default function SalesKPIPage() {
                   canEdit={(entry) =>
                     entry.is_editable &&
                     entry.status !== 'won' &&
-                    entry.status !== 'lost'
+                    entry.status !== 'lost' &&
+                    canModifyEntry(user, entry.added_by)
                   }
                   canDelete={(entry) =>
                     entry.added_by === currentUserId &&
@@ -1202,22 +1251,17 @@ export default function SalesKPIPage() {
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-base text-[#09090B]">Monthly Targets</h3>
                 {isAggregator ? (
-                  <Select value={cardView} onValueChange={setCardView}>
-                    <SelectTrigger className="w-[140px] h-7 shadow-none text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {user?.is_staff && <SelectItem value="my">My Deals</SelectItem>}
-                      <SelectItem value="team">Team Deals</SelectItem>
-                      {moduleUsers
-                        .filter((u) => u.id !== currentUserId)
-                        .map((u) => (
-                          <SelectItem key={u.id} value={String(u.id)}>
-                            {u.full_name || u.email}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect<{ id: string; label: string }>
+                    value={cardView}
+                    onValueChange={setCardView}
+                    fetchPage={viewFetchPage}
+                    getOptionValue={(o) => o.id}
+                    getOptionLabel={(o) => o.label}
+                    selectedLabel={viewSelectedLabel}
+                    placeholder="Select view"
+                    emptyLabel="No users found"
+                    triggerClassName="w-[140px] h-7 shadow-none text-xs"
+                  />
                 ) : (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">
                     My Target
@@ -1318,11 +1362,8 @@ export default function SalesKPIPage() {
                                 ? 'New Business Premium Target'
                                 : 'Renewal Premium Target'}
                             </Label>
-                            <Input
+                            <NumberInput
                               id={key}
-                              type="number"
-                              min="0.01"
-                              step="0.01"
                               autoFocus
                               placeholder={
                                 tab === 'premium'
@@ -1330,10 +1371,10 @@ export default function SalesKPIPage() {
                                   : 'Enter renewal premium target…'
                               }
                               value={sheetInlineValues[key] ?? ''}
-                              onChange={(e) =>
+                              onValueChange={(v) =>
                                 setSheetInlineValues((prev) => ({
                                   ...prev,
-                                  [key]: e.target.value,
+                                  [key]: v,
                                 }))
                               }
                               onKeyDown={(e) => {
@@ -1591,13 +1632,10 @@ function EntryModal({
             </div>
             <div className="space-y-2">
               <Label>Potential Premium *</Label>
-              <Input
-                type="number"
-                min="0.01"
-                step={0.01}
+              <NumberInput
                 placeholder="0.00"
                 value={potentialPremium}
-                onChange={(e) => setPotentialPremium(e.target.value)}
+                onValueChange={setPotentialPremium}
                 required
               />
             </div>
@@ -1776,13 +1814,10 @@ function TargetModal({
                 {monthLabel}
               </span>
             </div>
-            <Input
-              type="number"
-              min="0.01"
-              step="0.01"
+            <NumberInput
               placeholder="e.g. 150.00"
               value={premiumTarget}
-              onChange={(e) => setPremiumTarget(e.target.value)}
+              onValueChange={setPremiumTarget}
             />
             <p className="text-xs text-muted-foreground">
               New business premium target for this month
@@ -1795,13 +1830,10 @@ function TargetModal({
                 {monthLabel}
               </span>
             </div>
-            <Input
-              type="number"
-              min="0.01"
-              step="0.01"
+            <NumberInput
               placeholder="e.g. 150.00"
               value={clientsAssigned}
-              onChange={(e) => setClientsAssigned(e.target.value)}
+              onValueChange={setClientsAssigned}
             />
             <p className="text-xs text-muted-foreground">
               Renewal premium target for this month

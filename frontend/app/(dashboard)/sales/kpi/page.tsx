@@ -319,6 +319,34 @@ export default function SalesKPIPage() {
   // rows to request.user and team aggregates have no id to PATCH against.
   const isOwnTargetView = !isAggregator || cardView === 'my';
 
+  // TED-520: searchable view selector (My Deals / Team Deals / a specific user)
+  // for the Monthly Target card and side panel — same UX as the searchable
+  // filter dropdowns. Options come from the in-memory moduleUsers list.
+  const viewFetchPage = useCallback(
+    async ({ search }: { search: string; page: number }) => {
+      const opts: { id: string; label: string }[] = [];
+      if (user?.is_staff) opts.push({ id: 'my', label: 'My Deals' });
+      opts.push({ id: 'team', label: 'Team Deals' });
+      for (const u of moduleUsers) {
+        if (u.id === currentUserId) continue;
+        opts.push({ id: String(u.id), label: u.full_name || u.email });
+      }
+      const q = search.trim().toLowerCase();
+      return {
+        results: q ? opts.filter((o) => o.label.toLowerCase().includes(q)) : opts,
+        hasMore: false,
+      };
+    },
+    [user?.is_staff, moduleUsers, currentUserId],
+  );
+
+  const viewSelectedLabel = (() => {
+    if (cardView === 'my') return 'My Deals';
+    if (cardView === 'team') return 'Team Deals';
+    const u = moduleUsers.find((m) => String(m.id) === cardView);
+    return u ? u.full_name || u.email : null;
+  })();
+
   const fetchCardData = useCallback(async () => {
     if (!currentUserId) return;
     // Targets endpoint: aggregator + user_id → that user's row; aggregator
@@ -761,22 +789,17 @@ export default function SalesKPIPage() {
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Monthly Target</h2>
             {isAggregator && (
-              <Select value={cardView} onValueChange={setCardView}>
-                <SelectTrigger className="w-[140px] shadow-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {user?.is_staff && <SelectItem value="my">My Deals</SelectItem>}
-                  <SelectItem value="team">Team Deals</SelectItem>
-                  {moduleUsers
-                    .filter((u) => u.id !== currentUserId)
-                    .map((u) => (
-                      <SelectItem key={u.id} value={String(u.id)}>
-                        {u.full_name || u.email}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect<{ id: string; label: string }>
+                value={cardView}
+                onValueChange={setCardView}
+                fetchPage={viewFetchPage}
+                getOptionValue={(o) => o.id}
+                getOptionLabel={(o) => o.label}
+                selectedLabel={viewSelectedLabel}
+                placeholder="Select view"
+                emptyLabel="No users found"
+                triggerClassName="w-[140px] shadow-none"
+              />
             )}
           </div>
           <div className="grid grid-cols-2 gap-6">
@@ -1193,22 +1216,17 @@ export default function SalesKPIPage() {
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-base text-[#09090B]">Monthly Targets</h3>
                 {isAggregator ? (
-                  <Select value={cardView} onValueChange={setCardView}>
-                    <SelectTrigger className="w-[140px] h-7 shadow-none text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {user?.is_staff && <SelectItem value="my">My Deals</SelectItem>}
-                      <SelectItem value="team">Team Deals</SelectItem>
-                      {moduleUsers
-                        .filter((u) => u.id !== currentUserId)
-                        .map((u) => (
-                          <SelectItem key={u.id} value={String(u.id)}>
-                            {u.full_name || u.email}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect<{ id: string; label: string }>
+                    value={cardView}
+                    onValueChange={setCardView}
+                    fetchPage={viewFetchPage}
+                    getOptionValue={(o) => o.id}
+                    getOptionLabel={(o) => o.label}
+                    selectedLabel={viewSelectedLabel}
+                    placeholder="Select view"
+                    emptyLabel="No users found"
+                    triggerClassName="w-[140px] h-7 shadow-none text-xs"
+                  />
                 ) : (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">
                     My Target

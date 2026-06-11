@@ -704,6 +704,16 @@ class MotorFleetNewEntry(BaseEntry):
     converted_premium = models.DecimalField(
         max_digits=15, decimal_places=2, null=True, blank=True,
     )
+    class_of_enquiry = models.CharField(
+        max_length=20, choices=MOTOR_CLASS_OF_ENQUIRY_CHOICES,
+        blank=True, default='',
+    )
+    insurance_company = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='motor_fleet_new_entries',
+        null=True, blank=True,
+    )
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Motor Fleet New Entry'
@@ -818,6 +828,16 @@ class MotorFleetRenewalEntry(BaseEntry):
     # update-status flow (TED-440). NULL when not yet closed or closed as Lost.
     converted_premium = models.DecimalField(
         max_digits=15, decimal_places=2, null=True, blank=True,
+    )
+    class_of_enquiry = models.CharField(
+        max_length=20, choices=MOTOR_CLASS_OF_ENQUIRY_CHOICES,
+        blank=True, default='',
+    )
+    insurance_company = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='motor_fleet_renewal_entries',
+        null=True, blank=True,
     )
 
     class Meta(BaseEntry.Meta):

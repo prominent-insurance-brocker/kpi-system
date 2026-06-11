@@ -248,6 +248,8 @@ export function MotorEnquiryPage({
   const [agentId, setAgentId] = useState('');   // FK Source/Agent
   const [statusFilter, setStatusFilter] = useState('');
   const [clientName, setClientName] = useState('');
+  const [insuranceCompanyFilter, setInsuranceCompanyFilter] = useState('');
+  const [classOfEnquiryFilter, setClassOfEnquiryFilter] = useState('');
 
   // Dashboard filters (independent of enquiries filters to avoid coupling).
   const [dashFrom, setDashFrom] = useState('');
@@ -363,6 +365,8 @@ export function MotorEnquiryPage({
       if (agentId) qs.set('agent_id', agentId);
       if (statusFilter) qs.set('status', statusFilter);
       if (clientName) qs.set('client_name', clientName);
+      if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
+      if (classOfEnquiryFilter) qs.set('class_of_enquiry', classOfEnquiryFilter);
 
       const result = await fetchApi<{ results: MotorEnquiryEntry[]; count: number }>(
         `/api/entries/${apiSlug}/?${qs}`
@@ -372,7 +376,7 @@ export function MotorEnquiryPage({
     } finally {
       setIsLoading(false);
     }
-  }, [apiSlug, page, pageSize, dateFrom, dateTo, userId, agentId, statusFilter, clientName]);
+  }, [apiSlug, page, pageSize, dateFrom, dateTo, userId, agentId, statusFilter, clientName, insuranceCompanyFilter, classOfEnquiryFilter]);
 
   const fetchStats = useCallback(async () => {
     const result = await getMotorEnquiryStats(apiSlug, {
@@ -867,7 +871,8 @@ export function MotorEnquiryPage({
   ];
 
   const hasActiveFilters =
-    !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName);
+    !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName ||
+      insuranceCompanyFilter || classOfEnquiryFilter);
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -1130,6 +1135,40 @@ export function MotorEnquiryPage({
                 },
                 options: config.options.map((o) => ({ value: o.value, label: o.label })),
               }}
+              extraSearchableFilters={[
+                {
+                  label: 'Insurance Company',
+                  value: insuranceCompanyFilter,
+                  onChange: (v) => {
+                    setInsuranceCompanyFilter(v);
+                    setPage(1);
+                  },
+                  placeholder: 'All Insurers',
+                  clearLabel: 'All Insurers',
+                  fetchPage: async ({ search, page }) => {
+                    const res = await getInsuranceCompaniesPage({ search, page });
+                    return {
+                      results: res.data?.results ?? [],
+                      hasMore: res.data?.has_more ?? false,
+                    };
+                  },
+                },
+              ]}
+              extraSelects={[
+                {
+                  label: 'Class of Enquiry',
+                  value: classOfEnquiryFilter,
+                  onChange: (v) => {
+                    setClassOfEnquiryFilter(v);
+                    setPage(1);
+                  },
+                  options: [
+                    { value: 'all', label: 'All Classes' },
+                    { value: 'comprehensive', label: 'Comprehensive' },
+                    { value: 'tpl', label: 'TPL' },
+                  ],
+                },
+              ]}
               hasActiveFilters={hasActiveFilters}
               onClear={() => {
                 setDateFrom('');
@@ -1138,6 +1177,8 @@ export function MotorEnquiryPage({
                 setAgentId('');
                 setStatusFilter('');
                 setClientName('');
+                setInsuranceCompanyFilter('');
+                setClassOfEnquiryFilter('');
                 setPage(1);
               }}
             />

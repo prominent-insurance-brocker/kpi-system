@@ -41,33 +41,54 @@ class MotorClaimEntryFilter(EntryFilter):
         ]
 
 
-class MotorEnquiryFilter(EntryFilter):
-    """Filter for motor new / motor renewal enquiries — status, agent, and client-name search.
+class BaseEnquiryFilter(EntryFilter):
+    """Common per-enquiry filters shared by the motor + general modules.
 
-    Used by both MotorNewEntry and MotorRenewalEntry viewsets since their
-    schemas are identical.
+    All enquiry modules (motor new/renewal, motor fleet new/renewal, general
+    new/renewal) share the same status state-machine, an agent FK, a
+    client-name search, and an insurance_company FK. Module-specific class
+    fields are added by the subclasses below — Motor uses `class_of_enquiry`
+    (a char choice), General uses `class_of_insurance` (an FK).
     """
     status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
     agent_id = django_filters.NumberFilter(field_name='agent_id')
     client_name = django_filters.CharFilter(field_name='client_name', lookup_expr='icontains')
+    insurance_company = django_filters.NumberFilter(field_name='insurance_company_id')
 
     class Meta:
-        fields = ['date_from', 'date_to', 'user_id', 'status', 'agent_id', 'client_name']
+        fields = [
+            'date_from', 'date_to', 'user_id', 'status', 'agent_id', 'client_name',
+            'insurance_company',
+        ]
+
+
+class MotorEnquiryFilter(BaseEnquiryFilter):
+    """Filter for motor new / motor renewal / motor fleet enquiries.
+
+    Adds the motor-only `class_of_enquiry` char-choice filter (TED-527) on top
+    of the shared enquiry filters. Used by all four motor enquiry viewsets
+    since their schemas are identical.
+    """
+    class_of_enquiry = django_filters.CharFilter(field_name='class_of_enquiry', lookup_expr='exact')
+
+    class Meta:
+        fields = [
+            'date_from', 'date_to', 'user_id', 'status', 'agent_id', 'client_name',
+            'insurance_company', 'class_of_enquiry',
+        ]
 
 
 # Backwards-compatible alias (kept short to make grepping easy if old code lingers).
 MotorNewEntryFilter = MotorEnquiryFilter
 
 
-class GeneralEnquiryFilter(MotorEnquiryFilter):
+class GeneralEnquiryFilter(BaseEnquiryFilter):
     """Filter for general new / general renewal enquiries.
 
-    Extends the shared MotorEnquiryFilter (date/user/status/agent/client_name)
-    with the two FK lookups general modules expose but motor ones don't:
-    insurance_company and class_of_insurance (TED-528). Motor enquiries use a
-    `class_of_enquiry` char field instead, so these can't live on the base.
+    Adds the general-only `class_of_insurance` FK lookup (TED-528) on top of
+    the shared enquiry filters. General modules use an FK class field rather
+    than the motor `class_of_enquiry` char choice.
     """
-    insurance_company = django_filters.NumberFilter(field_name='insurance_company_id')
     class_of_insurance = django_filters.NumberFilter(field_name='class_of_insurance_id')
 
     class Meta:

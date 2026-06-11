@@ -13,7 +13,9 @@
       "Bash(Select-Object Name)",
       "Bash(xargs grep -l \"GeneralNewMonthlyTarget\")",
       "Bash(python -c \"import django_filters; print\\('has django_filters'\\)\")",
-      "Bash(./.venv/Scripts/python.exe manage.py check)"
+      "Bash(./.venv/Scripts/python.exe manage.py check)",
+      "Bash(./.venv/Scripts/python.exe manage.py makemigrations entries)",
+      "Bash(./.venv/Scripts/python.exe manage.py migrate entries)"
     ]
   }
 }

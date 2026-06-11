@@ -69,6 +69,7 @@ import {
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate } from '@/app/lib/date';
+import { formatPremium, formatNumber } from '@/app/lib/number';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import {
@@ -241,6 +242,8 @@ export function GeneralNewEnquiryPage() {
   const [agentId, setAgentId] = useState('');   // FK Source/Agent
   const [statusFilter, setStatusFilter] = useState('');
   const [clientName, setClientName] = useState('');
+  const [insuranceCompanyFilter, setInsuranceCompanyFilter] = useState('');
+  const [classOfInsuranceFilter, setClassOfInsuranceFilter] = useState('');
 
   // Dashboard filters (independent of enquiries filters to avoid coupling).
   const [dashFrom, setDashFrom] = useState('');
@@ -332,6 +335,8 @@ export function GeneralNewEnquiryPage() {
       if (agentId) qs.set('agent_id', agentId);
       if (statusFilter) qs.set('status', statusFilter);
       if (clientName) qs.set('client_name', clientName);
+      if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
+      if (classOfInsuranceFilter) qs.set('class_of_insurance', classOfInsuranceFilter);
 
       const result = await fetchApi<{ results: MotorEnquiryEntry[]; count: number }>(
         `/api/entries/${apiSlug}/?${qs}`
@@ -341,7 +346,7 @@ export function GeneralNewEnquiryPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [apiSlug, page, pageSize, dateFrom, dateTo, userId, agentId, statusFilter, clientName]);
+  }, [apiSlug, page, pageSize, dateFrom, dateTo, userId, agentId, statusFilter, clientName, insuranceCompanyFilter, classOfInsuranceFilter]);
 
   const fetchStats = useCallback(async () => {
     const result = await getMotorEnquiryStats(apiSlug, {
@@ -761,7 +766,7 @@ export function GeneralNewEnquiryPage() {
         const raw = item.potential_premium as string | null | undefined;
         if (raw == null || raw === '') return '—';
         const n = Number(raw);
-        return Number.isFinite(n) ? n.toLocaleString() : raw;
+        return Number.isFinite(n) ? formatPremium(n) : raw;
       },
     },
     {
@@ -771,7 +776,7 @@ export function GeneralNewEnquiryPage() {
         const raw = item.converted_premium as string | null | undefined;
         if (raw == null || raw === '') return '—';
         const n = Number(raw);
-        return Number.isFinite(n) ? n.toLocaleString() : raw;
+        return Number.isFinite(n) ? formatPremium(n) : raw;
       },
     },
     {
@@ -801,7 +806,8 @@ export function GeneralNewEnquiryPage() {
   ];
 
   const hasActiveFilters =
-    !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName);
+    !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName ||
+      insuranceCompanyFilter || classOfInsuranceFilter);
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -1057,6 +1063,42 @@ export function GeneralNewEnquiryPage() {
                 },
                 options: config.options.map((o) => ({ value: o.value, label: o.label })),
               }}
+              extraSearchableFilters={[
+                {
+                  label: 'Insurance Company',
+                  value: insuranceCompanyFilter,
+                  onChange: (v) => {
+                    setInsuranceCompanyFilter(v);
+                    setPage(1);
+                  },
+                  placeholder: 'All Insurers',
+                  clearLabel: 'All Insurers',
+                  fetchPage: async ({ search, page }) => {
+                    const res = await getInsuranceCompaniesPage({ search, page });
+                    return {
+                      results: res.data?.results ?? [],
+                      hasMore: res.data?.has_more ?? false,
+                    };
+                  },
+                },
+                {
+                  label: 'Class of Insurance',
+                  value: classOfInsuranceFilter,
+                  onChange: (v) => {
+                    setClassOfInsuranceFilter(v);
+                    setPage(1);
+                  },
+                  placeholder: 'All Classes',
+                  clearLabel: 'All Classes',
+                  fetchPage: async ({ search, page }) => {
+                    const res = await getClassOfInsurancePage({ search, page });
+                    return {
+                      results: res.data?.results ?? [],
+                      hasMore: res.data?.has_more ?? false,
+                    };
+                  },
+                },
+              ]}
               hasActiveFilters={hasActiveFilters}
               onClear={() => {
                 setDateFrom('');
@@ -1065,6 +1107,8 @@ export function GeneralNewEnquiryPage() {
                 setAgentId('');
                 setStatusFilter('');
                 setClientName('');
+                setInsuranceCompanyFilter('');
+                setClassOfInsuranceFilter('');
                 setPage(1);
               }}
             />
@@ -1374,17 +1418,12 @@ function RatioCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold text-[#09090B]">
-          {success.toLocaleString()} / {total.toLocaleString()}
+          {formatNumber(success)} / {formatNumber(total)}
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">({pct.toFixed(1)}%)</div>
       </CardContent>
     </Card>
   );
-}
-
-function formatPremium(n: number | null | undefined): string {
-  if (n == null) return '0';
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 function StatCard({
@@ -1659,7 +1698,7 @@ function ClientRetentionTargetCard({
       <div className="space-y-1">
         <div>
           <div className="flex items-baseline justify-between">
-            <span className="text-xl font-bold">{actuals.toLocaleString()}</span>
+            <span className="text-xl font-bold">{formatNumber(actuals)}</span>
             <span className="text-sm text-muted-foreground">Client Retention</span>
           </div>
           <div className="relative">
@@ -1688,7 +1727,7 @@ function ClientRetentionTargetCard({
               >
                 <span className="text-blue-500 leading-none">▲</span>
                 <span className="text-muted-foreground">
-                  {Math.round(clientsTarget).toLocaleString()}
+                  {formatNumber(Math.round(clientsTarget))}
                 </span>
               </div>
             )}

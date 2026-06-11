@@ -59,6 +59,24 @@ class MotorEnquiryFilter(EntryFilter):
 MotorNewEntryFilter = MotorEnquiryFilter
 
 
+class GeneralEnquiryFilter(MotorEnquiryFilter):
+    """Filter for general new / general renewal enquiries.
+
+    Extends the shared MotorEnquiryFilter (date/user/status/agent/client_name)
+    with the two FK lookups general modules expose but motor ones don't:
+    insurance_company and class_of_insurance (TED-528). Motor enquiries use a
+    `class_of_enquiry` char field instead, so these can't live on the base.
+    """
+    insurance_company = django_filters.NumberFilter(field_name='insurance_company_id')
+    class_of_insurance = django_filters.NumberFilter(field_name='class_of_insurance_id')
+
+    class Meta:
+        fields = [
+            'date_from', 'date_to', 'user_id', 'status', 'agent_id', 'client_name',
+            'insurance_company', 'class_of_insurance',
+        ]
+
+
 class SalesKPIEntryFilter(EntryFilter):
     """Per-ticket Sales KPI filter (TED-446).
 

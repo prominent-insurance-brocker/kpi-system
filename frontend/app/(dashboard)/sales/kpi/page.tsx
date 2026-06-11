@@ -59,6 +59,7 @@ import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate } from '@/app/lib/date';
+import { formatPremium } from '@/app/lib/number';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { useAuth } from '@/app/context/AuthContext';
@@ -124,16 +125,6 @@ const STATUS_BADGE_CLASSES: Record<SalesKPIStatus, string> = {
   won: 'bg-green-100 text-green-800',
   lost: 'bg-red-100 text-red-800',
 };
-
-function formatPremium(val: number | string | null | undefined): string {
-  if (val == null || val === '') return '0.00';
-  const n = Number(val);
-  if (!Number.isFinite(n)) return '0.00';
-  return n.toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 function toLocalDateString(d: Date): string {
   const y = d.getFullYear();

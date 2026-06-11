@@ -65,6 +65,7 @@ import {
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate } from '@/app/lib/date';
+import { formatPremium, formatNumber } from '@/app/lib/number';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import {
@@ -826,7 +827,7 @@ export function MotorEnquiryPage({
         const raw = item.potential_premium as string | null | undefined;
         if (raw == null || raw === '') return '—';
         const n = Number(raw);
-        return Number.isFinite(n) ? n.toLocaleString() : raw;
+        return Number.isFinite(n) ? formatPremium(n) : raw;
       },
     },
     {
@@ -836,7 +837,7 @@ export function MotorEnquiryPage({
         const raw = item.converted_premium as string | null | undefined;
         if (raw == null || raw === '') return '—';
         const n = Number(raw);
-        return Number.isFinite(n) ? n.toLocaleString() : raw;
+        return Number.isFinite(n) ? formatPremium(n) : raw;
       },
     },
     {
@@ -1477,17 +1478,12 @@ function RatioCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold text-[#09090B]">
-          {success.toLocaleString()} / {total.toLocaleString()}
+          {formatNumber(success)} / {formatNumber(total)}
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">({pct.toFixed(1)}%)</div>
       </CardContent>
     </Card>
   );
-}
-
-function formatPremium(n: number | null | undefined): string {
-  if (n == null) return '0';
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 function StatCard({
@@ -1802,7 +1798,7 @@ function ClientRetentionTargetCard({
       <div className="space-y-1">
         <div>
           <div className="flex items-baseline justify-between">
-            <span className="text-xl font-bold">{actuals.toLocaleString()}</span>
+            <span className="text-xl font-bold">{formatNumber(actuals)}</span>
             <span className="text-sm text-muted-foreground">Client Retention</span>
           </div>
           <div className="relative">
@@ -1831,7 +1827,7 @@ function ClientRetentionTargetCard({
               >
                 <span className="text-blue-500 leading-none">▲</span>
                 <span className="text-muted-foreground">
-                  {Math.round(clientsTarget).toLocaleString()}
+                  {formatNumber(Math.round(clientsTarget))}
                 </span>
               </div>
             )}

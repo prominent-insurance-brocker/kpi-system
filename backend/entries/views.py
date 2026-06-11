@@ -80,7 +80,7 @@ from .serializers import (
 )
 from .filters import (
     EntryFilter, ClaimEntryFilter, MotorEnquiryFilter, MotorClaimEntryFilter,
-    SalesKPIEntryFilter,
+    SalesKPIEntryFilter, GeneralEnquiryFilter,
 )
 from roles.permissions import IsAdminUser, user_is_hod
 
@@ -324,7 +324,7 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
     queryset = GeneralNewEntry.objects.all()
     serializer_class = GeneralNewEntrySerializer
     module_key = 'general_new'
-    filterset_class = MotorEnquiryFilter
+    filterset_class = GeneralEnquiryFilter
 
     def get_queryset(self):
         return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
@@ -432,7 +432,7 @@ class GeneralRenewalEntryViewSet(BaseEntryViewSet):
     queryset = GeneralRenewalEntry.objects.all()
     serializer_class = GeneralRenewalEntrySerializer
     module_key = 'general_renewal'
-    filterset_class = MotorEnquiryFilter
+    filterset_class = GeneralEnquiryFilter
 
     def get_queryset(self):
         return super().get_queryset().select_related('agent').prefetch_related('status_transitions')

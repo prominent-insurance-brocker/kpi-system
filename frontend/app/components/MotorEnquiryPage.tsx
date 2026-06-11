@@ -1677,7 +1677,7 @@ function EnquiryForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label>Potential Premium</Label>
+          <Label>Potential Premium *</Label>
           <Input
             type="number"
             min={0}
@@ -1685,10 +1685,11 @@ function EnquiryForm({
             placeholder="0.00"
             value={potentialPremium}
             onChange={(e) => setPotentialPremium(e.target.value)}
+            required
           />
         </div>
         <div className="space-y-2">
-          <Label>Class of Enquiry</Label>
+          <Label>Class of Enquiry *</Label>
           <Select
             value={classOfEnquiry || '__none__'}
             onValueChange={(v) => setClassOfEnquiry(v === '__none__' ? '' : v)}
@@ -1706,7 +1707,7 @@ function EnquiryForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Insurance Company</Label>
+        <Label>Insurance Company *</Label>
         <SearchableSelect
           value={insurerId ? String(insurerId) : null}
           onValueChange={(v) => setInsurerId(v ? Number(v) : null)}
@@ -1751,7 +1752,7 @@ function EnquiryForm({
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting || !clientName || !chassisNo || !agentId}>
+        <Button type="submit" disabled={isSubmitting || !clientName || !chassisNo || !agentId || !potentialPremium.trim() || !classOfEnquiry || !insurerId}>
           {isSubmitting ? 'Saving…' : entry ? 'Update' : 'Add Enquiry'}
         </Button>
       </DialogFooter>

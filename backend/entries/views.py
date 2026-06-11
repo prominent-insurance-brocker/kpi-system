@@ -275,14 +275,24 @@ class BaseEntryViewSet(viewsets.ModelViewSet):
         return queryset
 
     def check_permissions(self, request):
-        """Reject writes from HOD users before any view dispatch.
+        """Reject most writes from HOD users before any view dispatch.
 
         Covers POST (create), PATCH/PUT (update + custom @action mutations like
-        update-status, update-revisions, update-next-call-date), and DELETE.
-        Reads pass through to the normal HasModulePermission flow.
+        update-revisions, update-next-call-date), and DELETE. Reads pass through
+        to the normal HasModulePermission flow.
+
+        Exception: HOD/oversight roles MAY change an entry's status via the
+        `update-status` action — they oversee the workflow — even though they
+        still cannot create, edit, or delete the entry itself. (Super-admins and
+        data_visibility='all' roles are never HOD, so their status changes
+        already pass through here.)
         """
         super().check_permissions(request)
-        if request.method in _WRITE_METHODS and user_is_hod(request.user):
+        if (
+            request.method in _WRITE_METHODS
+            and self.action != 'update_status'
+            and user_is_hod(request.user)
+        ):
             raise PermissionDenied('HOD users cannot create, modify, or delete entries.')
 
     def perform_create(self, serializer):

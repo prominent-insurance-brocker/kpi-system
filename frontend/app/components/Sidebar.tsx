@@ -4,9 +4,10 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp, Anchor, HeartPulse, Settings } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp, Anchor, HeartPulse, Settings, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/app/context/AuthContext';
+import { AUDIT_CATEGORIES } from '@/app/lib/audit';
 
 interface NavItem {
   name: string;
@@ -78,6 +79,12 @@ const navigation: NavItem[] = [
       { name: 'Users', href: '/admin/users' },
       { name: 'Roles', href: '/admin/roles' },
     ],
+  },
+  {
+    name: 'Audit',
+    icon: History,
+    adminOnly: true,
+    children: AUDIT_CATEGORIES.map((c) => ({ name: c.label, href: `/audit/${c.key}` })),
   },
   { name: 'Settings', href: '/admin/settings', icon: Settings, moduleKey: 'settings' },
 ];

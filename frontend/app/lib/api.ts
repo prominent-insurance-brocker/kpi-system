@@ -134,6 +134,59 @@ export interface ModuleInfo {
   label: string;
 }
 
+// Audit log -------------------------------------------------------------
+export interface AuditLogChange {
+  old: unknown;
+  new: unknown;
+}
+
+export interface AuditLog {
+  id: number;
+  timestamp: string;
+  category: string;
+  category_label: string;
+  model_label: string;
+  action: 'create' | 'update' | 'delete';
+  action_display: string;
+  actor: number | null;
+  actor_name: string;
+  actor_email: string | null;
+  object_label: string;
+  content_type: number | null;
+  object_id: number | null;
+  changes: Record<string, AuditLogChange>;
+  ip_address: string | null;
+}
+
+export interface AuditLogParams {
+  category?: string;
+  action?: string;
+  actor_id?: string | number;
+  date_from?: string;
+  date_to?: string;
+  search?: string;
+  page?: number;
+  page_size?: number;
+}
+
+// Admin-only audit trail. Defaults (newest-first, all users) live on the
+// backend; pass `category` to scope to one Audit sidebar section.
+export async function getAuditLogs(
+  params: AuditLogParams = {}
+): Promise<ApiResponse<PaginatedResponse<AuditLog>>> {
+  const qs = new URLSearchParams();
+  if (params.category) qs.set('category', params.category);
+  if (params.action) qs.set('action', params.action);
+  if (params.actor_id) qs.set('actor_id', String(params.actor_id));
+  if (params.date_from) qs.set('date_from', params.date_from);
+  if (params.date_to) qs.set('date_to', params.date_to);
+  if (params.search) qs.set('search', params.search);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.page_size) qs.set('page_size', String(params.page_size));
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return fetchApi<PaginatedResponse<AuditLog>>(`/api/audit/logs/${suffix}`);
+}
+
 // Magic Link API functions
 export async function requestMagicLink(email: string): Promise<ApiResponse<MagicLinkResponse>> {
   return fetchApi<MagicLinkResponse>('/api/auth/magic-link/request/', {

@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'roles',
     'entries',
     'ai_chat',
+    'audit',
 ]
 
 MIDDLEWARE = [
@@ -71,6 +72,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Stash the cookie-JWT actor for audit logging (must follow AuthenticationMiddleware).
+    'auth_app.middleware.AuditActorMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

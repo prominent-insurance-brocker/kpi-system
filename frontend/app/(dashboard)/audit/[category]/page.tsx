@@ -23,7 +23,7 @@ import { AUDIT_CATEGORIES, auditCategoryLabel } from '@/app/lib/audit';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar, type FilterBarOption } from '@/app/components/FilterBar';
 import { getAuditLogs, type AuditLog } from '@/app/lib/api';
-import { formatDateTime } from '@/app/lib/date';
+import { formatDate, formatDateTime } from '@/app/lib/date';
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -45,9 +45,18 @@ function titleCase(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// Audit values arrive as JSON primitives; dates/datetimes come through as ISO
+// strings, which we render with the app's standard formatters.
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
 function formatValue(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'string') {
+    if (ISO_DATETIME.test(value)) return formatDateTime(value);
+    if (ISO_DATE.test(value)) return formatDate(value);
+  }
   return String(value);
 }
 

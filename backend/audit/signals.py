@@ -31,17 +31,8 @@ logger = logging.getLogger(__name__)
 IGNORED_FIELDS = {'updated_at'}
 
 
-def _tracked_field_names(instance):
-    model = type(instance)
-    ignored = IGNORED_FIELDS | PER_MODEL_IGNORED_FIELDS.get(model, set())
-    names = []
-    for field in instance._meta.concrete_fields:
-        if field.primary_key:
-            continue
-        if field.attname in ignored or field.name in ignored:
-            continue
-        names.append(field.attname)  # `attname` yields `<fk>_id` for FKs
-    return names
+def _ignored_for(instance):
+    return IGNORED_FIELDS | PER_MODEL_IGNORED_FIELDS.get(type(instance), set())
 
 
 def _normalize(value):
@@ -53,8 +44,44 @@ def _normalize(value):
     return value
 
 
+def _fk_label(instance, field):
+    """Human label for a foreign-key field's value, or None if unset/missing.
+
+    Resolved at write time so the audit row records what the relation was at the
+    moment of the change (and survives a later rename/deletion of the related
+    row). Defensive: a cascade may have already removed the related row.
+    """
+    try:
+        related = getattr(instance, field.name)
+    except Exception:
+        return None
+    return str(related) if related is not None else None
+
+
 def _snapshot(instance):
-    return {name: _normalize(getattr(instance, name)) for name in _tracked_field_names(instance)}
+    """Map each tracked field to ``{"cmp": <comparable>, "disp": <display>}``.
+
+    FK fields compare by id (precise change detection) but display the related
+    object's label; other fields use their normalized value for both. The key is
+    the field's bare name for FKs (``added_by``, not ``added_by_id``).
+    """
+    snapshot = {}
+    ignored = _ignored_for(instance)
+    for field in instance._meta.concrete_fields:
+        if field.primary_key:
+            continue
+        if field.attname in ignored or field.name in ignored:
+            continue
+        if field.is_relation:
+            fk_id = getattr(instance, field.attname)
+            snapshot[field.name] = {
+                'cmp': fk_id,
+                'disp': _fk_label(instance, field) if fk_id is not None else None,
+            }
+        else:
+            value = _normalize(getattr(instance, field.attname))
+            snapshot[field.attname] = {'cmp': value, 'disp': value}
+    return snapshot
 
 
 def _object_label(instance):
@@ -94,7 +121,7 @@ def audit_pre_save(sender, instance, **kwargs):
 def audit_post_save(sender, instance, created, **kwargs):
     if created:
         snapshot = _snapshot(instance)
-        changes = {name: {'old': None, 'new': value} for name, value in snapshot.items()}
+        changes = {key: {'old': None, 'new': v['disp']} for key, v in snapshot.items()}
         _write(instance, AuditLog.ACTION_CREATE, changes)
         return
 
@@ -102,18 +129,18 @@ def audit_post_save(sender, instance, created, **kwargs):
     if pre is None:
         return  # pre_save was skipped (no prior row) -> nothing to diff
     post = _snapshot(instance)
-    changes = {
-        name: {'old': pre.get(name), 'new': new_value}
-        for name, new_value in post.items()
-        if pre.get(name) != new_value
-    }
+    changes = {}
+    for key, post_v in post.items():
+        pre_v = pre.get(key, {'cmp': None, 'disp': None})
+        if pre_v['cmp'] != post_v['cmp']:
+            changes[key] = {'old': pre_v['disp'], 'new': post_v['disp']}
     if changes:
         _write(instance, AuditLog.ACTION_UPDATE, changes)
 
 
 def audit_post_delete(sender, instance, **kwargs):
     snapshot = _snapshot(instance)
-    changes = {name: {'old': value, 'new': None} for name, value in snapshot.items()}
+    changes = {key: {'old': v['disp'], 'new': None} for key, v in snapshot.items()}
     _write(instance, AuditLog.ACTION_DELETE, changes)
 
 

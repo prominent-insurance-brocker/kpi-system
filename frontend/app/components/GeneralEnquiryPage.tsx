@@ -1120,6 +1120,7 @@ export function GeneralEnquiryPage() {
               <RemarksPanel
                 contentTypeId={remarksContentTypeId}
                 objectId={panelEntry?.id ?? null}
+                canAddComment={panelEntry ? canModifyEntry(user, panelEntry.added_by) : true}
                 entryLabel={panelEntry ? `${TITLE} — ${panelEntry.pib_id}` : ''}
                 open={!!panelEntry}
                 onOpenChange={(open) => {

@@ -1663,9 +1663,20 @@ class EntryRemarkViewSet(viewsets.ModelViewSet):
             raise drf_serializers.ValidationError(
                 {'content_type': 'Remarks are not supported on this model.'}
             )
-        if not ct.model_class().objects.filter(pk=serializer.validated_data['object_id']).exists():
+        entry = ct.model_class().objects.filter(
+            pk=serializer.validated_data['object_id']
+        ).first()
+        if entry is None:
             raise drf_serializers.ValidationError(
                 {'object_id': 'Referenced entry does not exist.'}
+            )
+        # Admins (is_staff) and HODs are view-only on entries they did not
+        # create: they cannot add (or edit/delete) comments on someone else's
+        # entry. Each user can still comment on their own entries.
+        user = self.request.user
+        if (user.is_staff or user_is_hod(user)) and entry.added_by_id != user.id:
+            raise PermissionDenied(
+                'Admins and HODs cannot comment on entries they did not create.'
             )
         serializer.save(author=self.request.user)
 

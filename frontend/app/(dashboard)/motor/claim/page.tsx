@@ -850,6 +850,7 @@ export default function MotorClaimPage() {
             <RemarksPanel
               contentTypeId={remarksContentTypeId}
               objectId={panelEntry?.id ?? null}
+              canAddComment={panelEntry ? canModifyEntry(user, panelEntry.added_by) : true}
               entryLabel={panelEntry ? `Motor Claim — ${panelEntry.pib_id}` : ''}
               open={!!panelEntry}
               onOpenChange={(open) => {

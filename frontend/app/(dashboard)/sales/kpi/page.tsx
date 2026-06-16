@@ -633,6 +633,7 @@ export default function SalesKPIPage() {
   // TED-543: Sales table column order — ID, Customer Name, Status, Notes,
   // Potential Premium, Converted Premium, then the remaining columns as before,
   // with Date moved to the end.
+  // TED-546: Added by moved to sit immediately after Converted Premium.
   const columns = [
     { key: 'pib_id', header: 'ID', render: (item: SalesKPIEntry) => item.pib_id },
     { key: 'customer_name', header: 'Customer Name' },
@@ -707,6 +708,11 @@ export default function SalesKPIPage() {
         item.converted_premium != null ? formatPremium(item.converted_premium) : '—',
     },
     {
+      key: 'added_by_name',
+      header: 'Added by',
+      render: (item: SalesKPIEntry) => <AddedByCell entry={item} />,
+    },
+    {
       key: 'entry_type',
       header: 'Type',
       render: (item: SalesKPIEntry) => item.entry_type_display,
@@ -717,11 +723,6 @@ export default function SalesKPIPage() {
       render: (item: SalesKPIEntry) => item.class_of_insurance_name || '—',
     },
     { key: 'assignee', header: 'Assignee', render: (item: SalesKPIEntry) => item.assignee_name },
-    {
-      key: 'added_by_name',
-      header: 'Added by',
-      render: (item: SalesKPIEntry) => <AddedByCell entry={item} />,
-    },
     { key: 'date', header: 'Date', render: (item: SalesKPIEntry) => formatDate(item.date) },
   ];
 

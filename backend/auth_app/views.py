@@ -332,6 +332,14 @@ class UserViewSet(viewsets.ModelViewSet):
                 target = target - timedelta(days=1)
             queryset = queryset.filter(last_login__date=target)
 
+        # TED-544: free-text search across name + email.
+        search = (self.request.query_params.get('search') or '').strip()
+        if search:
+            queryset = queryset.filter(
+                db_models.Q(full_name__icontains=search) |
+                db_models.Q(email__icontains=search)
+            )
+
         return queryset.order_by('-date_joined')
 
     @action(detail=True, methods=['post'])

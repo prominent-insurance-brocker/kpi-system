@@ -27,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, MoreHorizontal, Pencil, Trash2, UserCheck, UserX } from 'lucide-react';
+import { Plus, MoreHorizontal, Pencil, Trash2, UserCheck, UserX, Search } from 'lucide-react';
 import { DataTable } from '@/app/components/DataTable';
 import {
   getUsers,
@@ -65,6 +65,10 @@ export default function UsersPage() {
   const [dailyEmailFilter, setDailyEmailFilter] = useState('all');
   const [lastLoginFilter, setLastLoginFilter] = useState('all');
 
+  // TED-544: search by name/email (debounced to avoid a request per keystroke).
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
   // Alert dialog shown when the server blocks a delete (user has uploaded
   // data or is referenced as agent on someone else's entries).
   const [deleteBlocked, setDeleteBlocked] = useState<{
@@ -81,6 +85,7 @@ export default function UsersPage() {
     if (statusFilter !== 'all') params.set('is_active', statusFilter);
     if (dailyEmailFilter !== 'all') params.set('daily_email_enabled', dailyEmailFilter);
     if (lastLoginFilter !== 'all') params.set('last_login', lastLoginFilter);
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
 
     const result = await getUsers(params);
     if (result.data) {
@@ -97,10 +102,19 @@ export default function UsersPage() {
     }
   };
 
+  // TED-544: debounce the search box; reset to page 1 when the term applies.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
   useEffect(() => {
     fetchUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, roleFilter, statusFilter, dailyEmailFilter, lastLoginFilter]);
+  }, [page, pageSize, roleFilter, statusFilter, dailyEmailFilter, lastLoginFilter, debouncedSearch]);
 
   useEffect(() => {
     fetchRoles();
@@ -188,13 +202,16 @@ export default function UsersPage() {
     roleFilter !== 'all' ||
     statusFilter !== 'all' ||
     dailyEmailFilter !== 'all' ||
-    lastLoginFilter !== 'all';
+    lastLoginFilter !== 'all' ||
+    search.trim() !== '';
 
   const clearFilters = () => {
     setRoleFilter('all');
     setStatusFilter('all');
     setDailyEmailFilter('all');
     setLastLoginFilter('all');
+    setSearch('');
+    setDebouncedSearch('');
     setPage(1);
   };
 
@@ -331,6 +348,17 @@ export default function UsersPage() {
 
       {/* TED-521: filter the user list by role, status, daily email, last login */}
       <div className="flex flex-wrap items-center gap-3">
+        {/* TED-544: search by name or email */}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF] pointer-events-none" />
+          <Input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name or email…"
+            className="w-[260px] pl-8 h-9 shadow-none"
+          />
+        </div>
         <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setPage(1); }}>
           <SelectTrigger className="w-[180px] h-9 shadow-none">
             <SelectValue placeholder="Role" />

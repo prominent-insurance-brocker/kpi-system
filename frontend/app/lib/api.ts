@@ -1086,6 +1086,17 @@ export async function updateSalesKPIStatus(
   );
 }
 
+// Edit converted_premium on a Won deal after it's terminal (creator-only).
+export async function updateSalesKPIConvertedPremium(
+  id: number,
+  converted_premium: string | number,
+): Promise<ApiResponse<SalesKPIEntry>> {
+  return fetchApi<SalesKPIEntry>(
+    `/api/entries/sales-kpi/${id}/update-converted-premium/`,
+    { method: 'PATCH', body: JSON.stringify({ converted_premium }) },
+  );
+}
+
 // AI Chat
 export interface AiChatResponse {
   success: boolean;

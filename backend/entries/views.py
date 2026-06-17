@@ -71,6 +71,7 @@ from .serializers import (
     InsuranceCompanySerializer,
     ClassOfInsuranceSerializer,
     SalesKPIEntrySerializer,
+    SalesKPIConvertedPremiumSerializer,
     SalesKPIStatusUpdateSerializer,
     SalesMonthlyTargetSerializer,
     MarineNewEntrySerializer,
@@ -1160,6 +1161,31 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
             changed_by=request.user,
         )
 
+        return Response(
+            SalesKPIEntrySerializer(entry, context={'request': request}).data
+        )
+
+    @action(detail=True, methods=['patch'], url_path='update-converted-premium')
+    def update_converted_premium(self, request, pk=None):
+        """Edit converted_premium on a Won deal after it's terminal.
+
+        Won deals are otherwise locked (update / destroy / update-status all
+        reject terminal rows), but the converted premium often needs correcting
+        post-close. Creator-only, mirroring the frontend canModifyEntry gate; the
+        edit is captured by the audit log via the normal model save.
+        """
+        entry = self.get_object()
+        if entry.added_by_id != request.user.id:
+            raise PermissionDenied('You can only update enquiries you created.')
+        if entry.status != SalesKPIEntry.STATUS_WON:
+            return Response(
+                {'error': 'Converted premium can only be updated on a won enquiry.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = SalesKPIConvertedPremiumSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        entry.converted_premium = serializer.validated_data['converted_premium']
+        entry.save(update_fields=['converted_premium', 'updated_at'])
         return Response(
             SalesKPIEntrySerializer(entry, context={'request': request}).data
         )

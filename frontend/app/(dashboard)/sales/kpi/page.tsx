@@ -76,6 +76,7 @@ import {
   type ModuleUser,
 } from '@/app/components/KpiModulePage';
 import { SalesKPIStatusModal } from '@/app/components/SalesKPIStatusModal';
+import { SalesKPIConvertedPremiumModal } from '@/app/components/SalesKPIConvertedPremiumModal';
 import {
   fetchApi,
   getSalesKPIStats,
@@ -186,6 +187,8 @@ export default function SalesKPIPage() {
   const [modalError, setModalError] = useState('');
 
   const [statusModalEntry, setStatusModalEntry] = useState<SalesKPIEntry | null>(null);
+  // TED-555: edit converted premium on a Won deal (post-close).
+  const [convertedPremiumEntry, setConvertedPremiumEntry] = useState<SalesKPIEntry | null>(null);
   const [statusModalNext, setStatusModalNext] = useState<SalesKPIStatus | null>(null);
 
   // Remarks side panel (same UX as the other modules — opens on the Notes
@@ -1192,6 +1195,14 @@ export default function SalesKPIPage() {
                     entry.status !== 'won' &&
                     entry.status !== 'lost'
                   }
+                  rowActions={(entry) =>
+                    entry.status === 'won' && canModifyEntry(user, entry.added_by)
+                      ? [{
+                          label: 'Update Converted Premium',
+                          onClick: () => setConvertedPremiumEntry(entry),
+                        }]
+                      : []
+                  }
                   isLoading={isLoading}
                 />
               </div>
@@ -1231,6 +1242,14 @@ export default function SalesKPIPage() {
           }}
           entry={statusModalEntry}
           nextStatus={statusModalNext}
+          onSaved={() => refreshAll()}
+        />
+
+        {/* TED-555 update-converted-premium modal (Won deals) */}
+        <SalesKPIConvertedPremiumModal
+          isOpen={!!convertedPremiumEntry}
+          onClose={() => setConvertedPremiumEntry(null)}
+          entry={convertedPremiumEntry}
           onSaved={() => refreshAll()}
         />
 

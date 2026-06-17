@@ -60,7 +60,7 @@ import { toast } from 'sonner';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
-import { formatDate } from '@/app/lib/date';
+import { formatDateTime } from '@/app/lib/date';
 import { formatPremium } from '@/app/lib/number';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
@@ -731,9 +731,9 @@ export default function SalesKPIPage() {
       render: (item: SalesKPIEntry) => item.class_of_insurance_name || '—',
     },
     { key: 'assignee', header: 'Assignee', render: (item: SalesKPIEntry) => item.assignee_name },
-    // Show the entry day (added_at) — matches the trackers + every Sales filter,
-    // which all key off added_at. Local-day, so it lines up with the tracker cell.
-    { key: 'added_at', header: 'Date', render: (item: SalesKPIEntry) => formatDate(toLocalDateString(new Date(item.added_at))) },
+    // Entry timestamp (added_at) — matches the trackers + every Sales filter,
+    // which all key off added_at. Shown as local date + time.
+    { key: 'added_at', header: 'Added at', render: (item: SalesKPIEntry) => formatDateTime(item.added_at) },
   ];
 
   // ── Side panel helpers (unchanged from prior page) ───────────────────────

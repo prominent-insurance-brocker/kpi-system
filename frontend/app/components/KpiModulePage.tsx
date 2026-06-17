@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { DataTable, Tooltip } from '@/app/components/DataTable';
 import { fetchApi, getUsersForModule } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
@@ -353,8 +354,8 @@ export function TrackerView<T extends BaseModuleEntry>({
   calMonth: number;
   monthEntries: T[];
   moduleUsers: ModuleUser[];
-  trackerUserFilter: string;
-  onTrackerUserFilterChange: (v: string) => void;
+  trackerUserFilter: string[];
+  onTrackerUserFilterChange: (v: string[]) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
   onGoToday: () => void;
@@ -382,14 +383,18 @@ export function TrackerView<T extends BaseModuleEntry>({
     userMap.set(e.added_by, (userMap.get(e.added_by) ?? 0) + 1);
   }
 
-  const filteredModuleUsers =
-    excludeUserId != null
-      ? moduleUsers.filter((u) => u.id !== excludeUserId)
-      : moduleUsers;
+  const filteredModuleUsers = useMemo(
+    () =>
+      excludeUserId != null
+        ? moduleUsers.filter((u) => u.id !== excludeUserId)
+        : moduleUsers,
+    [moduleUsers, excludeUserId]
+  );
+  // TED-553: trackerUserFilter is a list of selected user ids; [] = all members.
   const visibleUsers =
-    trackerUserFilter === 'all'
+    trackerUserFilter.length === 0
       ? filteredModuleUsers
-      : filteredModuleUsers.filter((u) => String(u.id) === trackerUserFilter);
+      : filteredModuleUsers.filter((u) => trackerUserFilter.includes(String(u.id)));
 
   return (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
@@ -413,26 +418,27 @@ export function TrackerView<T extends BaseModuleEntry>({
             </button>
           </div>
 
-          <Select value={trackerUserFilter} onValueChange={onTrackerUserFilterChange}>
-            <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 gap-1.5 w-auto min-w-[120px]">
-              <Users className="h-3.5 w-3.5 text-[#71717A]" />
-              <SelectValue placeholder="All Users" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Users</SelectItem>
-              {filteredModuleUsers.map((u) => (
-                <SelectItem key={u.id} value={String(u.id)}>
-                  {u.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {trackerUserFilter !== 'all' && (
+          {/* TED-550 + TED-553: searchable multi-select member picker. */}
+          <div className="w-[220px]">
+            <MultiSelect
+              options={filteredModuleUsers}
+              value={trackerUserFilter}
+              onChange={onTrackerUserFilterChange}
+              getOptionValue={(u) => String(u.id)}
+              getOptionLabel={(u) => u.full_name}
+              placeholder="All Users"
+              searchPlaceholder="Search members…"
+              emptyLabel="No users found"
+              summarize={(n) => `${n} users`}
+              triggerClassName="h-8 rounded-lg border-[#E4E4E4]"
+            />
+          </div>
+          {trackerUserFilter.length > 0 && (
             <Button
               variant="outline"
               size="sm"
               className="h-8"
-              onClick={() => onTrackerUserFilterChange('all')}
+              onClick={() => onTrackerUserFilterChange([])}
             >
               Clear filter
             </Button>
@@ -1075,7 +1081,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   const [personalCalMonth, setPersonalCalMonth] = useState(today.getMonth());
   const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());
   const [teamCalMonth, setTeamCalMonth] = useState(today.getMonth());
-  const [trackerUserFilter, setTrackerUserFilter] = useState('all');
+  const [trackerUserFilter, setTrackerUserFilter] = useState<string[]>([]);
 
   const [weekStart, setWeekStart] = useState<Date>(startOfWeek(today));
   const [weeklyUserFilter, setWeeklyUserFilter] = useState('all');

@@ -159,7 +159,7 @@ export default function MotorClaimPage() {
   const [personalCalMonth, setPersonalCalMonth] = useState(today.getMonth());
   const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());
   const [teamCalMonth, setTeamCalMonth] = useState(today.getMonth());
-  const [trackerUserFilter, setTrackerUserFilter] = useState('all');
+  const [trackerUserFilter, setTrackerUserFilter] = useState<string[]>([]);
   const [monthEntries, setMonthEntries] = useState<MotorClaimEntry[]>([]);
 
   // Module + agent (sales_kpi) + lookup pools

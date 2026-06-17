@@ -174,7 +174,7 @@ export default function SalesKPIPage() {
   // move the Monthly Target card (cardYear/cardMonth) and vice-versa.
   const [monthEntries, setMonthEntries] = useState<SalesKPIEntry[]>([]);
   const [moduleUsers, setModuleUsers] = useState<ModuleUser[]>([]);
-  const [trackerUserFilter, setTrackerUserFilter] = useState('all');
+  const [trackerUserFilter, setTrackerUserFilter] = useState<string[]>([]);
   const [personalCalYear, setPersonalCalYear] = useState(today.getFullYear());
   const [personalCalMonth, setPersonalCalMonth] = useState(today.getMonth());
   const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());

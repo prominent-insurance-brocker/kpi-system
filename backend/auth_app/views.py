@@ -497,6 +497,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 db_models.Q(is_staff=True) |
                 db_models.Q(role__permissions__module=module)
             )
+            .select_related('role')
             .distinct()
             .order_by('full_name', 'email', 'id')
         )
@@ -510,7 +511,14 @@ class UserViewSet(viewsets.ModelViewSet):
         offset = (page - 1) * page_size
         users = qs[offset:offset + page_size]
         data = [
-            {'id': u.id, 'email': u.email, 'full_name': u.get_full_name()}
+            {
+                'id': u.id,
+                'email': u.email,
+                'full_name': u.get_full_name(),
+                # TED-554: surface the member's role so the export picker can
+                # label each user (additive — existing consumers ignore it).
+                'role_name': u.role.name if u.role else None,
+            }
             for u in users
         ]
         return Response({

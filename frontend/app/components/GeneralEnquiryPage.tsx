@@ -949,6 +949,7 @@ export function GeneralEnquiryPage() {
             )}
             {(isAdmin || isHodUser) && (
               <TrackerView<GeneralRenewalEntry>
+                moduleKey={MODULE_KEY}
                 calYear={teamCalYear}
                 calMonth={teamCalMonth}
                 monthEntries={monthEntries}

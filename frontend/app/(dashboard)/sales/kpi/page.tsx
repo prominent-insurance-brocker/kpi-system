@@ -1075,6 +1075,7 @@ export default function SalesKPIPage() {
             )}
             {(isAdmin || isHodUser) && (
               <TrackerView<SalesKPIEntry>
+                moduleKey="sales_kpi"
                 calYear={teamCalYear}
                 calMonth={teamCalMonth}
                 monthEntries={monthEntries}

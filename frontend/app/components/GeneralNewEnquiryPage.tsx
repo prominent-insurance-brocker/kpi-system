@@ -994,6 +994,7 @@ export function GeneralNewEnquiryPage() {
           )}
           {(isAdmin || isHodUser) && (
             <TrackerView<MotorEnquiryEntry>
+              moduleKey={moduleKey}
               calYear={teamCalYear}
               calMonth={teamCalMonth}
               monthEntries={monthEntries}

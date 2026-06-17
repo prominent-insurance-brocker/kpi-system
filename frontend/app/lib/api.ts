@@ -333,8 +333,8 @@ export async function getUsersForFilter(): Promise<ApiResponse<{ id: number; ema
 // usage call getUsersForModulePage instead.
 export async function getUsersForModule(
   moduleKey: string
-): Promise<ApiResponse<{ id: number; email: string; full_name: string }[]>> {
-  const result = await fetchApi<{ results: { id: number; email: string; full_name: string }[] }>(
+): Promise<ApiResponse<{ id: number; email: string; full_name: string; role_name?: string | null }[]>> {
+  const result = await fetchApi<{ results: { id: number; email: string; full_name: string; role_name?: string | null }[] }>(
     `/api/auth/users/module-members/?module=${encodeURIComponent(moduleKey)}&page_size=200`
   );
   if (result.data) {
@@ -1183,6 +1183,73 @@ export const REMARKS_MODEL_NAME_BY_API_SLUG: Record<string, string> = {
   'motor-claim': 'motorclaimentry',
   'sales-kpi': 'saleskpientry',
 };
+
+// ─── TED-554: Tracker export (.xlsx) ─────────────────────────────────────────
+
+export interface TrackerExportParams {
+  module: string;
+  userIds: number[]; // explicit member ids; empty => backend resolves all members
+  start: string; // YYYY-MM-DD (local)
+  end: string; // YYYY-MM-DD (local, inclusive)
+}
+
+/**
+ * Download the Team Daily Tracker export as an .xlsx Blob. Mirrors `fetchApi`'s
+ * cookie credentials + 401 refresh-and-retry, but returns a binary Blob instead
+ * of JSON. The browser timezone is sent so the backend buckets days exactly the
+ * way the on-screen tracker does.
+ */
+export async function exportTrackerXlsx(
+  params: TrackerExportParams,
+): Promise<ApiResponse<Blob>> {
+  const qs = new URLSearchParams({
+    module: params.module,
+    start: params.start,
+    end: params.end,
+  });
+  if (params.userIds.length > 0) qs.set('user_ids', params.userIds.join(','));
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) qs.set('tz', tz);
+  } catch {
+    /* timezone is best-effort */
+  }
+
+  const url = `${API_BASE_URL}/api/entries/tracker-export/?${qs.toString()}`;
+  const doFetch = () => fetch(url, { method: 'GET', credentials: 'include' });
+
+  try {
+    let res = await doFetch();
+    if (res.status === 401 && (await refreshAccessToken())) {
+      res = await doFetch();
+    }
+    if (!res.ok) {
+      let message = `Export failed (${res.status})`;
+      try {
+        const body = await res.json();
+        message = body?.detail || body?.error || message;
+      } catch {
+        /* non-JSON error body */
+      }
+      return { error: message };
+    }
+    return { data: await res.blob() };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Network error' };
+  }
+}
+
+/** Trigger a browser download for a Blob. */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 // Generic fetch helper for other API calls
 export { fetchApi, API_BASE_URL };

@@ -22,6 +22,7 @@ from .views import (
     ClassOfInsuranceViewSet,
     remarks_content_types,
 )
+from .tracker_export import TrackerExportView
 
 router = DefaultRouter()
 router.register(r'general-new', GeneralNewEntryViewSet, basename='general-new')
@@ -52,5 +53,7 @@ router.register(r'remarks', EntryRemarkViewSet, basename='remarks')
 
 urlpatterns = [
     path('remarks-content-types/', remarks_content_types, name='remarks-content-types'),
+    # TED-554: Team Daily Tracker export (.xlsx).
+    path('tracker-export/', TrackerExportView.as_view(), name='tracker-export'),
     path('', include(router.urls)),
 ]

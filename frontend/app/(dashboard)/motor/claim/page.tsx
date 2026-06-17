@@ -656,6 +656,7 @@ export default function MotorClaimPage() {
           )}
           {(isAdmin || isHodUser) && (
             <TrackerView<MotorClaimEntry>
+              moduleKey="motor_claim"
               calYear={teamCalYear}
               calMonth={teamCalMonth}
               monthEntries={monthEntries}

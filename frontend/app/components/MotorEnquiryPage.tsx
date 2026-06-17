@@ -1051,6 +1051,7 @@ export function MotorEnquiryPage({
           )}
           {(isAdmin || isHodUser) && (
             <TrackerView<MotorEnquiryEntry>
+              moduleKey={moduleKey}
               calYear={teamCalYear}
               calMonth={teamCalMonth}
               monthEntries={monthEntries}

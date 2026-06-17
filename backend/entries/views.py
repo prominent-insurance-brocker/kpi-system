@@ -1192,11 +1192,13 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        """Dashboard counts + premium aggregates, RBAC + date filtered."""
+        """Dashboard counts + premium aggregates, RBAC + added_at filtered."""
         queryset = self.get_queryset()
+        # Filter by the entry day (added_at), matching the trackers + the
+        # Enquiries list — not the deal's `date` field.
         date_params = {
             k: v for k, v in request.query_params.items()
-            if k in ('date_from', 'date_to')
+            if k in ('created_from', 'created_to')
         }
         filterset = self.filterset_class(date_params, queryset=queryset)
         queryset = filterset.qs

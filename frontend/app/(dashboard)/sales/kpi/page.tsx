@@ -255,8 +255,9 @@ export default function SalesKPIPage() {
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('page_size', String(pageSize));
-    if (dateFrom) params.set('date_from', dateFrom);
-    if (dateTo) params.set('date_to', dateTo);
+    // All Sales filters apply on the entry day (added_at), not the deal's `date`.
+    if (dateFrom) params.set('created_from', dateFrom);
+    if (dateTo) params.set('created_to', dateTo);
     if (userId) params.set('user_id', userId);
     if (assigneeId) params.set('assignee', assigneeId);
     if (statusFilter) params.set('status', statusFilter);
@@ -278,8 +279,8 @@ export default function SalesKPIPage() {
     // Dashboard cards are scoped by the dashboard-tab FilterBar (date range +
     // user), independent of the Enquiries-tab URL-synced filters.
     const result = await getSalesKPIStats({
-      date_from: dashFrom || undefined,
-      date_to: dashTo || undefined,
+      created_from: dashFrom || undefined,
+      created_to: dashTo || undefined,
       user_id: dashUserId || undefined,
     });
     if (result.data) setStats(result.data);
@@ -384,7 +385,7 @@ export default function SalesKPIPage() {
     // actuals, personal targets pair with personal actuals.
     const userFilter = cardViewUserId ? `&user_id=${cardViewUserId}` : '';
     const result = await fetchApi<{ results: SalesKPIEntry[] }>(
-      `/api/entries/sales-kpi/?date_from=${firstDay}&date_to=${lastDay}${userFilter}&page_size=1000`,
+      `/api/entries/sales-kpi/?created_from=${firstDay}&created_to=${lastDay}${userFilter}&page_size=1000`,
     );
     setCardEntries(result.data?.results ?? []);
   }, [cardYear, cardMonth, currentUserId, cardViewUserId]);
@@ -730,7 +731,9 @@ export default function SalesKPIPage() {
       render: (item: SalesKPIEntry) => item.class_of_insurance_name || '—',
     },
     { key: 'assignee', header: 'Assignee', render: (item: SalesKPIEntry) => item.assignee_name },
-    { key: 'date', header: 'Date', render: (item: SalesKPIEntry) => formatDate(item.date) },
+    // Show the entry day (added_at) — matches the trackers + every Sales filter,
+    // which all key off added_at. Local-day, so it lines up with the tracker cell.
+    { key: 'added_at', header: 'Date', render: (item: SalesKPIEntry) => formatDate(toLocalDateString(new Date(item.added_at))) },
   ];
 
   // ── Side panel helpers (unchanged from prior page) ───────────────────────

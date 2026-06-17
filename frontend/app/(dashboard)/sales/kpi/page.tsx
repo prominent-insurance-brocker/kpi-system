@@ -60,7 +60,6 @@ import { toast } from 'sonner';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
-import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { formatDate } from '@/app/lib/date';
 import { formatPremium } from '@/app/lib/number';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
@@ -75,6 +74,7 @@ import {
   TrackerView,
   type ModuleUser,
 } from '@/app/components/KpiModulePage';
+import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { SalesKPIStatusModal } from '@/app/components/SalesKPIStatusModal';
 import { SalesKPIConvertedPremiumModal } from '@/app/components/SalesKPIConvertedPremiumModal';
 import {
@@ -809,6 +809,9 @@ export default function SalesKPIPage() {
             <h1 className="text-2xl font-bold">Deals</h1>
           </div>
           <div className="flex items-center gap-2">
+            {(isAdmin || isHodUser) && (
+              <ExportTrackerButton moduleKey="sales_kpi" moduleUsers={moduleUsers} />
+            )}
             <Button variant="outline" onClick={() => setIsPanelOpen((o) => !o)}>
               <Pencil className="h-4 w-4 mr-2" /> Monthly Targets
             </Button>
@@ -1075,7 +1078,6 @@ export default function SalesKPIPage() {
             )}
             {(isAdmin || isHodUser) && (
               <TrackerView<SalesKPIEntry>
-                moduleKey="sales_kpi"
                 calYear={teamCalYear}
                 calMonth={teamCalMonth}
                 monthEntries={monthEntries}
@@ -1519,7 +1521,6 @@ function EntryModal({
 }) {
   const isEdit = !!entry;
 
-  const [date, setDate] = useState<string>(entry?.date ?? '');
   const [customerName, setCustomerName] = useState(entry?.customer_name ?? '');
   const [entryType, setEntryType] = useState<SalesKPIEntryType>(entry?.entry_type ?? 'new');
   const [classOfInsuranceId, setClassOfInsuranceId] = useState<number | null>(
@@ -1539,7 +1540,6 @@ function EntryModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setDate(entry?.date ?? toLocalDateString(new Date()));
     setCustomerName(entry?.customer_name ?? '');
     setEntryType(entry?.entry_type ?? 'new');
     setClassOfInsuranceId(typeof entry?.class_of_insurance === 'number' ? entry.class_of_insurance : null);
@@ -1597,9 +1597,9 @@ function EntryModal({
       assignee: assigneeId,
       potential_premium: potentialPremium.trim(),
     };
-    if (isEdit) {
-      payload.date = date;
-    } else if (initialRemark.trim()) {
+    // `date` is the immutable entry day (auto-set on create, like added_at), so
+    // it's never sent on edit. Only the initial remark is create-only.
+    if (!isEdit && initialRemark.trim()) {
       payload.initial_remark = initialRemark.trim();
     }
     await onSave(payload);
@@ -1617,15 +1617,6 @@ function EntryModal({
             <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
               {error}
             </div>
-          )}
-
-          {isEdit && (
-            <FormDatePicker
-              label="Date"
-              value={date}
-              onChange={(d) => setDate(d)}
-              required
-            />
           )}
 
           <div className="space-y-2">

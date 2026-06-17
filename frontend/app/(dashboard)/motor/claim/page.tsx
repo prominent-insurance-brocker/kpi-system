@@ -43,6 +43,7 @@ import {
   toLocalDateString,
   type ModuleUser,
 } from '@/app/components/KpiModulePage';
+import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
 import { canModifyEntry } from '@/app/lib/permissions';
 import { useConfirm } from '@/app/components/ConfirmDialog';
@@ -524,12 +525,17 @@ export default function MotorClaimPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Motor Claim</h1>
-        {!isHodUser && (
-          <Button onClick={openAddModal}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Claim
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {(isAdmin || isHodUser) && (
+            <ExportTrackerButton moduleKey="motor_claim" moduleUsers={moduleUsers} />
+          )}
+          {!isHodUser && (
+            <Button onClick={openAddModal}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Claim
+            </Button>
+          )}
+        </div>
       </div>
 
       <Tabs
@@ -656,7 +662,6 @@ export default function MotorClaimPage() {
           )}
           {(isAdmin || isHodUser) && (
             <TrackerView<MotorClaimEntry>
-              moduleKey="motor_claim"
               calYear={teamCalYear}
               calMonth={teamCalMonth}
               monthEntries={monthEntries}

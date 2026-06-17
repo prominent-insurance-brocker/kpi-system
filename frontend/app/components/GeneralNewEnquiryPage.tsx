@@ -67,6 +67,7 @@ import {
   MONTH_NAMES,
   type ModuleUser,
 } from '@/app/components/KpiModulePage';
+import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate } from '@/app/lib/date';
@@ -833,6 +834,9 @@ export function GeneralNewEnquiryPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{title}</h1>
         <div className="flex items-center gap-2">
+          {(isAdmin || isHodUser) && (
+            <ExportTrackerButton moduleKey={moduleKey} moduleUsers={moduleUsers} />
+          )}
           {isRenewal && (
             <Button variant="outline" onClick={() => setIsPanelOpen((o) => !o)}>
               <Pencil className="h-4 w-4 mr-2" />
@@ -994,7 +998,6 @@ export function GeneralNewEnquiryPage() {
           )}
           {(isAdmin || isHodUser) && (
             <TrackerView<MotorEnquiryEntry>
-              moduleKey={moduleKey}
               calYear={teamCalYear}
               calMonth={teamCalMonth}
               monthEntries={monthEntries}

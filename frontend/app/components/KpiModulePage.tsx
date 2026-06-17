@@ -28,10 +28,10 @@ import {
 import { MultiSelect } from '@/components/ui/multi-select';
 import { DataTable, Tooltip } from '@/app/components/DataTable';
 import { fetchApi, getUsersForModule } from '@/app/lib/api';
-import { ExportTrackerDialog } from '@/app/components/ExportTrackerDialog';
+import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
 import { canModifyEntry } from '@/app/lib/permissions';
-import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users, Info, Download, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users, Info } from 'lucide-react';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -343,7 +343,6 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
 export function TrackerView<T extends BaseModuleEntry>({
   calYear,
   calMonth,
-  moduleKey,
   monthEntries,
   moduleUsers,
   trackerUserFilter,
@@ -355,8 +354,6 @@ export function TrackerView<T extends BaseModuleEntry>({
 }: {
   calYear: number;
   calMonth: number;
-  // TED-554: module this tracker belongs to, used by the export endpoint.
-  moduleKey: string;
   monthEntries: T[];
   moduleUsers: ModuleUser[];
   trackerUserFilter: string[];
@@ -369,7 +366,6 @@ export function TrackerView<T extends BaseModuleEntry>({
   // since HOD users don't submit data.
   excludeUserId?: number;
 }) {
-  const [exportOpen, setExportOpen] = useState(false);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -452,24 +448,6 @@ export function TrackerView<T extends BaseModuleEntry>({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* TED-554: Export → Tracker (.xlsx). */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="inline-flex items-center gap-1 text-sm font-medium text-[#09090B] px-3 py-1 rounded-lg border border-[#E4E4E4] hover:bg-[#F3F3F3] transition-colors">
-                <Download className="h-4 w-4" />
-                Export
-                <ChevronDown className="h-3.5 w-3.5 text-[#71717A]" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[160px] bg-white border border-[#E4E4E4] rounded-lg p-1 shadow-md">
-              <DropdownMenuItem
-                onClick={() => setExportOpen(true)}
-                className="cursor-pointer px-3 py-2 text-sm text-[#09090B] rounded-md"
-              >
-                Tracker
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
           <span className="text-sm font-semibold text-[#09090B] min-w-[120px]">
             {MONTH_NAMES[calMonth]} {calYear}
           </span>
@@ -608,14 +586,6 @@ export function TrackerView<T extends BaseModuleEntry>({
           </tbody>
         </table>
       </div>
-
-      <ExportTrackerDialog
-        open={exportOpen}
-        onOpenChange={setExportOpen}
-        moduleKey={moduleKey}
-        moduleUsers={filteredModuleUsers}
-        defaultSelectedUserIds={trackerUserFilter}
-      />
     </div>
   );
 }
@@ -1518,7 +1488,10 @@ export function KpiModulePage<T extends BaseModuleEntry>({
 
   return (
     <div className="p-6 space-y-5">
-      <h1 className="text-2xl font-bold text-[#09090B]">{title}</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-[#09090B]">{title}</h1>
+        <ExportTrackerButton moduleKey={moduleKey} moduleUsers={moduleUsers} />
+      </div>
 
       <PersonalDailyTracker
         calYear={personalCalYear}
@@ -1558,7 +1531,6 @@ export function KpiModulePage<T extends BaseModuleEntry>({
 
         <TabsContent value="tracker" className="mt-4">
           <TrackerView
-            moduleKey={moduleKey}
             calYear={teamCalYear}
             calMonth={teamCalMonth}
             monthEntries={monthEntries}

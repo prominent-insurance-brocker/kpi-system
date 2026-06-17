@@ -316,11 +316,15 @@ export function GeneralEnquiryPage() {
     try {
       const responses = await Promise.all(
         unique.map(([year, month]) => {
-          const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-          const lastDay = toLocalDateString(new Date(year, month + 1, 0));
+          // TED-551: trackers bucket by `added_at` (entry day), so fetch by
+          // creation date, not the entry's `date` field — otherwise deals
+          // entered this month but dated to another month drop out. Widened a
+          // day each side so boundary rows land on the right local day.
+          const createdFrom = toLocalDateString(new Date(year, month, 0));
+          const createdTo = toLocalDateString(new Date(year, month + 1, 1));
           const qs = new URLSearchParams({
-            date_from: firstDay,
-            date_to: lastDay,
+            created_from: createdFrom,
+            created_to: createdTo,
             page_size: '1000',
           });
           return fetchApi<{ results: GeneralRenewalEntry[] }>(

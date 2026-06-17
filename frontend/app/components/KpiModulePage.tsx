@@ -1120,13 +1120,21 @@ export function KpiModulePage<T extends BaseModuleEntry>({
         const [y, m] = s.split('-').map(Number);
         return [y, m] as [number, number];
       });
+      // monthEntries feeds two kinds of view, so fetch the union of both windows:
+      //  • the Weekly view + "submitted today" lock key on the entry's `date`;
+      //  • the daily trackers bucket by `added_at` (TED-551) — so also pull deals
+      //    *entered* this month regardless of their `date`, widened a day each side.
+      const windows: URLSearchParams[] = [];
+      for (const [year, month] of unique) {
+        const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+        const lastDay = toLocalDateString(new Date(year, month + 1, 0));
+        windows.push(new URLSearchParams({ date_from: firstDay, date_to: lastDay, page_size: '1000' }));
+        const createdFrom = toLocalDateString(new Date(year, month, 0));
+        const createdTo = toLocalDateString(new Date(year, month + 1, 1));
+        windows.push(new URLSearchParams({ created_from: createdFrom, created_to: createdTo, page_size: '1000' }));
+      }
       const responses = await Promise.all(
-        unique.map(([year, month]) => {
-          const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-          const lastDay = toLocalDateString(new Date(year, month + 1, 0));
-          const params = new URLSearchParams({ date_from: firstDay, date_to: lastDay, page_size: '1000' });
-          return fetchApi<{ results: T[] }>(`/api/entries/${apiSlug}/?${params}`);
-        })
+        windows.map((params) => fetchApi<{ results: T[] }>(`/api/entries/${apiSlug}/?${params}`))
       );
       const merged = new Map<number, T>();
       for (const res of responses) {

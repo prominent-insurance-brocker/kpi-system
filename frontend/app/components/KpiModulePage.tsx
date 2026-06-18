@@ -35,7 +35,8 @@ import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users, Info } from 'lu
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { formatDate, businessDateString, businessToday } from '@/app/lib/date';
+import { formatDate, businessToday } from '@/app/lib/date';
+import { useTrackerCounts, type DailyCountMap } from '@/app/lib/useTrackerCounts';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { toast } from 'sonner';
@@ -181,11 +182,11 @@ export function UserAvatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 
 
 // ─── Personal Daily Tracker ──────────────────────────────────────────────────
 
-export function PersonalDailyTracker<T extends BaseModuleEntry>({
+export function PersonalDailyTracker({
   calYear,
   calMonth,
   today,
-  monthEntries,
+  dailyCounts,
   currentUserId,
   userFullName,
   onPrevMonth,
@@ -196,7 +197,8 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
   calMonth: number;
   // Business-zone "today" (Asia/Dubai), supplied by the parent via businessToday().
   today: Date;
-  monthEntries: T[];
+  // Per-day counts for the current user, keyed YYYY-MM-DD (see useTrackerCounts).
+  dailyCounts: DailyCountMap;
   currentUserId: number | undefined;
   userFullName: string;
   onPrevMonth: () => void;
@@ -268,14 +270,10 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
             // Count entries added on this calendar day by the current user.
             // Driven by `added_at` (creation date) rather than the entry's
             // `date` field, so the tracker reflects actual submission activity.
-            const entryCount = monthEntries.reduce(
-              (sum, e) =>
-                businessDateString(new Date(e.added_at)) === ds &&
-                ownerId(e) === currentUserId
-                  ? sum + 1
-                  : sum,
-              0,
-            );
+            const entryCount =
+              currentUserId != null
+                ? dailyCounts.get(ds)?.get(currentUserId) ?? 0
+                : 0;
             const hasEntry = entryCount > 0;
 
             let indicatorBg = '';
@@ -341,10 +339,10 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
 
 // ─── Tracker View ────────────────────────────────────────────────────────────
 
-export function TrackerView<T extends BaseModuleEntry>({
+export function TrackerView({
   calYear,
   calMonth,
-  monthEntries,
+  dailyCounts,
   moduleUsers,
   trackerUserFilter,
   onTrackerUserFilterChange,
@@ -355,7 +353,8 @@ export function TrackerView<T extends BaseModuleEntry>({
 }: {
   calYear: number;
   calMonth: number;
-  monthEntries: T[];
+  // Per-day, per-user counts for the team, keyed YYYY-MM-DD -> userId (see useTrackerCounts).
+  dailyCounts: DailyCountMap;
   moduleUsers: ModuleUser[];
   trackerUserFilter: string[];
   onTrackerUserFilterChange: (v: string[]) => void;
@@ -375,16 +374,6 @@ export function TrackerView<T extends BaseModuleEntry>({
     { length: daysInMonth },
     (_, i) => new Date(calYear, calMonth, i + 1)
   );
-
-  // Per (date, user) count of entries created on that calendar day. Keyed
-  // by Created Date (added_at) — see PersonalDailyTracker comment above.
-  const entryCountMap = new Map<string, Map<number, number>>();
-  for (const e of monthEntries) {
-    const createdDs = businessDateString(new Date(e.added_at));
-    if (!entryCountMap.has(createdDs)) entryCountMap.set(createdDs, new Map());
-    const userMap = entryCountMap.get(createdDs)!;
-    userMap.set(e.added_by, (userMap.get(e.added_by) ?? 0) + 1);
-  }
 
   const filteredModuleUsers = useMemo(
     () =>
@@ -540,7 +529,7 @@ export function TrackerView<T extends BaseModuleEntry>({
                     const isToday = sameDay(d, today);
                     const isPast = d < today && !isToday;
                     const isFuture = d > today;
-                    const entryCount = entryCountMap.get(ds)?.get(user.id) ?? 0;
+                    const entryCount = dailyCounts.get(ds)?.get(user.id) ?? 0;
                     const hasEntry = entryCount > 0;
 
                     let cellBg = '';
@@ -1097,6 +1086,8 @@ export function KpiModulePage<T extends BaseModuleEntry>({
 
   const [monthEntries, setMonthEntries] = useState<T[]>([]);
   const [moduleUsers, setModuleUsers] = useState<ModuleUser[]>([]);
+  // Bumped after a create/edit/delete so the tracker-count hooks refetch.
+  const [trackerRefreshKey, setTrackerRefreshKey] = useState(0);
 
   const [dataEntries, setDataEntries] = useState<T[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -1125,18 +1116,15 @@ export function KpiModulePage<T extends BaseModuleEntry>({
         const [y, m] = s.split('-').map(Number);
         return [y, m] as [number, number];
       });
-      // monthEntries feeds two kinds of view, so fetch the union of both windows:
-      //  • the Weekly view + "submitted today" lock key on the entry's `date`;
-      //  • the daily trackers bucket by `added_at` (TED-551) — so also pull deals
-      //    *entered* this month regardless of their `date`, widened a day each side.
+      // monthEntries now feeds only the Weekly view + the "submitted today" lock,
+      // which key on the entry's `date`. The daily-tracker counts moved to the
+      // backend tracker-counts endpoint (see useTrackerCounts), so the added_at
+      // window is no longer needed here.
       const windows: URLSearchParams[] = [];
       for (const [year, month] of unique) {
         const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
         const lastDay = toLocalDateString(new Date(year, month + 1, 0));
         windows.push(new URLSearchParams({ date_from: firstDay, date_to: lastDay, page_size: '1000' }));
-        const createdFrom = toLocalDateString(new Date(year, month, 0));
-        const createdTo = toLocalDateString(new Date(year, month + 1, 1));
-        windows.push(new URLSearchParams({ created_from: createdFrom, created_to: createdTo, page_size: '1000' }));
       }
       const responses = await Promise.all(
         windows.map((params) => fetchApi<{ results: T[] }>(`/api/entries/${apiSlug}/?${params}`))
@@ -1169,6 +1157,23 @@ export function KpiModulePage<T extends BaseModuleEntry>({
     teamCalMonth,
     weekStart,
   ]);
+
+  // Daily-tracker counts come from the backend (no pagination cap, bucketed in
+  // Asia/Dubai) instead of bucketing monthEntries client-side.
+  const personalCounts = useTrackerCounts({
+    moduleKey,
+    year: personalCalYear,
+    month: personalCalMonth,
+    userIds: currentUserId != null ? [currentUserId] : undefined,
+    refreshKey: trackerRefreshKey,
+  });
+  const teamCounts = useTrackerCounts({
+    moduleKey,
+    year: teamCalYear,
+    month: teamCalMonth,
+    refreshKey: trackerRefreshKey,
+    enabled: isAdmin,
+  });
 
   const fetchDataEntries = useCallback(async () => {
     setDataLoading(true);
@@ -1253,6 +1258,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
       setEditingEntry(null);
       setModalDate('');
       refetchAllMonths();
+      setTrackerRefreshKey((k) => k + 1);
       if (activeView === 'data') fetchDataEntries();
     } else {
       setModalError(result.error || 'Failed to save entry');
@@ -1272,6 +1278,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
     });
     if (!result.error) {
       refetchAllMonths();
+      setTrackerRefreshKey((k) => k + 1);
       if (activeView === 'data') fetchDataEntries();
     } else {
       toast.error(result.error || 'Failed to delete entry');
@@ -1450,7 +1457,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
           calYear={personalCalYear}
           calMonth={personalCalMonth}
           today={today}
-          monthEntries={monthEntries}
+          dailyCounts={personalCounts}
           currentUserId={currentUserId}
           userFullName={user?.full_name || ''}
           onPrevMonth={prevPersonalMonth}
@@ -1500,7 +1507,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
         calYear={personalCalYear}
         calMonth={personalCalMonth}
         today={today}
-        monthEntries={monthEntries}
+        dailyCounts={personalCounts}
         currentUserId={currentUserId}
         userFullName={user?.full_name || ''}
         onPrevMonth={prevPersonalMonth}
@@ -1536,7 +1543,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
           <TrackerView
             calYear={teamCalYear}
             calMonth={teamCalMonth}
-            monthEntries={monthEntries}
+            dailyCounts={teamCounts}
             moduleUsers={moduleUsers}
             trackerUserFilter={trackerUserFilter}
             onTrackerUserFilterChange={setTrackerUserFilter}

@@ -68,6 +68,7 @@ import {
 } from '@/app/components/KpiModulePage';
 import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
+import { useTrackerCounts } from '@/app/lib/useTrackerCounts';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
@@ -199,7 +200,8 @@ export function GeneralEnquiryPage() {
   const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());
   const [teamCalMonth, setTeamCalMonth] = useState(today.getMonth());
   const [trackerUserFilter, setTrackerUserFilter] = useState<string[]>([]);
-  const [monthEntries, setMonthEntries] = useState<GeneralRenewalEntry[]>([]);
+  // Bumped after a create/edit/delete so the tracker-count hooks refetch.
+  const [trackerRefreshKey, setTrackerRefreshKey] = useState(0);
 
   // Module + sales-KPI user pools
   const [moduleUsers, setModuleUsers] = useState<ModuleUser[]>([]);
@@ -303,45 +305,23 @@ export function GeneralEnquiryPage() {
     }
   }, [dashFrom, dashTo, dashUserId]);
 
-  const fetchMonthEntries = useCallback(async () => {
-    const months: Array<[number, number]> = [
-      [personalCalYear, personalCalMonth],
-      [teamCalYear, teamCalMonth],
-    ];
-    const unique = Array.from(new Set(months.map(([y, m]) => `${y}-${m}`))).map((s) => {
-      const [y, m] = s.split('-').map(Number);
-      return [y, m] as [number, number];
-    });
-    try {
-      const responses = await Promise.all(
-        unique.map(([year, month]) => {
-          // TED-551: trackers bucket by `added_at` (entry day), so fetch by
-          // creation date, not the entry's `date` field — otherwise deals
-          // entered this month but dated to another month drop out. Widened a
-          // day each side so boundary rows land on the right local day.
-          const createdFrom = toLocalDateString(new Date(year, month, 0));
-          const createdTo = toLocalDateString(new Date(year, month + 1, 1));
-          const qs = new URLSearchParams({
-            created_from: createdFrom,
-            created_to: createdTo,
-            page_size: '1000',
-          });
-          return fetchApi<{ results: GeneralRenewalEntry[] }>(
-            `/api/entries/${API_SLUG}/?${qs}`
-          );
-        })
-      );
-      const merged = new Map<number, GeneralRenewalEntry>();
-      for (const res of responses) {
-        for (const entry of res.data?.results ?? []) {
-          merged.set(entry.id, entry);
-        }
-      }
-      setMonthEntries(Array.from(merged.values()));
-    } catch {
-      setMonthEntries([]);
-    }
-  }, [personalCalYear, personalCalMonth, teamCalYear, teamCalMonth]);
+  // Daily-tracker counts come from the backend tracker-counts endpoint (no
+  // pagination cap, bucketed in Asia/Dubai): YYYY-MM-DD -> userId -> count.
+  const personalCounts = useTrackerCounts({
+    moduleKey: MODULE_KEY,
+    year: personalCalYear,
+    month: personalCalMonth,
+    userIds: currentUserId != null ? [currentUserId] : undefined,
+    refreshKey: trackerRefreshKey,
+    enabled: activeView === 'tracker' && !isHodUser,
+  });
+  const teamCounts = useTrackerCounts({
+    moduleKey: MODULE_KEY,
+    year: teamCalYear,
+    month: teamCalMonth,
+    refreshKey: trackerRefreshKey,
+    enabled: activeView === 'tracker' && (isAdmin || isHodUser),
+  });
 
   // ── Monthly-target fetchers ─────────────────────────────────────────────────
   const fetchCurrentTarget = useCallback(async () => {
@@ -450,10 +430,6 @@ export function GeneralEnquiryPage() {
   }, [activeView, fetchStats]);
 
   useEffect(() => {
-    if (activeView === 'tracker') fetchMonthEntries();
-  }, [activeView, fetchMonthEntries]);
-
-  useEffect(() => {
     fetchCurrentTarget();
   }, [fetchCurrentTarget]);
 
@@ -494,7 +470,7 @@ export function GeneralEnquiryPage() {
   const refreshAfterMutation = () => {
     fetchEntries();
     fetchStats();
-    fetchMonthEntries();
+    setTrackerRefreshKey((k) => k + 1);
     fetchTargetCard();
   };
 
@@ -920,11 +896,11 @@ export function GeneralEnquiryPage() {
           {/* ─── Tracker View ─────────────────────────────────────────────── */}
           <TabsContent value="tracker" className="mt-4 space-y-4">
             {!isHodUser && (
-              <PersonalDailyTracker<GeneralRenewalEntry>
+              <PersonalDailyTracker
                 calYear={personalCalYear}
                 calMonth={personalCalMonth}
                 today={today}
-                monthEntries={monthEntries}
+                dailyCounts={personalCounts}
                 currentUserId={currentUserId}
                 userFullName={userFullName}
                 onPrevMonth={() => {
@@ -950,10 +926,10 @@ export function GeneralEnquiryPage() {
               />
             )}
             {(isAdmin || isHodUser) && (
-              <TrackerView<GeneralRenewalEntry>
+              <TrackerView
                 calYear={teamCalYear}
                 calMonth={teamCalMonth}
-                monthEntries={monthEntries}
+                dailyCounts={teamCounts}
                 moduleUsers={moduleUsers}
                 trackerUserFilter={trackerUserFilter}
                 onTrackerUserFilterChange={setTrackerUserFilter}

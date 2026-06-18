@@ -1,3 +1,5 @@
+import { BUSINESS_TZ } from './date';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export interface ApiResponse<T> {
@@ -1208,12 +1210,10 @@ export async function exportTrackerXlsx(
     end: params.end,
   });
   if (params.userIds.length > 0) qs.set('user_ids', params.userIds.join(','));
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (tz) qs.set('tz', tz);
-  } catch {
-    /* timezone is best-effort */
-  }
+  // Bucket in the business timezone (Asia/Dubai) so the export matches the
+  // on-screen calendar + the tracker-counts endpoint for every viewer,
+  // regardless of the browser's timezone.
+  qs.set('tz', BUSINESS_TZ);
 
   const url = `${API_BASE_URL}/api/entries/tracker-export/?${qs.toString()}`;
   const doFetch = () => fetch(url, { method: 'GET', credentials: 'include' });
@@ -1249,6 +1249,44 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+// ─── Team Daily Tracker counts (JSON) ────────────────────────────────────────
+
+export interface TrackerDailyCount {
+  user_id: number;
+  date: string; // YYYY-MM-DD, in the business timezone
+  count: number;
+}
+
+export interface TrackerCountsParams {
+  module: string;
+  start: string; // YYYY-MM-DD
+  end: string; // YYYY-MM-DD (inclusive)
+  userIds?: number[]; // omit / empty => all visible members
+}
+
+/**
+ * Per-(member, day) entry counts for the Daily Tracker calendar, aggregated
+ * server-side (no pagination cap) and bucketed in the business timezone so the
+ * grid matches the .xlsx export cell-for-cell. Returns only the non-zero pairs;
+ * callers render 0 for every other (member, day) from their member list.
+ */
+export async function getTrackerCounts(
+  params: TrackerCountsParams,
+): Promise<ApiResponse<{ counts: TrackerDailyCount[] }>> {
+  const qs = new URLSearchParams({
+    module: params.module,
+    start: params.start,
+    end: params.end,
+    tz: BUSINESS_TZ,
+  });
+  if (params.userIds && params.userIds.length > 0) {
+    qs.set('user_ids', params.userIds.join(','));
+  }
+  return fetchApi<{ counts: TrackerDailyCount[] }>(
+    `/api/entries/tracker-counts/?${qs}`,
+  );
 }
 
 // Generic fetch helper for other API calls

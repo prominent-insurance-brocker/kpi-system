@@ -61,6 +61,7 @@ import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { formatDateTime, businessToday } from '@/app/lib/date';
+import { useTrackerCounts } from '@/app/lib/useTrackerCounts';
 import { formatPremium } from '@/app/lib/number';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
@@ -171,7 +172,8 @@ export default function SalesKPIPage() {
 
   // Tracker tab state — independent calendars so paging the tracker doesn't
   // move the Monthly Target card (cardYear/cardMonth) and vice-versa.
-  const [monthEntries, setMonthEntries] = useState<SalesKPIEntry[]>([]);
+  // Bumped after a create/edit/delete so the tracker-count hooks refetch.
+  const [trackerRefreshKey, setTrackerRefreshKey] = useState(0);
   const [moduleUsers, setModuleUsers] = useState<ModuleUser[]>([]);
   const [trackerUserFilter, setTrackerUserFilter] = useState<string[]>([]);
   const [personalCalYear, setPersonalCalYear] = useState(today.getFullYear());
@@ -405,49 +407,23 @@ export default function SalesKPIPage() {
     setSheetTargets(rows);
   }, [sheetYear, cardViewUserId]);
 
-  // Wide-window fetch for the Tracker tab — pulls every entry visible to the
-  // user (the backend already scopes by data_visibility) for the months the
-  // personal + team calendars currently show. De-duped by id since the two
-  // calendars may overlap.
-  const fetchMonthEntries = useCallback(async () => {
-    const months: Array<[number, number]> = [
-      [personalCalYear, personalCalMonth],
-      [teamCalYear, teamCalMonth],
-    ];
-    const unique = Array.from(new Set(months.map(([y, m]) => `${y}-${m}`))).map((s) => {
-      const [y, m] = s.split('-').map(Number);
-      return [y, m] as [number, number];
-    });
-    try {
-      const responses = await Promise.all(
-        unique.map(([year, month]) => {
-          // TED-551: the trackers bucket by `added_at` (entry day), so fetch by
-          // creation date, not the entry's `date` field — otherwise deals
-          // entered this month but dated to another month drop out. Widened a
-          // day each side so boundary rows land on the right local day.
-          const createdFrom = toLocalDateString(new Date(year, month, 0));
-          const createdTo = toLocalDateString(new Date(year, month + 1, 1));
-          const qs = new URLSearchParams({
-            created_from: createdFrom,
-            created_to: createdTo,
-            page_size: '1000',
-          });
-          return fetchApi<{ results: SalesKPIEntry[] }>(
-            `/api/entries/sales-kpi/?${qs}`,
-          );
-        }),
-      );
-      const merged = new Map<number, SalesKPIEntry>();
-      for (const res of responses) {
-        for (const entry of res.data?.results ?? []) {
-          merged.set(entry.id, entry);
-        }
-      }
-      setMonthEntries(Array.from(merged.values()));
-    } catch {
-      setMonthEntries([]);
-    }
-  }, [personalCalYear, personalCalMonth, teamCalYear, teamCalMonth]);
+  // Daily-tracker counts come from the backend tracker-counts endpoint (no
+  // pagination cap, bucketed in Asia/Dubai): YYYY-MM-DD -> userId -> count.
+  const personalCounts = useTrackerCounts({
+    moduleKey: 'sales_kpi',
+    year: personalCalYear,
+    month: personalCalMonth,
+    userIds: currentUserId != null ? [currentUserId] : undefined,
+    refreshKey: trackerRefreshKey,
+    enabled: activeView === 'tracker' && !isHodUser,
+  });
+  const teamCounts = useTrackerCounts({
+    moduleKey: 'sales_kpi',
+    year: teamCalYear,
+    month: teamCalMonth,
+    refreshKey: trackerRefreshKey,
+    enabled: activeView === 'tracker' && (isAdmin || isHodUser),
+  });
 
   useEffect(() => { fetchCurrentTarget(); }, [fetchCurrentTarget]);
   useEffect(() => {
@@ -472,17 +448,11 @@ export default function SalesKPIPage() {
       if (r.data) setModuleUsers(r.data);
     });
   }, []);
-  // Refetch the tracker month window whenever the tab is active or either
-  // calendar is paged.
-  useEffect(() => {
-    if (activeView === 'tracker') fetchMonthEntries();
-  }, [activeView, fetchMonthEntries]);
-
   const refreshAll = () => {
     fetchEntries();
     fetchStats();
     fetchCardData();
-    if (activeView === 'tracker') fetchMonthEntries();
+    setTrackerRefreshKey((k) => k + 1);
   };
 
   // ── Monthly target card aggregates ───────────────────────────────────────
@@ -1048,11 +1018,11 @@ export default function SalesKPIPage() {
           {/* ─── Tracker tab ─────────────────────────────────────────── */}
           <TabsContent value="tracker" className="mt-4 space-y-4">
             {!isHodUser && (
-              <PersonalDailyTracker<SalesKPIEntry>
+              <PersonalDailyTracker
                 calYear={personalCalYear}
                 calMonth={personalCalMonth}
                 today={today}
-                monthEntries={monthEntries}
+                dailyCounts={personalCounts}
                 currentUserId={currentUserId}
                 userFullName={user?.full_name || ''}
                 onPrevMonth={() => {
@@ -1078,10 +1048,10 @@ export default function SalesKPIPage() {
               />
             )}
             {(isAdmin || isHodUser) && (
-              <TrackerView<SalesKPIEntry>
+              <TrackerView
                 calYear={teamCalYear}
                 calMonth={teamCalMonth}
-                monthEntries={monthEntries}
+                dailyCounts={teamCounts}
                 moduleUsers={moduleUsers}
                 trackerUserFilter={trackerUserFilter}
                 onTrackerUserFilterChange={setTrackerUserFilter}

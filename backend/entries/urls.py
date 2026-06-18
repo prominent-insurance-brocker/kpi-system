@@ -23,6 +23,7 @@ from .views import (
     remarks_content_types,
 )
 from .tracker_export import TrackerExportView
+from .tracker_counts import TrackerCountsView
 
 router = DefaultRouter()
 router.register(r'general-new', GeneralNewEntryViewSet, basename='general-new')
@@ -55,5 +56,7 @@ urlpatterns = [
     path('remarks-content-types/', remarks_content_types, name='remarks-content-types'),
     # TED-554: Team Daily Tracker export (.xlsx).
     path('tracker-export/', TrackerExportView.as_view(), name='tracker-export'),
+    # Team Daily Tracker per-(member, day) counts (JSON) — powers the calendar.
+    path('tracker-counts/', TrackerCountsView.as_view(), name='tracker-counts'),
     path('', include(router.urls)),
 ]

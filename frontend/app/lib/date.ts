@@ -2,7 +2,7 @@
 // the UI always matches the backend (settings.TIME_ZONE) regardless of the
 // viewer's browser timezone. Datetimes are STORED in UTC; this only affects how
 // they're displayed/grouped. Override with NEXT_PUBLIC_TIMEZONE if you relocate.
-const BUSINESS_TZ = process.env.NEXT_PUBLIC_TIMEZONE || 'Asia/Dubai'
+export const BUSINESS_TZ = process.env.NEXT_PUBLIC_TIMEZONE || 'Asia/Dubai'
 
 /**
  * Format a plain calendar date string (YYYY-MM-DD) to human readable format.

@@ -48,6 +48,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { canModifyEntry } from '@/app/lib/permissions';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate, businessToday } from '@/app/lib/date';
+import { useTrackerCounts } from '@/app/lib/useTrackerCounts';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
@@ -159,7 +160,8 @@ export default function MotorClaimPage() {
   const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());
   const [teamCalMonth, setTeamCalMonth] = useState(today.getMonth());
   const [trackerUserFilter, setTrackerUserFilter] = useState<string[]>([]);
-  const [monthEntries, setMonthEntries] = useState<MotorClaimEntry[]>([]);
+  // Bumped after a create/edit/delete so the tracker-count hooks refetch.
+  const [trackerRefreshKey, setTrackerRefreshKey] = useState(0);
 
   // Module + agent (sales_kpi) + lookup pools
   const [moduleUsers, setModuleUsers] = useState<ModuleUser[]>([]);
@@ -253,45 +255,23 @@ export default function MotorClaimPage() {
     if (result.data) setStats(result.data);
   }, [dashFrom, dashTo, dashUserId]);
 
-  const fetchMonthEntries = useCallback(async () => {
-    const months: Array<[number, number]> = [
-      [personalCalYear, personalCalMonth],
-      [teamCalYear, teamCalMonth],
-    ];
-    const unique = Array.from(new Set(months.map(([y, m]) => `${y}-${m}`))).map((s) => {
-      const [y, m] = s.split('-').map(Number);
-      return [y, m] as [number, number];
-    });
-    try {
-      const responses = await Promise.all(
-        unique.map(([year, month]) => {
-          // TED-551: trackers bucket by `added_at` (entry day), so fetch by
-          // creation date, not the entry's `date` field — otherwise deals
-          // entered this month but dated to another month drop out. Widened a
-          // day each side so boundary rows land on the right local day.
-          const createdFrom = toLocalDateString(new Date(year, month, 0));
-          const createdTo = toLocalDateString(new Date(year, month + 1, 1));
-          const qs = new URLSearchParams({
-            created_from: createdFrom,
-            created_to: createdTo,
-            page_size: '1000',
-          });
-          return fetchApi<{ results: MotorClaimEntry[] }>(
-            `/api/entries/motor-claim/?${qs}`
-          );
-        })
-      );
-      const merged = new Map<number, MotorClaimEntry>();
-      for (const res of responses) {
-        for (const entry of res.data?.results ?? []) {
-          merged.set(entry.id, entry);
-        }
-      }
-      setMonthEntries(Array.from(merged.values()));
-    } catch {
-      setMonthEntries([]);
-    }
-  }, [personalCalYear, personalCalMonth, teamCalYear, teamCalMonth]);
+  // Daily-tracker counts come from the backend tracker-counts endpoint (no
+  // pagination cap, bucketed in Asia/Dubai): YYYY-MM-DD -> userId -> count.
+  const personalCounts = useTrackerCounts({
+    moduleKey: 'motor_claim',
+    year: personalCalYear,
+    month: personalCalMonth,
+    userIds: currentUserId != null ? [currentUserId] : undefined,
+    refreshKey: trackerRefreshKey,
+    enabled: activeView === 'tracker' && !isHodUser,
+  });
+  const teamCounts = useTrackerCounts({
+    moduleKey: 'motor_claim',
+    year: teamCalYear,
+    month: teamCalMonth,
+    refreshKey: trackerRefreshKey,
+    enabled: activeView === 'tracker' && (isAdmin || isHodUser),
+  });
 
   // ── Initial loads ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -317,15 +297,11 @@ export default function MotorClaimPage() {
     if (activeView === 'dashboard') fetchStats();
   }, [activeView, fetchStats]);
 
-  useEffect(() => {
-    if (activeView === 'tracker') fetchMonthEntries();
-  }, [activeView, fetchMonthEntries]);
-
   // ── Mutations ────────────────────────────────────────────────────────────
   const refreshAfterMutation = () => {
     fetchEntries();
     fetchStats();
-    fetchMonthEntries();
+    setTrackerRefreshKey((k) => k + 1);
   };
 
   const handleSave = async (payload: Partial<MotorClaimEntry> & { initial_remark?: string }) => {
@@ -628,11 +604,11 @@ export default function MotorClaimPage() {
         {/* Tracker View */}
         <TabsContent value="tracker" className="mt-4 space-y-4">
           {!isHodUser && (
-            <PersonalDailyTracker<MotorClaimEntry>
+            <PersonalDailyTracker
               calYear={personalCalYear}
               calMonth={personalCalMonth}
               today={today}
-              monthEntries={monthEntries}
+              dailyCounts={personalCounts}
               currentUserId={currentUserId}
               userFullName={userFullName}
               onPrevMonth={() => {
@@ -658,10 +634,10 @@ export default function MotorClaimPage() {
             />
           )}
           {(isAdmin || isHodUser) && (
-            <TrackerView<MotorClaimEntry>
+            <TrackerView
               calYear={teamCalYear}
               calMonth={teamCalMonth}
-              monthEntries={monthEntries}
+              dailyCounts={teamCounts}
               moduleUsers={moduleUsers}
               trackerUserFilter={trackerUserFilter}
               onTrackerUserFilterChange={setTrackerUserFilter}

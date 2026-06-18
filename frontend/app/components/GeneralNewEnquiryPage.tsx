@@ -71,6 +71,7 @@ import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate, businessToday } from '@/app/lib/date';
+import { useTrackerCounts } from '@/app/lib/useTrackerCounts';
 import { formatPremium, formatNumber } from '@/app/lib/number';
 import { formatTatFromMinutes } from '@/app/lib/tat';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
@@ -267,7 +268,8 @@ export function GeneralNewEnquiryPage() {
   const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());
   const [teamCalMonth, setTeamCalMonth] = useState(today.getMonth());
   const [trackerUserFilter, setTrackerUserFilter] = useState<string[]>([]);
-  const [monthEntries, setMonthEntries] = useState<MotorEnquiryEntry[]>([]);
+  // Bumped after a create/edit/delete so the tracker-count hooks refetch.
+  const [trackerRefreshKey, setTrackerRefreshKey] = useState(0);
 
   // Module + sales-KPI user pools
   const [moduleUsers, setModuleUsers] = useState<ModuleUser[]>([]);
@@ -354,46 +356,23 @@ export function GeneralNewEnquiryPage() {
     }
   }, [apiSlug, dashFrom, dashTo, dashUserId]);
 
-  const fetchMonthEntries = useCallback(async () => {
-    // Pull a wide window covering both the personal month and the team month.
-    const months: Array<[number, number]> = [
-      [personalCalYear, personalCalMonth],
-      [teamCalYear, teamCalMonth],
-    ];
-    const unique = Array.from(new Set(months.map(([y, m]) => `${y}-${m}`))).map((s) => {
-      const [y, m] = s.split('-').map(Number);
-      return [y, m] as [number, number];
-    });
-    try {
-      const responses = await Promise.all(
-        unique.map(([year, month]) => {
-          // TED-551: trackers bucket by `added_at` (entry day), so fetch by
-          // creation date, not the entry's `date` field — otherwise deals
-          // entered this month but dated to another month drop out. Widened a
-          // day each side so boundary rows land on the right local day.
-          const createdFrom = toLocalDateString(new Date(year, month, 0));
-          const createdTo = toLocalDateString(new Date(year, month + 1, 1));
-          const qs = new URLSearchParams({
-            created_from: createdFrom,
-            created_to: createdTo,
-            page_size: '1000',
-          });
-          return fetchApi<{ results: MotorEnquiryEntry[] }>(
-            `/api/entries/${apiSlug}/?${qs}`
-          );
-        })
-      );
-      const merged = new Map<number, MotorEnquiryEntry>();
-      for (const res of responses) {
-        for (const entry of res.data?.results ?? []) {
-          merged.set(entry.id, entry);
-        }
-      }
-      setMonthEntries(Array.from(merged.values()));
-    } catch {
-      setMonthEntries([]);
-    }
-  }, [apiSlug, personalCalYear, personalCalMonth, teamCalYear, teamCalMonth]);
+  // Daily-tracker counts come from the backend tracker-counts endpoint (no
+  // pagination cap, bucketed in Asia/Dubai): YYYY-MM-DD -> userId -> count.
+  const personalCounts = useTrackerCounts({
+    moduleKey,
+    year: personalCalYear,
+    month: personalCalMonth,
+    userIds: currentUserId != null ? [currentUserId] : undefined,
+    refreshKey: trackerRefreshKey,
+    enabled: activeView === 'tracker' && !isHodUser,
+  });
+  const teamCounts = useTrackerCounts({
+    moduleKey,
+    year: teamCalYear,
+    month: teamCalMonth,
+    refreshKey: trackerRefreshKey,
+    enabled: activeView === 'tracker' && (isAdmin || isHodUser),
+  });
 
   // ── Motor Renewal target fetchers ─────────────────────────────────────────
   // General New has no monthly retention target — these are renewal-only.
@@ -501,10 +480,6 @@ export function GeneralNewEnquiryPage() {
     if (activeView === 'dashboard') fetchStats();
   }, [activeView, fetchStats]);
 
-  useEffect(() => {
-    if (activeView === 'tracker') fetchMonthEntries();
-  }, [activeView, fetchMonthEntries]);
-
   // Motor Renewal target: load once, then keep card in sync with card month.
   useEffect(() => {
     fetchCurrentTarget();
@@ -537,7 +512,7 @@ export function GeneralNewEnquiryPage() {
   const refreshAfterMutation = () => {
     fetchEntries();
     fetchStats();
-    fetchMonthEntries();
+    setTrackerRefreshKey((k) => k + 1);
     if (isRenewal) fetchTargetCard();
   };
 
@@ -965,11 +940,11 @@ export function GeneralNewEnquiryPage() {
         {/* ─── Tracker View ─────────────────────────────────────────────── */}
         <TabsContent value="tracker" className="mt-4 space-y-4">
           {!isHodUser && (
-            <PersonalDailyTracker<MotorEnquiryEntry>
+            <PersonalDailyTracker
               calYear={personalCalYear}
               calMonth={personalCalMonth}
               today={today}
-              monthEntries={monthEntries}
+              dailyCounts={personalCounts}
               currentUserId={currentUserId}
               userFullName={userFullName}
               onPrevMonth={() => {
@@ -995,10 +970,10 @@ export function GeneralNewEnquiryPage() {
             />
           )}
           {(isAdmin || isHodUser) && (
-            <TrackerView<MotorEnquiryEntry>
+            <TrackerView
               calYear={teamCalYear}
               calMonth={teamCalMonth}
-              monthEntries={monthEntries}
+              dailyCounts={teamCounts}
               moduleUsers={moduleUsers}
               trackerUserFilter={trackerUserFilter}
               onTrackerUserFilterChange={setTrackerUserFilter}

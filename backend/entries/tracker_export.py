@@ -3,13 +3,16 @@
 Generates an .xlsx workbook that mirrors the Team Daily Tracker grid for a
 single module: rows = team members, columns = calendar days, each cell the
 number of entries that member *created* (bucketed by ``added_at``) on that day,
-colored to match the on-screen tracker:
+colored to match the on-screen tracker. Unlike the live grid (which hides the 0
+on today/weekends for a clean glance), the export writes the count for *every day
+that has occurred* — 0 included — so a downloaded report never has empty cells in
+the past (otherwise a 0 on the last day looks like a blank):
 
-    count > 0            -> green   (DCFCE7 / text 15803D)
-    today, 0             -> blue    (EEF2FF)
+    count > 0            -> green   (DCFCE7 / text 15803D), value = count
     past weekday, 0      -> red     (FEE2E2 / text B91C1C), value 0
-    weekend (Sat/Sun)    -> gray    (F3F4F6)
-    future               -> blank
+    today, 0             -> blue    (EEF2FF), value 0
+    weekend, 0           -> gray    (F3F4F6), value 0
+    future               -> blank   (future weekends shaded gray)
 
 Days are bucketed in the *client's* timezone (passed as ``tz``) so the grid
 lines up cell-for-cell with what the browser renders — the frontend tracker
@@ -267,20 +270,27 @@ class TrackerExportView(APIView):
                 cell.alignment = CENTER
                 cell.border = BORDER
                 is_weekend = day.weekday() >= 5
+                if day > today_local:
+                    # Future days have no value; keep weekends shaded for consistency.
+                    if is_weekend:
+                        cell.fill = FILL_GRAY
+                    continue
+                # The day has occurred (past or today) -> always write the count,
+                # 0 included. The live grid hides 0 on today/weekends for a clean
+                # glance, but a downloaded report should show every occurred day
+                # (otherwise a 0 on the last day looks like an empty cell).
+                cell.value = count
                 if count > 0:
-                    cell.value = count
                     cell.fill = FILL_GREEN
                     cell.font = FONT_GREEN
                     row_total += count
                 elif day == today_local:
                     cell.fill = FILL_BLUE
-                elif day < today_local and not is_weekend:
-                    cell.value = 0
-                    cell.fill = FILL_RED
-                    cell.font = FONT_RED
                 elif is_weekend:
                     cell.fill = FILL_GRAY
-                # future days: left blank, no fill
+                else:
+                    cell.fill = FILL_RED
+                    cell.font = FONT_RED
             total_cell = ws.cell(row=r, column=total_col, value=row_total)
             total_cell.alignment = CENTER
             total_cell.border = BORDER

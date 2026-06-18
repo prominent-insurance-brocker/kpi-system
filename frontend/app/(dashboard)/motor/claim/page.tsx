@@ -196,8 +196,7 @@ export default function MotorClaimPage() {
       d.setDate(d.getDate() + days);
       return d;
     };
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
+    const now = businessToday();
     const todayStr = fmt(now);
     switch (nextCallPreset) {
       case 'overdue':

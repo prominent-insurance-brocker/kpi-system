@@ -118,9 +118,6 @@ const getDateRange = (preset: PresetKey): { from: string; to: string } => {
 const detectPreset = (dateFrom: string, dateTo: string): PresetKey => {
   if (!dateFrom && !dateTo) return "all"
 
-  const today = businessToday()
-  const todayStr = formatDate(today)
-
   // Check each preset — order matches the dropdown so a range that satisfies
   // multiple presets resolves to the most specific one declared first.
   for (const preset of [

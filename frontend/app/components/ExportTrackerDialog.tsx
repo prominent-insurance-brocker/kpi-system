@@ -235,9 +235,6 @@ export function ExportTrackerDialog({
                       <span className="text-sm text-[#09090B] flex-1 truncate">
                         {u.full_name}
                       </span>
-                      {u.role_name && (
-                        <span className="text-xs text-[#71717A]">{u.role_name}</span>
-                      )}
                     </label>
                   ))
                 )}

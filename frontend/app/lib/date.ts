@@ -68,3 +68,13 @@ export function businessDateString(d: Date): string {
     day: '2-digit',
   }).format(d)
 }
+
+/**
+ * "Today" in the business zone, as a Date at local midnight of that calendar
+ * day. Use instead of `new Date()` so the tracker's today-highlight / past /
+ * future reflect the business day, not the viewer's browser day.
+ */
+export function businessToday(): Date {
+  const [y, m, d] = businessDateString(new Date()).split('-').map(Number)
+  return new Date(y, m - 1, d)
+}

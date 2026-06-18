@@ -35,7 +35,7 @@ import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users, Info } from 'lu
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { formatDate, businessDateString } from '@/app/lib/date';
+import { formatDate, businessDateString, businessToday } from '@/app/lib/date';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { toast } from 'sonner';
@@ -184,7 +184,6 @@ export function UserAvatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 
 export function PersonalDailyTracker<T extends BaseModuleEntry>({
   calYear,
   calMonth,
-  today,
   monthEntries,
   currentUserId,
   userFullName,
@@ -194,7 +193,6 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
 }: {
   calYear: number;
   calMonth: number;
-  today: Date;
   monthEntries: T[];
   currentUserId: number | undefined;
   userFullName: string;
@@ -202,6 +200,9 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
   onNextMonth: () => void;
   onGoToday: () => void;
 }) {
+  // "Today" pinned to the business zone, not the viewer's browser clock, so the
+  // highlight / past / future split matches the backend day boundary.
+  const today = businessToday();
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
 
   return (
@@ -366,8 +367,8 @@ export function TrackerView<T extends BaseModuleEntry>({
   // since HOD users don't submit data.
   excludeUserId?: number;
 }) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // "Today" pinned to the business zone (see PersonalDailyTracker).
+  const today = businessToday();
 
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const calDays: Date[] = Array.from(

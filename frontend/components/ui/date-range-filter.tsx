@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { businessToday } from "@/app/lib/date"
 
 interface DateRangeFilterProps {
   dateFrom: string
@@ -61,8 +62,10 @@ const formatDate = (d: Date): string => {
 }
 
 const getDateRange = (preset: PresetKey): { from: string; to: string } => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  // "Today" et al. resolve against the business day (Asia/Dubai), so the preset
+  // ranges line up with how the backend buckets/filters added_at — not the
+  // viewer's browser clock.
+  const today = businessToday()
 
   switch (preset) {
     case "today":
@@ -114,10 +117,6 @@ const getDateRange = (preset: PresetKey): { from: string; to: string } => {
 
 const detectPreset = (dateFrom: string, dateTo: string): PresetKey => {
   if (!dateFrom && !dateTo) return "all"
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const todayStr = formatDate(today)
 
   // Check each preset — order matches the dropdown so a range that satisfies
   // multiple presets resolves to the most specific one declared first.
@@ -383,7 +382,7 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
             {pickerMode === "single" ? (
               <Calendar
                 mode="single"
-                defaultMonth={tempSingle || new Date()}
+                defaultMonth={tempSingle || businessToday()}
                 selected={tempSingle}
                 onSelect={handleSingleSelect}
                 numberOfMonths={1}
@@ -392,7 +391,7 @@ export function DateRangeFilter({ dateFrom, dateTo, onChange }: DateRangeFilterP
             ) : (
               <Calendar
                 mode="range"
-                defaultMonth={tempRange?.from || new Date()}
+                defaultMonth={tempRange?.from || businessToday()}
                 selected={tempRange}
                 onSelect={handleRangeSelect}
                 numberOfMonths={2}

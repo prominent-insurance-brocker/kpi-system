@@ -14,7 +14,7 @@ import { canModifyEntry } from '@/app/lib/permissions';
 import { Plus } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
-import { formatDate } from '@/app/lib/date';
+import { formatDate, businessDateString } from '@/app/lib/date';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { toast } from 'sonner';
@@ -354,7 +354,7 @@ function EntryForm({ entry, onSave, onClose, error }: { entry: MedicalClaimEntry
   useSubmitShortcut(formRef);
   useEffect(() => {
     if (entry) setFormData({ date: entry.date, customer_name: entry.customer_name, status: entry.status });
-    else setFormData({ date: new Date().toISOString().split('T')[0], customer_name: '', status: 'claims_opened' });
+    else setFormData({ date: businessDateString(new Date()), customer_name: '', status: 'claims_opened' });
   }, [entry]);
 
   const isEditing = !!entry;

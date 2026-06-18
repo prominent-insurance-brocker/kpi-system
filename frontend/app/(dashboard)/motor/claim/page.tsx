@@ -43,10 +43,11 @@ import {
   toLocalDateString,
   type ModuleUser,
 } from '@/app/components/KpiModulePage';
+import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
 import { canModifyEntry } from '@/app/lib/permissions';
 import { useConfirm } from '@/app/components/ConfirmDialog';
-import { formatDate } from '@/app/lib/date';
+import { formatDate, businessToday } from '@/app/lib/date';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
@@ -109,11 +110,9 @@ export default function MotorClaimPage() {
   const currentUserId = user?.id;
   const userFullName = user?.full_name ?? '';
 
-  const today = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
+  // Business-zone "today" (Asia/Dubai) so the default month, "go to today", and
+  // the auto-filled entry date follow the backend day boundary, not the browser.
+  const today = useMemo(() => businessToday(), []);
 
   const [activeView, setActiveView] = useState<'dashboard' | 'tracker' | 'enquiries'>('enquiries');
 
@@ -159,7 +158,7 @@ export default function MotorClaimPage() {
   const [personalCalMonth, setPersonalCalMonth] = useState(today.getMonth());
   const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());
   const [teamCalMonth, setTeamCalMonth] = useState(today.getMonth());
-  const [trackerUserFilter, setTrackerUserFilter] = useState('all');
+  const [trackerUserFilter, setTrackerUserFilter] = useState<string[]>([]);
   const [monthEntries, setMonthEntries] = useState<MotorClaimEntry[]>([]);
 
   // Module + agent (sales_kpi) + lookup pools
@@ -197,8 +196,7 @@ export default function MotorClaimPage() {
       d.setDate(d.getDate() + days);
       return d;
     };
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
+    const now = businessToday();
     const todayStr = fmt(now);
     switch (nextCallPreset) {
       case 'overdue':
@@ -267,11 +265,15 @@ export default function MotorClaimPage() {
     try {
       const responses = await Promise.all(
         unique.map(([year, month]) => {
-          const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-          const lastDay = toLocalDateString(new Date(year, month + 1, 0));
+          // TED-551: trackers bucket by `added_at` (entry day), so fetch by
+          // creation date, not the entry's `date` field — otherwise deals
+          // entered this month but dated to another month drop out. Widened a
+          // day each side so boundary rows land on the right local day.
+          const createdFrom = toLocalDateString(new Date(year, month, 0));
+          const createdTo = toLocalDateString(new Date(year, month + 1, 1));
           const qs = new URLSearchParams({
-            date_from: firstDay,
-            date_to: lastDay,
+            created_from: createdFrom,
+            created_to: createdTo,
             page_size: '1000',
           });
           return fetchApi<{ results: MotorClaimEntry[] }>(
@@ -520,12 +522,17 @@ export default function MotorClaimPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Motor Claim</h1>
-        {!isHodUser && (
-          <Button onClick={openAddModal}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Claim
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {(isAdmin || isHodUser) && (
+            <ExportTrackerButton moduleKey="motor_claim" moduleUsers={moduleUsers} />
+          )}
+          {!isHodUser && (
+            <Button onClick={openAddModal}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Claim
+            </Button>
+          )}
+        </div>
       </div>
 
       <Tabs
@@ -850,6 +857,7 @@ export default function MotorClaimPage() {
             <RemarksPanel
               contentTypeId={remarksContentTypeId}
               objectId={panelEntry?.id ?? null}
+              canAddComment={panelEntry ? canModifyEntry(user, panelEntry.added_by) : true}
               entryLabel={panelEntry ? `Motor Claim — ${panelEntry.pib_id}` : ''}
               open={!!panelEntry}
               onOpenChange={(open) => {

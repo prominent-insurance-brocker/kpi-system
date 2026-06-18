@@ -60,8 +60,7 @@ import { toast } from 'sonner';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
-import { FormDatePicker } from '@/components/ui/form-date-picker';
-import { formatDate } from '@/app/lib/date';
+import { formatDateTime, businessToday } from '@/app/lib/date';
 import { formatPremium } from '@/app/lib/number';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
@@ -75,7 +74,9 @@ import {
   TrackerView,
   type ModuleUser,
 } from '@/app/components/KpiModulePage';
+import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { SalesKPIStatusModal } from '@/app/components/SalesKPIStatusModal';
+import { SalesKPIConvertedPremiumModal } from '@/app/components/SalesKPIConvertedPremiumModal';
 import {
   fetchApi,
   getSalesKPIStats,
@@ -153,11 +154,9 @@ export default function SalesKPIPage() {
   const isHodUser = isHOD();
   const currentUserId = user?.id;
 
-  const today = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
+  // Business-zone "today" (Asia/Dubai) so the default month, "go to today", and
+  // the auto-filled entry date follow the backend day boundary, not the browser.
+  const today = useMemo(() => businessToday(), []);
 
   // Tabs
   const [activeView, setActiveView] = useState<'dashboard' | 'tracker' | 'enquiries'>(
@@ -174,7 +173,7 @@ export default function SalesKPIPage() {
   // move the Monthly Target card (cardYear/cardMonth) and vice-versa.
   const [monthEntries, setMonthEntries] = useState<SalesKPIEntry[]>([]);
   const [moduleUsers, setModuleUsers] = useState<ModuleUser[]>([]);
-  const [trackerUserFilter, setTrackerUserFilter] = useState('all');
+  const [trackerUserFilter, setTrackerUserFilter] = useState<string[]>([]);
   const [personalCalYear, setPersonalCalYear] = useState(today.getFullYear());
   const [personalCalMonth, setPersonalCalMonth] = useState(today.getMonth());
   const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());
@@ -186,6 +185,8 @@ export default function SalesKPIPage() {
   const [modalError, setModalError] = useState('');
 
   const [statusModalEntry, setStatusModalEntry] = useState<SalesKPIEntry | null>(null);
+  // TED-555: edit converted premium on a Won deal (post-close).
+  const [convertedPremiumEntry, setConvertedPremiumEntry] = useState<SalesKPIEntry | null>(null);
   const [statusModalNext, setStatusModalNext] = useState<SalesKPIStatus | null>(null);
 
   // Remarks side panel (same UX as the other modules — opens on the Notes
@@ -252,8 +253,9 @@ export default function SalesKPIPage() {
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('page_size', String(pageSize));
-    if (dateFrom) params.set('date_from', dateFrom);
-    if (dateTo) params.set('date_to', dateTo);
+    // All Sales filters apply on the entry day (added_at), not the deal's `date`.
+    if (dateFrom) params.set('created_from', dateFrom);
+    if (dateTo) params.set('created_to', dateTo);
     if (userId) params.set('user_id', userId);
     if (assigneeId) params.set('assignee', assigneeId);
     if (statusFilter) params.set('status', statusFilter);
@@ -275,8 +277,8 @@ export default function SalesKPIPage() {
     // Dashboard cards are scoped by the dashboard-tab FilterBar (date range +
     // user), independent of the Enquiries-tab URL-synced filters.
     const result = await getSalesKPIStats({
-      date_from: dashFrom || undefined,
-      date_to: dashTo || undefined,
+      created_from: dashFrom || undefined,
+      created_to: dashTo || undefined,
       user_id: dashUserId || undefined,
     });
     if (result.data) setStats(result.data);
@@ -381,7 +383,7 @@ export default function SalesKPIPage() {
     // actuals, personal targets pair with personal actuals.
     const userFilter = cardViewUserId ? `&user_id=${cardViewUserId}` : '';
     const result = await fetchApi<{ results: SalesKPIEntry[] }>(
-      `/api/entries/sales-kpi/?date_from=${firstDay}&date_to=${lastDay}${userFilter}&page_size=1000`,
+      `/api/entries/sales-kpi/?created_from=${firstDay}&created_to=${lastDay}${userFilter}&page_size=1000`,
     );
     setCardEntries(result.data?.results ?? []);
   }, [cardYear, cardMonth, currentUserId, cardViewUserId]);
@@ -419,11 +421,15 @@ export default function SalesKPIPage() {
     try {
       const responses = await Promise.all(
         unique.map(([year, month]) => {
-          const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-          const lastDay = toLocalDateString(new Date(year, month + 1, 0));
+          // TED-551: the trackers bucket by `added_at` (entry day), so fetch by
+          // creation date, not the entry's `date` field — otherwise deals
+          // entered this month but dated to another month drop out. Widened a
+          // day each side so boundary rows land on the right local day.
+          const createdFrom = toLocalDateString(new Date(year, month, 0));
+          const createdTo = toLocalDateString(new Date(year, month + 1, 1));
           const qs = new URLSearchParams({
-            date_from: firstDay,
-            date_to: lastDay,
+            created_from: createdFrom,
+            created_to: createdTo,
             page_size: '1000',
           });
           return fetchApi<{ results: SalesKPIEntry[] }>(
@@ -633,6 +639,7 @@ export default function SalesKPIPage() {
   // TED-543: Sales table column order — ID, Customer Name, Status, Notes,
   // Potential Premium, Converted Premium, then the remaining columns as before,
   // with Date moved to the end.
+  // TED-546: Added by moved to sit immediately after Converted Premium.
   const columns = [
     { key: 'pib_id', header: 'ID', render: (item: SalesKPIEntry) => item.pib_id },
     { key: 'customer_name', header: 'Customer Name' },
@@ -707,6 +714,11 @@ export default function SalesKPIPage() {
         item.converted_premium != null ? formatPremium(item.converted_premium) : '—',
     },
     {
+      key: 'added_by_name',
+      header: 'Added by',
+      render: (item: SalesKPIEntry) => <AddedByCell entry={item} />,
+    },
+    {
       key: 'entry_type',
       header: 'Type',
       render: (item: SalesKPIEntry) => item.entry_type_display,
@@ -717,12 +729,9 @@ export default function SalesKPIPage() {
       render: (item: SalesKPIEntry) => item.class_of_insurance_name || '—',
     },
     { key: 'assignee', header: 'Assignee', render: (item: SalesKPIEntry) => item.assignee_name },
-    {
-      key: 'added_by_name',
-      header: 'Added by',
-      render: (item: SalesKPIEntry) => <AddedByCell entry={item} />,
-    },
-    { key: 'date', header: 'Date', render: (item: SalesKPIEntry) => formatDate(item.date) },
+    // Entry timestamp (added_at) — matches the trackers + every Sales filter,
+    // which all key off added_at. Shown as local date + time.
+    { key: 'added_at', header: 'Added at', render: (item: SalesKPIEntry) => formatDateTime(item.added_at) },
   ];
 
   // ── Side panel helpers (unchanged from prior page) ───────────────────────
@@ -801,6 +810,9 @@ export default function SalesKPIPage() {
             <h1 className="text-2xl font-bold">Deals</h1>
           </div>
           <div className="flex items-center gap-2">
+            {(isAdmin || isHodUser) && (
+              <ExportTrackerButton moduleKey="sales_kpi" moduleUsers={moduleUsers} />
+            )}
             <Button variant="outline" onClick={() => setIsPanelOpen((o) => !o)}>
               <Pencil className="h-4 w-4 mr-2" /> Monthly Targets
             </Button>
@@ -1187,12 +1199,21 @@ export default function SalesKPIPage() {
                     entry.status !== 'won' &&
                     entry.status !== 'lost'
                   }
+                  rowActions={(entry) =>
+                    entry.status === 'won' && canModifyEntry(user, entry.added_by)
+                      ? [{
+                          label: 'Update Converted Premium',
+                          onClick: () => setConvertedPremiumEntry(entry),
+                        }]
+                      : []
+                  }
                   isLoading={isLoading}
                 />
               </div>
               <RemarksPanel
                 contentTypeId={remarksContentTypeId}
                 objectId={panelEntry?.id ?? null}
+                canAddComment={panelEntry ? canModifyEntry(user, panelEntry.added_by) : true}
                 entryLabel={panelEntry ? `Deals — ${panelEntry.pib_id}` : ''}
                 open={!!panelEntry}
                 onOpenChange={(open) => {
@@ -1225,6 +1246,14 @@ export default function SalesKPIPage() {
           }}
           entry={statusModalEntry}
           nextStatus={statusModalNext}
+          onSaved={() => refreshAll()}
+        />
+
+        {/* TED-555 update-converted-premium modal (Won deals) */}
+        <SalesKPIConvertedPremiumModal
+          isOpen={!!convertedPremiumEntry}
+          onClose={() => setConvertedPremiumEntry(null)}
+          entry={convertedPremiumEntry}
           onSaved={() => refreshAll()}
         />
 
@@ -1493,7 +1522,6 @@ function EntryModal({
 }) {
   const isEdit = !!entry;
 
-  const [date, setDate] = useState<string>(entry?.date ?? '');
   const [customerName, setCustomerName] = useState(entry?.customer_name ?? '');
   const [entryType, setEntryType] = useState<SalesKPIEntryType>(entry?.entry_type ?? 'new');
   const [classOfInsuranceId, setClassOfInsuranceId] = useState<number | null>(
@@ -1513,7 +1541,6 @@ function EntryModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setDate(entry?.date ?? toLocalDateString(new Date()));
     setCustomerName(entry?.customer_name ?? '');
     setEntryType(entry?.entry_type ?? 'new');
     setClassOfInsuranceId(typeof entry?.class_of_insurance === 'number' ? entry.class_of_insurance : null);
@@ -1571,9 +1598,9 @@ function EntryModal({
       assignee: assigneeId,
       potential_premium: potentialPremium.trim(),
     };
-    if (isEdit) {
-      payload.date = date;
-    } else if (initialRemark.trim()) {
+    // `date` is the immutable entry day (auto-set on create, like added_at), so
+    // it's never sent on edit. Only the initial remark is create-only.
+    if (!isEdit && initialRemark.trim()) {
       payload.initial_remark = initialRemark.trim();
     }
     await onSave(payload);
@@ -1591,15 +1618,6 @@ function EntryModal({
             <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
               {error}
             </div>
-          )}
-
-          {isEdit && (
-            <FormDatePicker
-              label="Date"
-              value={date}
-              onChange={(d) => setDate(d)}
-              required
-            />
           )}
 
           <div className="space-y-2">
@@ -1726,7 +1744,7 @@ function TargetModal({
   // TED-506: the "Action required" yellow banner only makes sense for the
   // CURRENT month — that's the gate that blocks the user from adding deals.
   // Past or future months are just admin housekeeping; no urgency, no banner.
-  const today = new Date();
+  const today = businessToday();
   const isCurrentMonth =
     year === today.getFullYear() && month === today.getMonth() + 1;
 

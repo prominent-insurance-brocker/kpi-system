@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'roles',
     'entries',
     'ai_chat',
+    'audit',
 ]
 
 MIDDLEWARE = [
@@ -71,6 +72,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Stash the cookie-JWT actor for audit logging (must follow AuthenticationMiddleware).
+    'auth_app.middleware.AuditActorMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -131,7 +134,11 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Business timezone (UAE). Datetimes are stored in UTC (USE_TZ=True); this is
+# the zone all date filters / `__date` lookups + displays are interpreted in, so
+# an entry made at 12:00 AM local stays on that local day instead of slipping to
+# the previous UTC day. Env-overridable for other deployments.
+TIME_ZONE = os.environ.get('TIME_ZONE', 'Asia/Dubai')
 
 USE_I18N = True
 

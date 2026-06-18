@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,15 +25,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { DataTable, Tooltip } from '@/app/components/DataTable';
 import { fetchApi, getUsersForModule } from '@/app/lib/api';
+import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
 import { canModifyEntry } from '@/app/lib/permissions';
 import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users, Info } from 'lucide-react';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { formatDate } from '@/app/lib/date';
+import { formatDate, businessDateString, businessToday } from '@/app/lib/date';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { toast } from 'sonner';
@@ -91,6 +93,7 @@ export interface ModuleUser {
   id: number;
   email: string;
   full_name: string;
+  role_name?: string | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -191,6 +194,7 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
 }: {
   calYear: number;
   calMonth: number;
+  // Business-zone "today" (Asia/Dubai), supplied by the parent via businessToday().
   today: Date;
   monthEntries: T[];
   currentUserId: number | undefined;
@@ -266,7 +270,7 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
             // `date` field, so the tracker reflects actual submission activity.
             const entryCount = monthEntries.reduce(
               (sum, e) =>
-                toLocalDateString(new Date(e.added_at)) === ds &&
+                businessDateString(new Date(e.added_at)) === ds &&
                 ownerId(e) === currentUserId
                   ? sum + 1
                   : sum,
@@ -353,8 +357,8 @@ export function TrackerView<T extends BaseModuleEntry>({
   calMonth: number;
   monthEntries: T[];
   moduleUsers: ModuleUser[];
-  trackerUserFilter: string;
-  onTrackerUserFilterChange: (v: string) => void;
+  trackerUserFilter: string[];
+  onTrackerUserFilterChange: (v: string[]) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
   onGoToday: () => void;
@@ -363,8 +367,8 @@ export function TrackerView<T extends BaseModuleEntry>({
   // since HOD users don't submit data.
   excludeUserId?: number;
 }) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // "Today" pinned to the business zone (see PersonalDailyTracker).
+  const today = businessToday();
 
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const calDays: Date[] = Array.from(
@@ -376,20 +380,24 @@ export function TrackerView<T extends BaseModuleEntry>({
   // by Created Date (added_at) — see PersonalDailyTracker comment above.
   const entryCountMap = new Map<string, Map<number, number>>();
   for (const e of monthEntries) {
-    const createdDs = toLocalDateString(new Date(e.added_at));
+    const createdDs = businessDateString(new Date(e.added_at));
     if (!entryCountMap.has(createdDs)) entryCountMap.set(createdDs, new Map());
     const userMap = entryCountMap.get(createdDs)!;
     userMap.set(e.added_by, (userMap.get(e.added_by) ?? 0) + 1);
   }
 
-  const filteredModuleUsers =
-    excludeUserId != null
-      ? moduleUsers.filter((u) => u.id !== excludeUserId)
-      : moduleUsers;
+  const filteredModuleUsers = useMemo(
+    () =>
+      excludeUserId != null
+        ? moduleUsers.filter((u) => u.id !== excludeUserId)
+        : moduleUsers,
+    [moduleUsers, excludeUserId]
+  );
+  // TED-553: trackerUserFilter is a list of selected user ids; [] = all members.
   const visibleUsers =
-    trackerUserFilter === 'all'
+    trackerUserFilter.length === 0
       ? filteredModuleUsers
-      : filteredModuleUsers.filter((u) => String(u.id) === trackerUserFilter);
+      : filteredModuleUsers.filter((u) => trackerUserFilter.includes(String(u.id)));
 
   return (
     <div className="bg-white rounded-2xl border border-[#E4E4E4] shadow-sm overflow-hidden">
@@ -413,26 +421,27 @@ export function TrackerView<T extends BaseModuleEntry>({
             </button>
           </div>
 
-          <Select value={trackerUserFilter} onValueChange={onTrackerUserFilterChange}>
-            <SelectTrigger className="h-8 text-sm border-[#E4E4E4] rounded-lg px-3 gap-1.5 w-auto min-w-[120px]">
-              <Users className="h-3.5 w-3.5 text-[#71717A]" />
-              <SelectValue placeholder="All Users" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Users</SelectItem>
-              {filteredModuleUsers.map((u) => (
-                <SelectItem key={u.id} value={String(u.id)}>
-                  {u.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {trackerUserFilter !== 'all' && (
+          {/* TED-550 + TED-553: searchable multi-select member picker. */}
+          <div className="w-[220px]">
+            <MultiSelect
+              options={filteredModuleUsers}
+              value={trackerUserFilter}
+              onChange={onTrackerUserFilterChange}
+              getOptionValue={(u) => String(u.id)}
+              getOptionLabel={(u) => u.full_name}
+              placeholder="All Users"
+              searchPlaceholder="Search members…"
+              emptyLabel="No users found"
+              summarize={(n) => `${n} users`}
+              triggerClassName="h-8 rounded-lg border-[#E4E4E4]"
+            />
+          </div>
+          {trackerUserFilter.length > 0 && (
             <Button
               variant="outline"
               size="sm"
               className="h-8"
-              onClick={() => onTrackerUserFilterChange('all')}
+              onClick={() => onTrackerUserFilterChange([])}
             >
               Clear filter
             </Button>
@@ -1065,8 +1074,10 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   const isHodUser = isHOD();
   const currentUserId = user?.id;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Business-zone "today" (Asia/Dubai) — drives the default calendar month,
+  // "go to today", and the auto-filled entry date so the whole page agrees with
+  // the backend day boundary regardless of the viewer's browser timezone.
+  const today = businessToday();
 
   const [activeView, setActiveView] = useState<'tracker' | 'weekly' | 'data'>('weekly');
 
@@ -1075,7 +1086,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   const [personalCalMonth, setPersonalCalMonth] = useState(today.getMonth());
   const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());
   const [teamCalMonth, setTeamCalMonth] = useState(today.getMonth());
-  const [trackerUserFilter, setTrackerUserFilter] = useState('all');
+  const [trackerUserFilter, setTrackerUserFilter] = useState<string[]>([]);
 
   const [weekStart, setWeekStart] = useState<Date>(startOfWeek(today));
   const [weeklyUserFilter, setWeeklyUserFilter] = useState('all');
@@ -1114,13 +1125,21 @@ export function KpiModulePage<T extends BaseModuleEntry>({
         const [y, m] = s.split('-').map(Number);
         return [y, m] as [number, number];
       });
+      // monthEntries feeds two kinds of view, so fetch the union of both windows:
+      //  • the Weekly view + "submitted today" lock key on the entry's `date`;
+      //  • the daily trackers bucket by `added_at` (TED-551) — so also pull deals
+      //    *entered* this month regardless of their `date`, widened a day each side.
+      const windows: URLSearchParams[] = [];
+      for (const [year, month] of unique) {
+        const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+        const lastDay = toLocalDateString(new Date(year, month + 1, 0));
+        windows.push(new URLSearchParams({ date_from: firstDay, date_to: lastDay, page_size: '1000' }));
+        const createdFrom = toLocalDateString(new Date(year, month, 0));
+        const createdTo = toLocalDateString(new Date(year, month + 1, 1));
+        windows.push(new URLSearchParams({ created_from: createdFrom, created_to: createdTo, page_size: '1000' }));
+      }
       const responses = await Promise.all(
-        unique.map(([year, month]) => {
-          const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-          const lastDay = toLocalDateString(new Date(year, month + 1, 0));
-          const params = new URLSearchParams({ date_from: firstDay, date_to: lastDay, page_size: '1000' });
-          return fetchApi<{ results: T[] }>(`/api/entries/${apiSlug}/?${params}`);
-        })
+        windows.map((params) => fetchApi<{ results: T[] }>(`/api/entries/${apiSlug}/?${params}`))
       );
       const merged = new Map<number, T>();
       for (const res of responses) {
@@ -1472,7 +1491,10 @@ export function KpiModulePage<T extends BaseModuleEntry>({
 
   return (
     <div className="p-6 space-y-5">
-      <h1 className="text-2xl font-bold text-[#09090B]">{title}</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-[#09090B]">{title}</h1>
+        <ExportTrackerButton moduleKey={moduleKey} moduleUsers={moduleUsers} />
+      </div>
 
       <PersonalDailyTracker
         calYear={personalCalYear}

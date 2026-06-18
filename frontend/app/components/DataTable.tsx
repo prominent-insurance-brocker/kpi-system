@@ -59,6 +59,8 @@ interface DataTableProps<T> {
   onDelete?: (item: T) => void;
   canEdit?: (item: T) => boolean;
   canDelete?: (item: T) => boolean;
+  // Extra per-row actions appended to the actions dropdown (after Edit/Delete).
+  rowActions?: (item: T) => Array<{ label: string; onClick: () => void; danger?: boolean }>;
   isLoading?: boolean;
   height?: string;
 }
@@ -75,10 +77,12 @@ export function DataTable<T extends { id: number }>({
   onDelete,
   canEdit,
   canDelete,
+  rowActions,
   isLoading,
   height = 'h-[calc(100vh-270px)]',
 }: DataTableProps<T>) {
   const totalPages = Math.ceil(totalCount / pageSize);
+  const hasActions = !!(onEdit || onDelete || rowActions);
 
   const getValue = (item: T, key: string): React.ReactNode => {
     const keys = key.split('.');
@@ -115,7 +119,7 @@ export function DataTable<T extends { id: number }>({
                     </div>
                   </th>
                 ))}
-                {(onEdit || onDelete) && (
+                {hasActions && (
                   <th className="px-3 text-left text-[#71717A] font-medium text-sm w-[100px] sticky right-0 bg-[#F3F3F3]">
                     Actions
                   </th>
@@ -127,7 +131,7 @@ export function DataTable<T extends { id: number }>({
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={columns.length + (onEdit || onDelete ? 1 : 0)} className="h-16 border-b border-[#EDEDED] text-center">
+                  <td colSpan={columns.length + (hasActions ? 1 : 0)} className="h-16 border-b border-[#EDEDED] text-center">
                     <div className="flex items-center justify-center">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
                       <span className="ml-2 text-[#71717A]">Loading...</span>
@@ -136,7 +140,7 @@ export function DataTable<T extends { id: number }>({
                 </tr>
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length + (onEdit || onDelete ? 1 : 0)} className="h-16 border-b border-[#EDEDED] text-center text-[#71717A]">
+                  <td colSpan={columns.length + (hasActions ? 1 : 0)} className="h-16 border-b border-[#EDEDED] text-center text-[#71717A]">
                     No entries yet
                   </td>
                 </tr>
@@ -144,7 +148,8 @@ export function DataTable<T extends { id: number }>({
                 data.map((item) => {
                   const showEdit = !!onEdit && (!canEdit || canEdit(item));
                   const showDelete = !!onDelete && (!canDelete || canDelete(item));
-                  const showActions = showEdit || showDelete;
+                  const extraActions = rowActions ? rowActions(item) : [];
+                  const showActions = showEdit || showDelete || extraActions.length > 0;
                   return (
                     <tr key={item.id} className="h-16 border-b border-[#EDEDED]">
                       {columns.map((col) => (
@@ -155,7 +160,7 @@ export function DataTable<T extends { id: number }>({
                           {col.render ? col.render(item) : getValue(item, col.key as string)}
                         </td>
                       ))}
-                      {(onEdit || onDelete) && (
+                      {hasActions && (
                         <td className="px-3 py-4 w-[100px] sticky right-0 bg-white">
                           {showActions && (
                             <DropdownMenu>
@@ -166,7 +171,7 @@ export function DataTable<T extends { id: number }>({
                               </DropdownMenuTrigger>
                               <DropdownMenuContent
                                 align="end"
-                                className="w-[149px] bg-white border border-[#D4D4D4] rounded-lg p-0.5 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] flex flex-col gap-2"
+                                className="min-w-[149px] bg-white border border-[#D4D4D4] rounded-lg p-0.5 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] flex flex-col gap-2"
                               >
                                 {showEdit && (
                                   <DropdownMenuItem
@@ -184,6 +189,15 @@ export function DataTable<T extends { id: number }>({
                                     Delete
                                   </DropdownMenuItem>
                                 )}
+                                {extraActions.map((a, i) => (
+                                  <DropdownMenuItem
+                                    key={i}
+                                    onClick={a.onClick}
+                                    className={`cursor-pointer px-3 py-2 text-sm rounded-md whitespace-nowrap ${a.danger ? 'text-red-600 hover:bg-red-50' : 'text-[#09090B] hover:bg-[#F3F3F3]'}`}
+                                  >
+                                    {a.label}
+                                  </DropdownMenuItem>
+                                ))}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           )}

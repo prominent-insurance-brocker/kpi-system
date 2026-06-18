@@ -1,7 +1,9 @@
 """
 SQL validation to ensure only SELECT queries are executed.
-Two-layer validation: sqlparse structural check + keyword blocklist.
+Validation layers: sqlparse structural check + keyword blocklist + table denylist.
 """
+
+import re
 
 import sqlparse
 
@@ -10,6 +12,13 @@ import sqlparse
 BLOCKED_KEYWORDS = {
     'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'CREATE',
     'TRUNCATE', 'REPLACE', 'GRANT', 'REVOKE', 'EXEC', 'EXECUTE',
+}
+
+# Tables that must never be reachable via the AI chat. The audit log holds
+# cross-user edit history and is admin-only, but the chat endpoint is open to
+# every authenticated user, so it is denied here regardless of the SELECT.
+BLOCKED_TABLES = {
+    'audit_auditlog',
 }
 
 
@@ -52,3 +61,10 @@ def validate_sql_is_select_only(sql: str) -> None:
                 raise ValueError(
                     f"Blocked SQL operation: {first_meaningful}. Only SELECT queries are allowed."
                 )
+
+    # Layer 4: Table denylist. Reject any query that references a sensitive
+    # table (e.g. the admin-only audit log) anywhere in its text.
+    lowered = cleaned.lower()
+    for table in BLOCKED_TABLES:
+        if re.search(rf'\b{re.escape(table)}\b', lowered):
+            raise ValueError(f"Access to table '{table}' is not allowed.")

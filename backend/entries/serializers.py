@@ -643,6 +643,26 @@ class SalesKPIEntrySerializer(BaseEntrySerializer):
     def get_is_terminal(self, obj):
         return obj.is_terminal
 
+    def update(self, instance, validated_data):
+        # The deal's `date` is the entry day — set once on create (like
+        # added_at) and never editable afterward, so every date-based filter /
+        # count stays in lockstep with the trackers (which bucket by added_at).
+        validated_data.pop('date', None)
+        return super().update(instance, validated_data)
+
+
+class SalesKPIConvertedPremiumSerializer(serializers.Serializer):
+    """Validates a post-close converted-premium edit on a Won Sales KPI deal
+    (the deal is otherwise locked once it reaches a terminal status)."""
+    converted_premium = serializers.DecimalField(
+        max_digits=15, decimal_places=2, min_value=0,
+    )
+
+    def validate_converted_premium(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Must be greater than 0.')
+        return value
+
 
 class SalesKPIStatusUpdateSerializer(serializers.Serializer):
     """Validates the TED-533 workflow on a Sales KPI status change.

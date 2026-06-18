@@ -71,6 +71,7 @@ from .serializers import (
     InsuranceCompanySerializer,
     ClassOfInsuranceSerializer,
     SalesKPIEntrySerializer,
+    SalesKPIConvertedPremiumSerializer,
     SalesKPIStatusUpdateSerializer,
     SalesMonthlyTargetSerializer,
     MarineNewEntrySerializer,
@@ -1164,13 +1165,40 @@ class SalesKPIEntryViewSet(BaseEntryViewSet):
             SalesKPIEntrySerializer(entry, context={'request': request}).data
         )
 
+    @action(detail=True, methods=['patch'], url_path='update-converted-premium')
+    def update_converted_premium(self, request, pk=None):
+        """Edit converted_premium on a Won deal after it's terminal.
+
+        Won deals are otherwise locked (update / destroy / update-status all
+        reject terminal rows), but the converted premium often needs correcting
+        post-close. Creator-only, mirroring the frontend canModifyEntry gate; the
+        edit is captured by the audit log via the normal model save.
+        """
+        entry = self.get_object()
+        if entry.added_by_id != request.user.id:
+            raise PermissionDenied('You can only update enquiries you created.')
+        if entry.status != SalesKPIEntry.STATUS_WON:
+            return Response(
+                {'error': 'Converted premium can only be updated on a won enquiry.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = SalesKPIConvertedPremiumSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        entry.converted_premium = serializer.validated_data['converted_premium']
+        entry.save(update_fields=['converted_premium', 'updated_at'])
+        return Response(
+            SalesKPIEntrySerializer(entry, context={'request': request}).data
+        )
+
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        """Dashboard counts + premium aggregates, RBAC + date filtered."""
+        """Dashboard counts + premium aggregates, RBAC + added_at filtered."""
         queryset = self.get_queryset()
+        # Filter by the entry day (added_at), matching the trackers + the
+        # Enquiries list — not the deal's `date` field.
         date_params = {
             k: v for k, v in request.query_params.items()
-            if k in ('date_from', 'date_to')
+            if k in ('created_from', 'created_to')
         }
         filterset = self.filterset_class(date_params, queryset=queryset)
         queryset = filterset.qs
@@ -1663,9 +1691,20 @@ class EntryRemarkViewSet(viewsets.ModelViewSet):
             raise drf_serializers.ValidationError(
                 {'content_type': 'Remarks are not supported on this model.'}
             )
-        if not ct.model_class().objects.filter(pk=serializer.validated_data['object_id']).exists():
+        entry = ct.model_class().objects.filter(
+            pk=serializer.validated_data['object_id']
+        ).first()
+        if entry is None:
             raise drf_serializers.ValidationError(
                 {'object_id': 'Referenced entry does not exist.'}
+            )
+        # Admins (is_staff) and HODs are view-only on entries they did not
+        # create: they cannot add (or edit/delete) comments on someone else's
+        # entry. Each user can still comment on their own entries.
+        user = self.request.user
+        if (user.is_staff or user_is_hod(user)) and entry.added_by_id != user.id:
+            raise PermissionDenied(
+                'Admins and HODs cannot comment on entries they did not create.'
             )
         serializer.save(author=self.request.user)
 

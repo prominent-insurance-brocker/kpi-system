@@ -63,9 +63,10 @@ import {
   MONTH_NAMES,
   type ModuleUser,
 } from '@/app/components/KpiModulePage';
+import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
-import { formatDate } from '@/app/lib/date';
+import { formatDate, businessToday } from '@/app/lib/date';
 import { formatPremium, formatNumber } from '@/app/lib/number';
 import { formatTatFromMinutes } from '@/app/lib/tat';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
@@ -223,11 +224,9 @@ export function MotorEnquiryPage({
   const currentUserId = user?.id;
   const userFullName = user?.full_name ?? '';
 
-  const today = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
+  // Business-zone "today" (Asia/Dubai) so the default month, "go to today", and
+  // the auto-filled entry date follow the backend day boundary, not the browser.
+  const today = useMemo(() => businessToday(), []);
 
   // ── Top-level state ────────────────────────────────────────────────────────
   const [activeView, setActiveView] = useState<'dashboard' | 'tracker' | 'enquiries'>('enquiries');
@@ -273,7 +272,7 @@ export function MotorEnquiryPage({
   const [personalCalMonth, setPersonalCalMonth] = useState(today.getMonth());
   const [teamCalYear, setTeamCalYear] = useState(today.getFullYear());
   const [teamCalMonth, setTeamCalMonth] = useState(today.getMonth());
-  const [trackerUserFilter, setTrackerUserFilter] = useState<string>('all');
+  const [trackerUserFilter, setTrackerUserFilter] = useState<string[]>([]);
   const [monthEntries, setMonthEntries] = useState<MotorEnquiryEntry[]>([]);
 
   // Module + sales-KPI user pools
@@ -398,11 +397,15 @@ export function MotorEnquiryPage({
     try {
       const responses = await Promise.all(
         unique.map(([year, month]) => {
-          const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-          const lastDay = toLocalDateString(new Date(year, month + 1, 0));
+          // TED-551: trackers bucket by `added_at` (entry day), so fetch by
+          // creation date, not the entry's `date` field — otherwise deals
+          // entered this month but dated to another month drop out. Widened a
+          // day each side so boundary rows land on the right local day.
+          const createdFrom = toLocalDateString(new Date(year, month, 0));
+          const createdTo = toLocalDateString(new Date(year, month + 1, 1));
           const qs = new URLSearchParams({
-            date_from: firstDay,
-            date_to: lastDay,
+            created_from: createdFrom,
+            created_to: createdTo,
             page_size: '1000',
           });
           return fetchApi<{ results: MotorEnquiryEntry[] }>(
@@ -879,6 +882,9 @@ export function MotorEnquiryPage({
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{title}</h1>
         <div className="flex items-center gap-2">
+          {(isAdmin || isHodUser) && (
+            <ExportTrackerButton moduleKey={moduleKey} moduleUsers={moduleUsers} />
+          )}
           {isRenewal && (
             <Button variant="outline" onClick={() => setIsPanelOpen((o) => !o)}>
               <Pencil className="h-4 w-4 mr-2" />
@@ -1220,6 +1226,7 @@ export function MotorEnquiryPage({
             <RemarksPanel
               contentTypeId={remarksContentTypeId}
               objectId={panelEntry?.id ?? null}
+              canAddComment={panelEntry ? canModifyEntry(user, panelEntry.added_by) : true}
               entryLabel={panelEntry ? `${title} — ${panelEntry.pib_id}` : ''}
               open={!!panelEntry}
               onOpenChange={(open) => {

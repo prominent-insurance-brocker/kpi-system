@@ -34,6 +34,12 @@ export interface RemarksPanelProps {
   entryLabel: string;     // shown in header, e.g. "Motor Claim — PIB-42"
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Whether the current viewer may add a comment. Defaults to true. Set false
+   * for admin/HOD viewing an entry they did not create — they're view-only on
+   * others' entries (the backend enforces the same rule).
+   */
+  canAddComment?: boolean;
 }
 
 export function RemarksPanel({
@@ -42,6 +48,7 @@ export function RemarksPanel({
   entryLabel,
   open,
   onOpenChange,
+  canAddComment = true,
 }: RemarksPanelProps) {
   const [remarks, setRemarks] = useState<EntryRemark[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -136,25 +143,31 @@ export function RemarksPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-        {/* Composer */}
-        <div className="rounded-md border bg-zinc-50 p-3 space-y-3">
-          <Textarea
-            placeholder="Type here..."
-            value={newText}
-            onChange={(e) => setNewText(e.target.value)}
-            rows={4}
-            className="bg-white"
-          />
-          <div>
-            <Button
-              onClick={handleAdd}
-              disabled={isSubmitting || !newText.trim()}
-              variant="outline"
-            >
-              {isSubmitting ? 'Adding…' : 'Add Comment'}
-            </Button>
+        {/* Composer — hidden when the viewer is view-only on this entry. */}
+        {canAddComment ? (
+          <div className="rounded-md border bg-zinc-50 p-3 space-y-3">
+            <Textarea
+              placeholder="Type here..."
+              value={newText}
+              onChange={(e) => setNewText(e.target.value)}
+              rows={4}
+              className="bg-white"
+            />
+            <div>
+              <Button
+                onClick={handleAdd}
+                disabled={isSubmitting || !newText.trim()}
+                variant="outline"
+              >
+                {isSubmitting ? 'Adding…' : 'Add Comment'}
+              </Button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <p className="text-xs text-zinc-500">
+            View only — you can&apos;t add comments on another user&apos;s entry.
+          </p>
+        )}
 
         {/* All comments */}
         <div>

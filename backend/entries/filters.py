@@ -5,10 +5,15 @@ class EntryFilter(django_filters.FilterSet):
     """Base filter for all entry types."""
     date_from = django_filters.DateFilter(field_name='date', lookup_expr='gte')
     date_to = django_filters.DateFilter(field_name='date', lookup_expr='lte')
+    # TED-551: filter by creation day (added_at) rather than the operational
+    # `date` field. The daily trackers bucket entries by added_at, so they fetch
+    # with these to avoid dropping deals whose `date` is in another month.
+    created_from = django_filters.DateFilter(field_name='added_at', lookup_expr='date__gte')
+    created_to = django_filters.DateFilter(field_name='added_at', lookup_expr='date__lte')
     user_id = django_filters.NumberFilter(field_name='added_by_id')
 
     class Meta:
-        fields = ['date_from', 'date_to', 'user_id']
+        fields = ['date_from', 'date_to', 'created_from', 'created_to', 'user_id']
 
 
 class ClaimEntryFilter(EntryFilter):

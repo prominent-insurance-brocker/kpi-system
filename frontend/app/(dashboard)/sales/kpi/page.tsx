@@ -60,7 +60,7 @@ import { toast } from 'sonner';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
-import { formatDateTime } from '@/app/lib/date';
+import { formatDateTime, businessToday } from '@/app/lib/date';
 import { formatPremium } from '@/app/lib/number';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
@@ -154,11 +154,9 @@ export default function SalesKPIPage() {
   const isHodUser = isHOD();
   const currentUserId = user?.id;
 
-  const today = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
+  // Business-zone "today" (Asia/Dubai) so the default month, "go to today", and
+  // the auto-filled entry date follow the backend day boundary, not the browser.
+  const today = useMemo(() => businessToday(), []);
 
   // Tabs
   const [activeView, setActiveView] = useState<'dashboard' | 'tracker' | 'enquiries'>(
@@ -1746,7 +1744,7 @@ function TargetModal({
   // TED-506: the "Action required" yellow banner only makes sense for the
   // CURRENT month — that's the gate that blocks the user from adding deals.
   // Past or future months are just admin housekeeping; no urgency, no banner.
-  const today = new Date();
+  const today = businessToday();
   const isCurrentMonth =
     year === today.getFullYear() && month === today.getMonth() + 1;
 

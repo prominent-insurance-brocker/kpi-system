@@ -66,7 +66,7 @@ import {
 import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
-import { formatDate } from '@/app/lib/date';
+import { formatDate, businessToday } from '@/app/lib/date';
 import { formatPremium, formatNumber } from '@/app/lib/number';
 import { formatTatFromMinutes } from '@/app/lib/tat';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
@@ -224,11 +224,9 @@ export function MotorEnquiryPage({
   const currentUserId = user?.id;
   const userFullName = user?.full_name ?? '';
 
-  const today = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
+  // Business-zone "today" (Asia/Dubai) so the default month, "go to today", and
+  // the auto-filled entry date follow the backend day boundary, not the browser.
+  const today = useMemo(() => businessToday(), []);
 
   // ── Top-level state ────────────────────────────────────────────────────────
   const [activeView, setActiveView] = useState<'dashboard' | 'tracker' | 'enquiries'>('enquiries');

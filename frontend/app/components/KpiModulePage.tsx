@@ -35,7 +35,7 @@ import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users, Info } from 'lu
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { formatDate } from '@/app/lib/date';
+import { formatDate, businessDateString } from '@/app/lib/date';
 import { useAddShortcut } from '@/app/lib/useAddShortcut';
 import { useSubmitShortcut } from '@/app/lib/useSubmitShortcut';
 import { toast } from 'sonner';
@@ -269,7 +269,7 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
             // `date` field, so the tracker reflects actual submission activity.
             const entryCount = monthEntries.reduce(
               (sum, e) =>
-                toLocalDateString(new Date(e.added_at)) === ds &&
+                businessDateString(new Date(e.added_at)) === ds &&
                 ownerId(e) === currentUserId
                   ? sum + 1
                   : sum,
@@ -379,7 +379,7 @@ export function TrackerView<T extends BaseModuleEntry>({
   // by Created Date (added_at) — see PersonalDailyTracker comment above.
   const entryCountMap = new Map<string, Map<number, number>>();
   for (const e of monthEntries) {
-    const createdDs = toLocalDateString(new Date(e.added_at));
+    const createdDs = businessDateString(new Date(e.added_at));
     if (!entryCountMap.has(createdDs)) entryCountMap.set(createdDs, new Map());
     const userMap = entryCountMap.get(createdDs)!;
     userMap.set(e.added_by, (userMap.get(e.added_by) ?? 0) + 1);

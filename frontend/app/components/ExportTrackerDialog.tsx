@@ -15,6 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { exportTrackerXlsx, downloadBlob } from '@/app/lib/api';
+import { businessToday } from '@/app/lib/date';
 import { toast } from 'sonner';
 
 export interface ExportUser {
@@ -50,9 +51,10 @@ function ymd(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-// [start, end] (YYYY-MM-DD, local) for the preset ranges, computed at call time.
+// [start, end] (YYYY-MM-DD) for the preset ranges, anchored to the business day
+// (Asia/Dubai) so "current/previous month" matches the backend, not the browser.
 function presetRange(type: 'recent' | 'previous'): { start: string; end: string } {
-  const now = new Date();
+  const now = businessToday();
   const y = now.getFullYear();
   const m = now.getMonth();
   if (type === 'recent') {

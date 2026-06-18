@@ -184,6 +184,7 @@ export function UserAvatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 
 export function PersonalDailyTracker<T extends BaseModuleEntry>({
   calYear,
   calMonth,
+  today,
   monthEntries,
   currentUserId,
   userFullName,
@@ -193,6 +194,8 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
 }: {
   calYear: number;
   calMonth: number;
+  // Business-zone "today" (Asia/Dubai), supplied by the parent via businessToday().
+  today: Date;
   monthEntries: T[];
   currentUserId: number | undefined;
   userFullName: string;
@@ -200,9 +203,6 @@ export function PersonalDailyTracker<T extends BaseModuleEntry>({
   onNextMonth: () => void;
   onGoToday: () => void;
 }) {
-  // "Today" pinned to the business zone, not the viewer's browser clock, so the
-  // highlight / past / future split matches the backend day boundary.
-  const today = businessToday();
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
 
   return (
@@ -1074,8 +1074,10 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   const isHodUser = isHOD();
   const currentUserId = user?.id;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Business-zone "today" (Asia/Dubai) — drives the default calendar month,
+  // "go to today", and the auto-filled entry date so the whole page agrees with
+  // the backend day boundary regardless of the viewer's browser timezone.
+  const today = businessToday();
 
   const [activeView, setActiveView] = useState<'tracker' | 'weekly' | 'data'>('weekly');
 

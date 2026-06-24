@@ -119,7 +119,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
     options: [
       { value: 'new', label: 'New Enquiry' },
       { value: 'in_progress', label: 'In Progress' },
-      { value: 'converted', label: 'Converted' },
+      { value: 'converted', label: 'Won' },
       { value: 'lost', label: 'Lost' },
     ],
     successValue: 'converted',
@@ -131,7 +131,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
     options: [
       { value: 'new', label: 'New Enquiry' },
       { value: 'in_progress', label: 'In Progress' },
-      { value: 'converted', label: 'Converted' },
+      { value: 'converted', label: 'Won' },
       { value: 'lost', label: 'Lost' },
     ],
     successValue: 'converted',
@@ -154,7 +154,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
     options: [
       { value: 'new', label: 'New Enquiry' },
       { value: 'in_progress', label: 'In Progress' },
-      { value: 'converted', label: 'Converted' },
+      { value: 'converted', label: 'Won' },
       { value: 'lost', label: 'Lost' },
     ],
     successValue: 'converted',
@@ -999,7 +999,7 @@ export function MotorEnquiryPage({
             )}
             <StatCard label="Enquiries Revised" value={stats.revised} accent="text-[#A855F7]" />
             <StatCard
-              label={config.successLabel}
+              label={statusLabelFor(config.successValue)}
               value={stats[config.successValue]}
               accent="text-green-700"
             />

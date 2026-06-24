@@ -1555,7 +1555,9 @@ function EnquiryForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!agentId) return;
+    // Client Name, Source / Agent, Potential Premium, Class of Insurance and
+    // Insurance Company are all required for General New.
+    if (!agentId || !(Number(potentialPremium) > 0) || !classOfInsuranceId || !insurerId) return;
     setIsSubmitting(true);
     onSave({
       client_name: clientName,
@@ -1604,7 +1606,7 @@ function EnquiryForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label>Potential Premium</Label>
+          <Label>Potential Premium *</Label>
           <Input
             type="number"
             min={0}
@@ -1615,7 +1617,7 @@ function EnquiryForm({
           />
         </div>
         <div className="space-y-2">
-          <Label>Class of Insurance</Label>
+          <Label>Class of Insurance *</Label>
           <SearchableSelect
             value={classOfInsuranceId ? String(classOfInsuranceId) : null}
             onValueChange={(v) => setClassOfInsuranceId(v ? Number(v) : null)}
@@ -1631,7 +1633,7 @@ function EnquiryForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Insurance Company</Label>
+        <Label>Insurance Company *</Label>
         <SearchableSelect
           value={insurerId ? String(insurerId) : null}
           onValueChange={(v) => setInsurerId(v ? Number(v) : null)}
@@ -1676,7 +1678,17 @@ function EnquiryForm({
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting || !clientName || !agentId}>
+        <Button
+          type="submit"
+          disabled={
+            isSubmitting ||
+            !clientName ||
+            !agentId ||
+            !(Number(potentialPremium) > 0) ||
+            !classOfInsuranceId ||
+            !insurerId
+          }
+        >
           {isSubmitting ? 'Saving…' : entry ? 'Update' : 'Add Enquiry'}
         </Button>
       </DialogFooter>

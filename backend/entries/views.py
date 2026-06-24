@@ -442,6 +442,13 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
+        # A Lost enquiry has no converted premium — record 0 so the column
+        # reads 0 instead of blank (the modal no longer asks for it on Lost).
+        if new_status == GeneralNewEntry.STATUS_LOST:
+            entry.converted_premium = 0
+            if 'converted_premium' not in update_fields:
+                update_fields.append('converted_premium')
+
         if new_status in GeneralNewEntry.TERMINAL_STATUSES:
             entry.status_changed_at = timezone.now()
             update_fields.append('status_changed_at')
@@ -770,6 +777,13 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
         if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
+
+        # A Lost enquiry has no converted premium — record 0 so the column
+        # reads 0 instead of blank (the modal no longer asks for it on Lost).
+        if new_status == MotorNewEntry.STATUS_LOST:
+            entry.converted_premium = 0
+            if 'converted_premium' not in update_fields:
+                update_fields.append('converted_premium')
 
         if new_status in MotorNewEntry.TERMINAL_STATUSES:
             entry.status_changed_at = timezone.now()
@@ -1370,6 +1384,13 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
         if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
+
+        # A Lost enquiry has no converted premium — record 0 so the column
+        # reads 0 instead of blank (the modal no longer asks for it on Lost).
+        if new_status == MotorFleetNewEntry.STATUS_LOST:
+            entry.converted_premium = 0
+            if 'converted_premium' not in update_fields:
+                update_fields.append('converted_premium')
 
         if new_status in MotorFleetNewEntry.TERMINAL_STATUSES:
             entry.status_changed_at = timezone.now()

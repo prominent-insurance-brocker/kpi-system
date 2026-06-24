@@ -453,20 +453,6 @@ export default function MotorClaimPage() {
       ),
     },
     {
-      key: 'added_by_name',
-      header: 'Added by',
-      render: (item: MotorClaimEntry) => <AddedByCell entry={item} />,
-    },
-    { key: 'vehicle_number', header: 'Vehicle Number' },
-    { key: 'claim_number', header: 'Claim Number' },
-    {
-      key: 'source_name',
-      header: 'Source',
-      render: (item: MotorClaimEntry) => item.source_name || '—',
-    },
-    { key: 'type_of_accident_name', header: 'Type of Accident' },
-    { key: 'insurance_company_name', header: 'Insurance Company' },
-    {
       key: 'next_call_date',
       header: 'Next call date',
       render: (item: MotorClaimEntry) => (
@@ -476,13 +462,27 @@ export default function MotorClaimPage() {
         />
       ),
     },
-    { key: 'garage_name', header: 'Garage Name' },
-    { key: 'garage_number', header: 'Garage Number' },
+    {
+      key: 'added_by_name',
+      header: 'Added by',
+      render: (item: MotorClaimEntry) => <AddedByCell entry={item} />,
+    },
     {
       key: 'tat_display',
       header: 'TAT',
       render: (item: MotorClaimEntry) => item.tat_display || '—',
     },
+    {
+      key: 'source_name',
+      header: 'Source',
+      render: (item: MotorClaimEntry) => item.source_name || '—',
+    },
+    { key: 'insurance_company_name', header: 'Insurance Company' },
+    { key: 'vehicle_number', header: 'Vehicle Number' },
+    { key: 'claim_number', header: 'Claim Number' },
+    { key: 'type_of_accident_name', header: 'Type of Accident' },
+    { key: 'garage_name', header: 'Garage Name' },
+    { key: 'garage_number', header: 'Garage Number' },
     {
       key: 'added_at',
       header: 'Added on',

@@ -701,22 +701,24 @@ export function GeneralNewEnquiryPage() {
       ),
     },
     {
-      key: 'class_of_insurance',
-      header: 'Class of Insurance',
-      render: (item: MotorEnquiryEntry) =>
-        (item.class_of_insurance_display as string | null | undefined) || '—',
+      key: 'potential_premium',
+      header: 'Potential Premium',
+      render: (item: MotorEnquiryEntry) => {
+        const raw = item.potential_premium as string | null | undefined;
+        if (raw == null || raw === '') return '—';
+        const n = Number(raw);
+        return Number.isFinite(n) ? formatPremium(n) : raw;
+      },
     },
     {
-      key: 'added_by_name',
-      header: 'Added by',
-      render: (item: MotorEnquiryEntry) => <AddedByCell entry={item} />,
-    },
-    { key: 'agent_name', header: 'Agent Name' },
-    {
-      key: 'insurance_company',
-      header: 'Insurance Company',
-      render: (item: MotorEnquiryEntry) =>
-        (item.insurance_company_name as string | undefined) || '—',
+      key: 'converted_premium',
+      header: 'Converted Premium',
+      render: (item: MotorEnquiryEntry) => {
+        const raw = item.converted_premium as string | null | undefined;
+        if (raw == null || raw === '') return '—';
+        const n = Number(raw);
+        return Number.isFinite(n) ? formatPremium(n) : raw;
+      },
     },
     {
       key: 'revisions',
@@ -754,6 +756,11 @@ export function GeneralNewEnquiryPage() {
       },
     },
     {
+      key: 'quotes_compared',
+      header: 'No. of Quotes Compared',
+      render: (item: MotorEnquiryEntry) => item.quotes_compared,
+    },
+    {
       key: 'tat_display',
       header: 'TAT',
       render: (item: MotorEnquiryEntry) => item.tat_display || '—',
@@ -764,29 +771,22 @@ export function GeneralNewEnquiryPage() {
       render: (item: MotorEnquiryEntry) => formatAccuracy(item.accuracy_pct),
     },
     {
-      key: 'quotes_compared',
-      header: 'No. of Quotes Compared',
-      render: (item: MotorEnquiryEntry) => item.quotes_compared,
+      key: 'added_by_name',
+      header: 'Added by',
+      render: (item: MotorEnquiryEntry) => <AddedByCell entry={item} />,
+    },
+    { key: 'agent_name', header: 'Agent Name' },
+    {
+      key: 'class_of_insurance',
+      header: 'Class of Insurance',
+      render: (item: MotorEnquiryEntry) =>
+        (item.class_of_insurance_display as string | null | undefined) || '—',
     },
     {
-      key: 'potential_premium',
-      header: 'Potential Premium',
-      render: (item: MotorEnquiryEntry) => {
-        const raw = item.potential_premium as string | null | undefined;
-        if (raw == null || raw === '') return '—';
-        const n = Number(raw);
-        return Number.isFinite(n) ? formatPremium(n) : raw;
-      },
-    },
-    {
-      key: 'converted_premium',
-      header: 'Converted Premium',
-      render: (item: MotorEnquiryEntry) => {
-        const raw = item.converted_premium as string | null | undefined;
-        if (raw == null || raw === '') return '—';
-        const n = Number(raw);
-        return Number.isFinite(n) ? formatPremium(n) : raw;
-      },
+      key: 'insurance_company',
+      header: 'Insurance Company',
+      render: (item: MotorEnquiryEntry) =>
+        (item.insurance_company_name as string | undefined) || '—',
     },
     {
       key: 'added_at',

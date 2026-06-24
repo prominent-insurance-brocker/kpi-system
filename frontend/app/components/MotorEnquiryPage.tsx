@@ -689,7 +689,10 @@ export function MotorEnquiryPage({
   };
 
   // ── Columns ──────────────────────────────────────────────────────────────
-  const columns = [
+  // Defined in their canonical order; the renewal modules that share this
+  // component render this order as-is. Motor New / Motor Fleet New reorder it
+  // below via NEW_MODULE_COLUMN_ORDER.
+  const baseColumns = [
     {
       key: 'pib_id',
       header: 'ID',
@@ -844,6 +847,24 @@ export function MotorEnquiryPage({
       render: (item: MotorEnquiryEntry) => formatDate(item.added_at.split('T')[0]),
     },
   ];
+
+  // Motor New & Motor Fleet New use a specific column order; the renewal
+  // modules that share this component keep their original order untouched.
+  const NEW_MODULE_COLUMN_ORDER = [
+    'pib_id', 'client_name', 'status', 'notes',
+    'potential_premium', 'converted_premium', 'revisions', 'quotes_compared',
+    'tat_display', 'accuracy_pct', 'added_by_name', 'agent_name',
+  ];
+  const columns = isRenewal
+    ? baseColumns
+    : [
+        ...NEW_MODULE_COLUMN_ORDER
+          .map((k) => baseColumns.find((c) => c.key === k))
+          .filter((c): c is (typeof baseColumns)[number] => Boolean(c)),
+        ...baseColumns.filter(
+          (c) => !NEW_MODULE_COLUMN_ORDER.includes(c.key as string)
+        ),
+      ];
 
   const hasActiveFilters =
     !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName ||

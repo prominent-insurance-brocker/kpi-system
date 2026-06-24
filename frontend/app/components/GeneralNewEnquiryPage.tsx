@@ -22,6 +22,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -57,6 +58,7 @@ import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
+import { EnquiryConvertedPremiumModal } from '@/app/components/EnquiryConvertedPremiumModal';
 import { canModifyEntry } from '@/app/lib/permissions';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
@@ -117,7 +119,8 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
   'general-new': {
     options: [
       { value: 'new', label: 'New Enquiry' },
-      { value: 'converted', label: 'Converted' },
+      { value: 'in_progress', label: 'In Progress' },
+      { value: 'converted', label: 'Won' },
       { value: 'lost', label: 'Lost' },
     ],
     successValue: 'converted',
@@ -128,7 +131,8 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
   'motor-new': {
     options: [
       { value: 'new', label: 'New Enquiry' },
-      { value: 'converted', label: 'Converted' },
+      { value: 'in_progress', label: 'In Progress' },
+      { value: 'converted', label: 'Won' },
       { value: 'lost', label: 'Lost' },
     ],
     successValue: 'converted',
@@ -150,7 +154,8 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
   'motor-fleet-new': {
     options: [
       { value: 'new', label: 'New Enquiry' },
-      { value: 'converted', label: 'Converted' },
+      { value: 'in_progress', label: 'In Progress' },
+      { value: 'converted', label: 'Won' },
       { value: 'lost', label: 'Lost' },
     ],
     successValue: 'converted',
@@ -173,6 +178,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
 
 const STATUS_COLORS: Record<MotorEnquiryEntry['status'], string> = {
   new: 'bg-blue-100 text-blue-800',
+  in_progress: 'bg-amber-100 text-amber-800',
   converted: 'bg-green-100 text-green-800',
   retained: 'bg-green-100 text-green-800',
   lost: 'bg-red-100 text-red-800',
@@ -251,6 +257,7 @@ export function GeneralNewEnquiryPage() {
   // they'll update once /stats/ resolves.
   const [stats, setStats] = useState<MotorEnquiryStats>({
     total: 0,
+    in_progress: 0,
     revised: 0,
     converted: 0,
     retained: 0,
@@ -288,6 +295,9 @@ export function GeneralNewEnquiryPage() {
 
   // Remarks side panel
   const [panelEntry, setPanelEntry] = useState<MotorEnquiryEntry | null>(null);
+  // Post-conversion converted-premium edit (mirrors Sales KPI "Deals").
+  const [convertedPremiumEntry, setConvertedPremiumEntry] =
+    useState<MotorEnquiryEntry | null>(null);
   const [ctMap, setCtMap] = useState<Record<string, number>>({});
   useEffect(() => {
     getRemarksContentTypes().then((res) => {
@@ -615,7 +625,7 @@ export function GeneralNewEnquiryPage() {
 
   const applyStatusChange = async (
     entry: MotorEnquiryEntry,
-    newStatus: SuccessStatus | 'lost',
+    newStatus: MotorEnquiryEntry['status'],
     revisions?: number,
     quotesCompared?: number,
     coverage?: string,
@@ -662,6 +672,9 @@ export function GeneralNewEnquiryPage() {
                   entry: item,
                   newStatus: v as SuccessStatus | 'lost',
                 });
+              } else if (v === 'new' || v === 'in_progress') {
+                // New ↔ In Progress is a free, no-confirmation transition.
+                applyStatusChange(item, v);
               }
             }}
           >
@@ -701,29 +714,32 @@ export function GeneralNewEnquiryPage() {
       ),
     },
     {
-      key: 'class_of_insurance',
-      header: 'Class of Insurance',
-      render: (item: MotorEnquiryEntry) =>
-        (item.class_of_insurance_display as string | null | undefined) || '—',
+      key: 'potential_premium',
+      header: 'Potential Premium',
+      render: (item: MotorEnquiryEntry) => {
+        const raw = item.potential_premium as string | null | undefined;
+        if (raw == null || raw === '') return '—';
+        const n = Number(raw);
+        return Number.isFinite(n) ? formatPremium(n) : raw;
+      },
     },
     {
-      key: 'added_by_name',
-      header: 'Added by',
-      render: (item: MotorEnquiryEntry) => <AddedByCell entry={item} />,
-    },
-    { key: 'agent_name', header: 'Agent Name' },
-    {
-      key: 'insurance_company',
-      header: 'Insurance Company',
-      render: (item: MotorEnquiryEntry) =>
-        (item.insurance_company_name as string | undefined) || '—',
+      key: 'converted_premium',
+      header: 'Converted Premium',
+      render: (item: MotorEnquiryEntry) => {
+        const raw = item.converted_premium as string | null | undefined;
+        if (raw == null || raw === '') return '—';
+        const n = Number(raw);
+        return Number.isFinite(n) ? formatPremium(n) : raw;
+      },
     },
     {
       key: 'revisions',
       header: 'Revisions',
       render: (item: MotorEnquiryEntry) => {
-        // Read-only once the enquiry has been closed (converted/lost).
-        if (item.status !== 'new') {
+        // Read-only once closed (converted/lost); editable while the enquiry
+        // is still active (New or In Progress).
+        if (item.status !== 'new' && item.status !== 'in_progress') {
           return <span className="text-sm text-[#374151]">{item.revisions}</span>;
         }
         // While status=new, anyone with table access can bump the counter inline.
@@ -754,6 +770,11 @@ export function GeneralNewEnquiryPage() {
       },
     },
     {
+      key: 'quotes_compared',
+      header: 'No. of Quotes Compared',
+      render: (item: MotorEnquiryEntry) => item.quotes_compared,
+    },
+    {
       key: 'tat_display',
       header: 'TAT',
       render: (item: MotorEnquiryEntry) => item.tat_display || '—',
@@ -764,29 +785,22 @@ export function GeneralNewEnquiryPage() {
       render: (item: MotorEnquiryEntry) => formatAccuracy(item.accuracy_pct),
     },
     {
-      key: 'quotes_compared',
-      header: 'No. of Quotes Compared',
-      render: (item: MotorEnquiryEntry) => item.quotes_compared,
+      key: 'added_by_name',
+      header: 'Added by',
+      render: (item: MotorEnquiryEntry) => <AddedByCell entry={item} />,
+    },
+    { key: 'agent_name', header: 'Agent Name' },
+    {
+      key: 'class_of_insurance',
+      header: 'Class of Insurance',
+      render: (item: MotorEnquiryEntry) =>
+        (item.class_of_insurance_display as string | null | undefined) || '—',
     },
     {
-      key: 'potential_premium',
-      header: 'Potential Premium',
-      render: (item: MotorEnquiryEntry) => {
-        const raw = item.potential_premium as string | null | undefined;
-        if (raw == null || raw === '') return '—';
-        const n = Number(raw);
-        return Number.isFinite(n) ? formatPremium(n) : raw;
-      },
-    },
-    {
-      key: 'converted_premium',
-      header: 'Converted Premium',
-      render: (item: MotorEnquiryEntry) => {
-        const raw = item.converted_premium as string | null | undefined;
-        if (raw == null || raw === '') return '—';
-        const n = Number(raw);
-        return Number.isFinite(n) ? formatPremium(n) : raw;
-      },
+      key: 'insurance_company',
+      header: 'Insurance Company',
+      render: (item: MotorEnquiryEntry) =>
+        (item.insurance_company_name as string | undefined) || '—',
     },
     {
       key: 'added_at',
@@ -902,9 +916,10 @@ export function GeneralNewEnquiryPage() {
               />
             )}
             <StatCard label={config.totalLabel} value={stats.total} accent="text-[#09090B]" />
+            <StatCard label="In Progress" value={stats.in_progress} accent="text-amber-600" />
             <StatCard label="Enquiries Revised" value={stats.revised} accent="text-[#A855F7]" />
             <StatCard
-              label={config.successLabel}
+              label={statusLabelFor(config.successValue)}
               value={stats[config.successValue]}
               accent="text-green-700"
             />
@@ -933,6 +948,7 @@ export function GeneralNewEnquiryPage() {
               label={`${config.successLabel} vs Potential Premium`}
               total={stats.total_potential_premium ?? 0}
               success={stats.converted_premium ?? 0}
+              format={formatPremium}
             />
           </div>
         </TabsContent>
@@ -1136,9 +1152,25 @@ export function GeneralNewEnquiryPage() {
                   setIsModalOpen(true);
                 }}
                 onDelete={handleDelete}
-                canEdit={(entry) => entry.status === 'new' && entry.is_editable && canModifyEntry(user, entry.added_by)}
+                canEdit={(entry) =>
+                  (entry.status === 'new' || entry.status === 'in_progress') &&
+                  entry.is_editable &&
+                  canModifyEntry(user, entry.added_by)
+                }
                 canDelete={(entry) =>
-                  entry.added_by === currentUserId && entry.status === 'new'
+                  entry.added_by === currentUserId &&
+                  (entry.status === 'new' || entry.status === 'in_progress')
+                }
+                rowActions={(entry) =>
+                  entry.status === config.successValue &&
+                  canModifyEntry(user, entry.added_by)
+                    ? [
+                        {
+                          label: 'Update Converted Premium',
+                          onClick: () => setConvertedPremiumEntry(entry),
+                        },
+                      ]
+                    : []
                 }
                 isLoading={isLoading}
               />
@@ -1228,6 +1260,15 @@ export function GeneralNewEnquiryPage() {
           }
         />
       )}
+
+      {/* Post-conversion converted-premium edit (mirrors Sales KPI "Deals") */}
+      <EnquiryConvertedPremiumModal
+        isOpen={!!convertedPremiumEntry}
+        onClose={() => setConvertedPremiumEntry(null)}
+        module={apiSlug}
+        entry={convertedPremiumEntry}
+        onSaved={() => refreshAfterMutation()}
+      />
 
       {/* ── Client Retention edit-target modal (renewal modules only) ────── */}
       {isRenewal && (
@@ -1425,10 +1466,12 @@ function RatioCard({
   label,
   total,
   success,
+  format = formatNumber,
 }: {
   label: string;
   total: number;
   success: number;
+  format?: (n: number) => string;
 }) {
   const pct = total > 0 ? (success / total) * 100 : 0;
   return (
@@ -1438,7 +1481,7 @@ function RatioCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold text-[#09090B]">
-          {formatNumber(success)} / {formatNumber(total)}
+          {format(success)} / {format(total)}
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">({pct.toFixed(1)}%)</div>
       </CardContent>
@@ -1555,7 +1598,9 @@ function EnquiryForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!agentId) return;
+    // Client Name, Source / Agent, Potential Premium, Class of Insurance and
+    // Insurance Company are all required for General New.
+    if (!agentId || !(Number(potentialPremium) > 0) || !classOfInsuranceId || !insurerId) return;
     setIsSubmitting(true);
     onSave({
       client_name: clientName,
@@ -1604,18 +1649,15 @@ function EnquiryForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label>Potential Premium</Label>
-          <Input
-            type="number"
-            min={0}
-            step={0.01}
+          <Label>Potential Premium *</Label>
+          <NumberInput
             placeholder="0.00"
             value={potentialPremium}
-            onChange={(e) => setPotentialPremium(e.target.value)}
+            onValueChange={setPotentialPremium}
           />
         </div>
         <div className="space-y-2">
-          <Label>Class of Insurance</Label>
+          <Label>Class of Insurance *</Label>
           <SearchableSelect
             value={classOfInsuranceId ? String(classOfInsuranceId) : null}
             onValueChange={(v) => setClassOfInsuranceId(v ? Number(v) : null)}
@@ -1631,7 +1673,7 @@ function EnquiryForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Insurance Company</Label>
+        <Label>Insurance Company *</Label>
         <SearchableSelect
           value={insurerId ? String(insurerId) : null}
           onValueChange={(v) => setInsurerId(v ? Number(v) : null)}
@@ -1676,7 +1718,17 @@ function EnquiryForm({
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting || !clientName || !agentId}>
+        <Button
+          type="submit"
+          disabled={
+            isSubmitting ||
+            !clientName ||
+            !agentId ||
+            !(Number(potentialPremium) > 0) ||
+            !classOfInsuranceId ||
+            !insurerId
+          }
+        >
           {isSubmitting ? 'Saving…' : entry ? 'Update' : 'Add Enquiry'}
         </Button>
       </DialogFooter>

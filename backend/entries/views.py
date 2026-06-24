@@ -78,6 +78,7 @@ from .serializers import (
     MarineRenewalEntrySerializer,
     MedicalClaimEntrySerializer,
     MedicalClaimStatusUpdateSerializer,
+    ConvertedPremiumUpdateSerializer,
 )
 from .filters import (
     EntryFilter, ClaimEntryFilter, MotorEnquiryFilter, MotorClaimEntryFilter,
@@ -235,6 +236,28 @@ def _seed_initial_remark(text, instance, user):
         content_type=ct, object_id=instance.id, text=text, author=user,
     )
     EntryRemark.objects.filter(pk=remark.pk).update(created_at=instance.added_at)
+
+
+def _update_converted_premium(viewset, request):
+    """Post-close converted-premium edit for the per-enquiry 'new' modules
+    (General New, Motor New, Motor Fleet New). Converted enquiries are
+    otherwise locked (update / destroy / update-status all reject terminal
+    rows), but the converted premium often needs correcting post-close.
+    Creator-only, mirroring the frontend canModifyEntry gate.
+    """
+    entry = viewset.get_object()
+    if entry.added_by_id != request.user.id:
+        raise PermissionDenied('You can only update enquiries you created.')
+    if entry.status != entry.STATUS_CONVERTED:
+        return Response(
+            {'error': 'Converted premium can only be updated on a converted enquiry.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    serializer = ConvertedPremiumUpdateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    entry.converted_premium = serializer.validated_data['converted_premium']
+    entry.save(update_fields=['converted_premium', 'updated_at'])
+    return Response(viewset.get_serializer(entry).data)
 
 
 class BaseEntryViewSet(viewsets.ModelViewSet):
@@ -419,6 +442,13 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
+        # A Lost enquiry has no converted premium — record 0 so the column
+        # reads 0 instead of blank (the modal no longer asks for it on Lost).
+        if new_status == GeneralNewEntry.STATUS_LOST:
+            entry.converted_premium = 0
+            if 'converted_premium' not in update_fields:
+                update_fields.append('converted_premium')
+
         if new_status in GeneralNewEntry.TERMINAL_STATUSES:
             entry.status_changed_at = timezone.now()
             update_fields.append('status_changed_at')
@@ -436,13 +466,17 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
             GeneralNewEntrySerializer(entry, context={'request': request}).data
         )
 
+    @action(detail=True, methods=['patch'], url_path='update-converted-premium')
+    def update_converted_premium(self, request, pk=None):
+        return _update_converted_premium(self, request)
+
     @action(detail=True, methods=['patch'], url_path='update-revisions')
     def update_revisions(self, request, pk=None):
         entry = self.get_object()
 
-        if entry.status != GeneralNewEntry.STATUS_NEW:
+        if entry.status not in (GeneralNewEntry.STATUS_NEW, GeneralNewEntry.STATUS_IN_PROGRESS):
             return Response(
-                {'error': 'Revisions can only be edited while the enquiry status is New.'},
+                {'error': 'Revisions can only be edited while the enquiry is New or In Progress.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -612,6 +646,7 @@ def _build_enquiry_stats(queryset, success_status='converted'):
     viewset's select_related('agent') with .only(...) on a partial field set.
     """
     total = queryset.count()
+    in_progress = queryset.filter(status='in_progress').count()
     revised = queryset.filter(revisions__gt=0).count()
     success_count = queryset.filter(status=success_status).count()
     lost = queryset.filter(status='lost').count()
@@ -639,7 +674,15 @@ def _build_enquiry_stats(queryset, success_status='converted'):
 
     # Premium aggregates (added 2026-05-24). potential_premium is nullable;
     # Sum() returns None when no matching rows have a value, so coerce.
+    # Some modules (e.g. Motor Fleet New) have no potential_premium field at all,
+    # so guard the aggregates that reference it by field presence — otherwise the
+    # ORM raises a FieldError and the dashboard 500s.
+    field_names = {f.name for f in queryset.model._meta.get_fields()}
+    has_potential = 'potential_premium' in field_names
+
     def _sum_potential(qs):
+        if not has_potential:
+            return 0.0
         result = qs.aggregate(s=Sum('potential_premium'))['s']
         # DecimalField → Decimal; the frontend expects a string-or-number JSON value.
         return float(result) if result is not None else 0.0
@@ -648,9 +691,11 @@ def _build_enquiry_stats(queryset, success_status='converted'):
     # close; fall back to potential_premium for entries closed before this
     # field existed so historical aggregates don't regress to zero.
     def _sum_converted(qs):
-        result = qs.aggregate(
-            s=Sum(Coalesce('converted_premium', 'potential_premium')),
-        )['s']
+        amount = (
+            Coalesce('converted_premium', 'potential_premium')
+            if has_potential else 'converted_premium'
+        )
+        result = qs.aggregate(s=Sum(amount))['s']
         return float(result) if result is not None else 0.0
 
     converted_premium = _sum_converted(queryset.filter(status=success_status))
@@ -659,6 +704,7 @@ def _build_enquiry_stats(queryset, success_status='converted'):
 
     return {
         'total': total,
+        'in_progress': in_progress,
         'revised': revised,
         'converted': success_count if success_status == 'converted' else 0,
         'retained': success_count if success_status == 'retained' else 0,
@@ -742,6 +788,13 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
+        # A Lost enquiry has no converted premium — record 0 so the column
+        # reads 0 instead of blank (the modal no longer asks for it on Lost).
+        if new_status == MotorNewEntry.STATUS_LOST:
+            entry.converted_premium = 0
+            if 'converted_premium' not in update_fields:
+                update_fields.append('converted_premium')
+
         if new_status in MotorNewEntry.TERMINAL_STATUSES:
             entry.status_changed_at = timezone.now()
             update_fields.append('status_changed_at')
@@ -759,14 +812,18 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
             MotorNewEntrySerializer(entry, context={'request': request}).data
         )
 
+    @action(detail=True, methods=['patch'], url_path='update-converted-premium')
+    def update_converted_premium(self, request, pk=None):
+        return _update_converted_premium(self, request)
+
     @action(detail=True, methods=['patch'], url_path='update-revisions')
     def update_revisions(self, request, pk=None):
         """Update the revisions counter. Only allowed while status='new'."""
         entry = self.get_object()
 
-        if entry.status != MotorNewEntry.STATUS_NEW:
+        if entry.status not in (MotorNewEntry.STATUS_NEW, MotorNewEntry.STATUS_IN_PROGRESS):
             return Response(
-                {'error': 'Revisions can only be edited while the enquiry status is New.'},
+                {'error': 'Revisions can only be edited while the enquiry is New or In Progress.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1338,6 +1395,13 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
+        # A Lost enquiry has no converted premium — record 0 so the column
+        # reads 0 instead of blank (the modal no longer asks for it on Lost).
+        if new_status == MotorFleetNewEntry.STATUS_LOST:
+            entry.converted_premium = 0
+            if 'converted_premium' not in update_fields:
+                update_fields.append('converted_premium')
+
         if new_status in MotorFleetNewEntry.TERMINAL_STATUSES:
             entry.status_changed_at = timezone.now()
             update_fields.append('status_changed_at')
@@ -1355,14 +1419,18 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
             MotorFleetNewEntrySerializer(entry, context={'request': request}).data
         )
 
+    @action(detail=True, methods=['patch'], url_path='update-converted-premium')
+    def update_converted_premium(self, request, pk=None):
+        return _update_converted_premium(self, request)
+
     @action(detail=True, methods=['patch'], url_path='update-revisions')
     def update_revisions(self, request, pk=None):
         """Update the revisions counter. Only allowed while status='new'."""
         entry = self.get_object()
 
-        if entry.status != MotorFleetNewEntry.STATUS_NEW:
+        if entry.status not in (MotorFleetNewEntry.STATUS_NEW, MotorFleetNewEntry.STATUS_IN_PROGRESS):
             return Response(
-                {'error': 'Revisions can only be edited while the enquiry status is New.'},
+                {'error': 'Revisions can only be edited while the enquiry is New or In Progress.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

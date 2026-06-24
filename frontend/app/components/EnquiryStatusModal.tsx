@@ -32,6 +32,7 @@ import { Pencil } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -98,12 +99,10 @@ function EditableCountRow({
             min={0}
             value={value}
             onChange={(e) => onChange(Math.max(0, Number(e.target.value || 0)))}
+            onBlur={onDone}
             className="w-20 h-8"
             autoFocus
           />
-          <Button type="button" size="sm" variant="outline" onClick={onDone}>
-            Done
-          </Button>
         </div>
       ) : (
         <div className="flex items-center gap-3">
@@ -203,29 +202,29 @@ export function EnquiryStatusModal({
             <p className="text-xs text-muted-foreground">{coverage.helper}</p>
           </div>
 
-          {/* 4. Converted premium */}
-          <div className="space-y-2">
-            <Label className="text-sm font-semibold text-[#09090B]">
-              Converted premium
-            </Label>
-            <div className="flex items-center border border-[#E4E4E4] rounded-md overflow-hidden focus-within:ring-1 focus-within:ring-[#09090B]">
-              <span className="px-3 py-2 text-sm text-[#71717A] bg-[#F9FAFB] border-r border-[#E4E4E4]">
-                AED
-              </span>
-              <Input
-                type="number"
-                min={0}
-                step={0.01}
-                placeholder="0.00"
-                value={premium}
-                onChange={(e) => setPremium(e.target.value)}
-                className="border-0 shadow-none focus-visible:ring-0"
-              />
+          {/* 4. Converted premium — only on a successful close; hidden for Lost
+              (a Lost enquiry has no converted premium and is saved as 0). */}
+          {needsConvertedPremium && (
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-[#09090B]">
+                Converted premium
+              </Label>
+              <div className="flex items-center border border-[#E4E4E4] rounded-md overflow-hidden focus-within:ring-1 focus-within:ring-[#09090B]">
+                <span className="px-3 py-2 text-sm text-[#71717A] bg-[#F9FAFB] border-r border-[#E4E4E4]">
+                  AED
+                </span>
+                <NumberInput
+                  placeholder="0.00"
+                  value={premium}
+                  onValueChange={setPremium}
+                  className="border-0 shadow-none focus-visible:ring-0"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Enter the converted premium amount for this enquiry.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Enter the converted premium amount for this enquiry.
-            </p>
-          </div>
+          )}
         </div>
 
         <DialogFooter className="p-4 border-t border-[#E4E4E4]">

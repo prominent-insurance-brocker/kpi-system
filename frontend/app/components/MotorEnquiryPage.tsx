@@ -18,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -53,6 +54,7 @@ import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
+import { EnquiryConvertedPremiumModal } from '@/app/components/EnquiryConvertedPremiumModal';
 import { canModifyEntry } from '@/app/lib/permissions';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
@@ -116,7 +118,8 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
   'general-new': {
     options: [
       { value: 'new', label: 'New Enquiry' },
-      { value: 'converted', label: 'Converted' },
+      { value: 'in_progress', label: 'In Progress' },
+      { value: 'converted', label: 'Won' },
       { value: 'lost', label: 'Lost' },
     ],
     successValue: 'converted',
@@ -127,7 +130,8 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
   'motor-new': {
     options: [
       { value: 'new', label: 'New Enquiry' },
-      { value: 'converted', label: 'Converted' },
+      { value: 'in_progress', label: 'In Progress' },
+      { value: 'converted', label: 'Won' },
       { value: 'lost', label: 'Lost' },
     ],
     successValue: 'converted',
@@ -149,7 +153,8 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
   'motor-fleet-new': {
     options: [
       { value: 'new', label: 'New Enquiry' },
-      { value: 'converted', label: 'Converted' },
+      { value: 'in_progress', label: 'In Progress' },
+      { value: 'converted', label: 'Won' },
       { value: 'lost', label: 'Lost' },
     ],
     successValue: 'converted',
@@ -172,6 +177,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
 
 const STATUS_COLORS: Record<MotorEnquiryEntry['status'], string> = {
   new: 'bg-blue-100 text-blue-800',
+  in_progress: 'bg-amber-100 text-amber-800',
   converted: 'bg-green-100 text-green-800',
   retained: 'bg-green-100 text-green-800',
   lost: 'bg-red-100 text-red-800',
@@ -257,6 +263,7 @@ export function MotorEnquiryPage({
   // they'll update once /stats/ resolves.
   const [stats, setStats] = useState<MotorEnquiryStats>({
     total: 0,
+    in_progress: 0,
     revised: 0,
     converted: 0,
     retained: 0,
@@ -294,6 +301,9 @@ export function MotorEnquiryPage({
 
   // Remarks side panel
   const [panelEntry, setPanelEntry] = useState<MotorEnquiryEntry | null>(null);
+  // Post-conversion converted-premium edit (mirrors Sales KPI "Deals").
+  const [convertedPremiumEntry, setConvertedPremiumEntry] =
+    useState<MotorEnquiryEntry | null>(null);
   // Map of {model_name: content_type_id} for all 7 remark-supporting modules;
   // fetched once on mount and cached. Used by the shared RemarksPanel.
   const [ctMap, setCtMap] = useState<Record<string, number>>({});
@@ -666,7 +676,7 @@ export function MotorEnquiryPage({
 
   const applyStatusChange = async (
     entry: MotorEnquiryEntry,
-    newStatus: SuccessStatus | 'lost',
+    newStatus: MotorEnquiryEntry['status'],
     revisions?: number,
     quotesCompared?: number,
     coverage?: string,
@@ -689,7 +699,10 @@ export function MotorEnquiryPage({
   };
 
   // ── Columns ──────────────────────────────────────────────────────────────
-  const columns = [
+  // Defined in their canonical order; the renewal modules that share this
+  // component render this order as-is. Motor New / Motor Fleet New reorder it
+  // below via NEW_MODULE_COLUMN_ORDER.
+  const baseColumns = [
     {
       key: 'pib_id',
       header: 'ID',
@@ -711,6 +724,9 @@ export function MotorEnquiryPage({
                   entry: item,
                   newStatus: v as SuccessStatus | 'lost',
                 });
+              } else if (v === 'new' || v === 'in_progress') {
+                // New ↔ In Progress is a free, no-confirmation transition.
+                applyStatusChange(item, v);
               }
             }}
           >
@@ -772,8 +788,9 @@ export function MotorEnquiryPage({
       key: 'revisions',
       header: 'Revisions',
       render: (item: MotorEnquiryEntry) => {
-        // Read-only once the enquiry has been closed (converted/lost).
-        if (item.status !== 'new') {
+        // Read-only once closed (converted/lost); editable while the enquiry
+        // is still active (New or In Progress).
+        if (item.status !== 'new' && item.status !== 'in_progress') {
           return <span className="text-sm text-[#374151]">{item.revisions}</span>;
         }
         // While status=new, anyone with table access can bump the counter inline.
@@ -844,6 +861,24 @@ export function MotorEnquiryPage({
       render: (item: MotorEnquiryEntry) => formatDate(item.added_at.split('T')[0]),
     },
   ];
+
+  // Motor New & Motor Fleet New use a specific column order; the renewal
+  // modules that share this component keep their original order untouched.
+  const NEW_MODULE_COLUMN_ORDER = [
+    'pib_id', 'client_name', 'status', 'notes',
+    'potential_premium', 'converted_premium', 'revisions', 'quotes_compared',
+    'tat_display', 'accuracy_pct', 'added_by_name', 'agent_name',
+  ];
+  const columns = isRenewal
+    ? baseColumns
+    : [
+        ...NEW_MODULE_COLUMN_ORDER
+          .map((k) => baseColumns.find((c) => c.key === k))
+          .filter((c): c is (typeof baseColumns)[number] => Boolean(c)),
+        ...baseColumns.filter(
+          (c) => !NEW_MODULE_COLUMN_ORDER.includes(c.key as string)
+        ),
+      ];
 
   const hasActiveFilters =
     !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName ||
@@ -959,9 +994,12 @@ export function MotorEnquiryPage({
               />
             )}
             <StatCard label={config.totalLabel} value={stats.total} accent="text-[#09090B]" />
+            {!isRenewal && (
+              <StatCard label="In Progress" value={stats.in_progress} accent="text-amber-600" />
+            )}
             <StatCard label="Enquiries Revised" value={stats.revised} accent="text-[#A855F7]" />
             <StatCard
-              label={config.successLabel}
+              label={statusLabelFor(config.successValue)}
               value={stats[config.successValue]}
               accent="text-green-700"
             />
@@ -990,6 +1028,7 @@ export function MotorEnquiryPage({
               label={`${config.successLabel} vs Potential Premium`}
               total={stats.total_potential_premium ?? 0}
               success={stats.converted_premium ?? 0}
+              format={formatPremium}
             />
           </div>
         </TabsContent>
@@ -1191,9 +1230,26 @@ export function MotorEnquiryPage({
                   setIsModalOpen(true);
                 }}
                 onDelete={handleDelete}
-                canEdit={(entry) => entry.status === 'new' && entry.is_editable && canModifyEntry(user, entry.added_by)}
+                canEdit={(entry) =>
+                  (entry.status === 'new' || entry.status === 'in_progress') &&
+                  entry.is_editable &&
+                  canModifyEntry(user, entry.added_by)
+                }
                 canDelete={(entry) =>
-                  entry.added_by === currentUserId && entry.status === 'new'
+                  entry.added_by === currentUserId &&
+                  (entry.status === 'new' || entry.status === 'in_progress')
+                }
+                rowActions={(entry) =>
+                  !isRenewal &&
+                  entry.status === config.successValue &&
+                  canModifyEntry(user, entry.added_by)
+                    ? [
+                        {
+                          label: 'Update Converted Premium',
+                          onClick: () => setConvertedPremiumEntry(entry),
+                        },
+                      ]
+                    : []
                 }
                 isLoading={isLoading}
               />
@@ -1277,6 +1333,15 @@ export function MotorEnquiryPage({
           }
         />
       )}
+
+      {/* Post-conversion converted-premium edit (mirrors Sales KPI "Deals") */}
+      <EnquiryConvertedPremiumModal
+        isOpen={!!convertedPremiumEntry}
+        onClose={() => setConvertedPremiumEntry(null)}
+        module={apiSlug}
+        entry={convertedPremiumEntry}
+        onSaved={() => refreshAfterMutation()}
+      />
 
       {/* ── Client Retention edit-target modal (renewal modules only) ────── */}
       {isRenewal && (
@@ -1505,10 +1570,12 @@ function RatioCard({
   label,
   total,
   success,
+  format = formatNumber,
 }: {
   label: string;
   total: number;
   success: number;
+  format?: (n: number) => string;
 }) {
   const pct = total > 0 ? (success / total) * 100 : 0;
   return (
@@ -1518,7 +1585,7 @@ function RatioCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold text-[#09090B]">
-          {formatNumber(success)} / {formatNumber(total)}
+          {format(success)} / {format(total)}
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">({pct.toFixed(1)}%)</div>
       </CardContent>
@@ -1685,13 +1752,10 @@ function EnquiryForm({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label>Potential Premium *</Label>
-          <Input
-            type="number"
-            min={0}
-            step={0.01}
+          <NumberInput
             placeholder="0.00"
             value={potentialPremium}
-            onChange={(e) => setPotentialPremium(e.target.value)}
+            onValueChange={setPotentialPremium}
             required
           />
         </div>

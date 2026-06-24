@@ -402,7 +402,7 @@ export interface MotorEnquiryEntry {
   chassis_no?: string;
   // Motor New uses 'converted'; Motor Renewal uses 'retained'. Both modules
   // share the same row type; the page's per-module STATUS_CONFIG narrows it.
-  status: 'new' | 'converted' | 'retained' | 'lost';
+  status: 'new' | 'in_progress' | 'converted' | 'retained' | 'lost';
   revisions: number;
   quotes_compared: number;
   status_changed_at: string | null;
@@ -439,6 +439,7 @@ export interface MotorEnquiryEntry {
 
 export interface MotorEnquiryStats {
   total: number;
+  in_progress: number;
   revised: number;
   // Only one of these is non-zero for any given module — `converted` for
   // motor_new, `retained` for motor_renewal. Both are always present in the
@@ -510,7 +511,7 @@ export async function updateMotorEnquiryStatus(
   // class_of_enquiry is used by the Motor modules, class_of_insurance by
   // general-new; converted_premium is now saved on every transition incl. Lost.
   payload: {
-    status: 'converted' | 'retained' | 'lost';
+    status: 'new' | 'in_progress' | 'converted' | 'retained' | 'lost';
     revisions?: number;
     quotes_compared?: number;
     class_of_enquiry?: string;
@@ -522,6 +523,20 @@ export async function updateMotorEnquiryStatus(
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
+}
+
+// Edit converted_premium on a converted enquiry after it's terminal
+// (creator-only). Mirrors updateSalesKPIConvertedPremium for the per-enquiry
+// "new" modules (general-new, motor-new, motor-fleet-new).
+export async function updateEnquiryConvertedPremium(
+  module: MotorEnquiryModule,
+  id: number,
+  converted_premium: string | number,
+): Promise<ApiResponse<MotorEnquiryEntry>> {
+  return fetchApi<MotorEnquiryEntry>(
+    `/api/entries/${module}/${id}/update-converted-premium/`,
+    { method: 'PATCH', body: JSON.stringify({ converted_premium }) },
+  );
 }
 
 export async function updateMotorEnquiryRevisions(

@@ -674,7 +674,15 @@ def _build_enquiry_stats(queryset, success_status='converted'):
 
     # Premium aggregates (added 2026-05-24). potential_premium is nullable;
     # Sum() returns None when no matching rows have a value, so coerce.
+    # Some modules (e.g. Motor Fleet New) have no potential_premium field at all,
+    # so guard the aggregates that reference it by field presence — otherwise the
+    # ORM raises a FieldError and the dashboard 500s.
+    field_names = {f.name for f in queryset.model._meta.get_fields()}
+    has_potential = 'potential_premium' in field_names
+
     def _sum_potential(qs):
+        if not has_potential:
+            return 0.0
         result = qs.aggregate(s=Sum('potential_premium'))['s']
         # DecimalField → Decimal; the frontend expects a string-or-number JSON value.
         return float(result) if result is not None else 0.0
@@ -683,9 +691,11 @@ def _build_enquiry_stats(queryset, success_status='converted'):
     # close; fall back to potential_premium for entries closed before this
     # field existed so historical aggregates don't regress to zero.
     def _sum_converted(qs):
-        result = qs.aggregate(
-            s=Sum(Coalesce('converted_premium', 'potential_premium')),
-        )['s']
+        amount = (
+            Coalesce('converted_premium', 'potential_premium')
+            if has_potential else 'converted_premium'
+        )
+        result = qs.aggregate(s=Sum(amount))['s']
         return float(result) if result is not None else 0.0
 
     converted_premium = _sum_converted(queryset.filter(status=success_status))

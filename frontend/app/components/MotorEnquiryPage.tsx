@@ -1028,6 +1028,7 @@ export function MotorEnquiryPage({
               label={`${config.successLabel} vs Potential Premium`}
               total={stats.total_potential_premium ?? 0}
               success={stats.converted_premium ?? 0}
+              format={formatPremium}
             />
           </div>
         </TabsContent>
@@ -1569,10 +1570,12 @@ function RatioCard({
   label,
   total,
   success,
+  format = formatNumber,
 }: {
   label: string;
   total: number;
   success: number;
+  format?: (n: number) => string;
 }) {
   const pct = total > 0 ? (success / total) * 100 : 0;
   return (
@@ -1582,7 +1585,7 @@ function RatioCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold text-[#09090B]">
-          {formatNumber(success)} / {formatNumber(total)}
+          {format(success)} / {format(total)}
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">({pct.toFixed(1)}%)</div>
       </CardContent>

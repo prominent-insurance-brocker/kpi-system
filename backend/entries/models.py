@@ -714,6 +714,9 @@ class MotorFleetNewEntry(BaseEntry):
     revisions = models.PositiveIntegerField(default=0)
     quotes_compared = models.PositiveIntegerField(default=0)
     status_changed_at = models.DateTimeField(null=True, blank=True)
+    potential_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
     # Captured at the moment the enquiry closes as Converted via the
     # update-status flow (TED-440). NULL when not yet closed or closed as Lost.
     converted_premium = models.DecimalField(

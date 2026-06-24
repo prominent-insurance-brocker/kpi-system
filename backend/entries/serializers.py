@@ -797,7 +797,7 @@ class MotorFleetNewEntrySerializer(BaseEntrySerializer):
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
-            'converted_premium',
+            'potential_premium', 'converted_premium',
             'class_of_enquiry', 'class_of_enquiry_display',
             'insurance_company', 'insurance_company_name',
             'added_by', 'added_by_name',

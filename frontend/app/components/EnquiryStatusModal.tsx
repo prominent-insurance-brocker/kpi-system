@@ -32,6 +32,7 @@ import { Pencil } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -212,13 +213,10 @@ export function EnquiryStatusModal({
               <span className="px-3 py-2 text-sm text-[#71717A] bg-[#F9FAFB] border-r border-[#E4E4E4]">
                 AED
               </span>
-              <Input
-                type="number"
-                min={0}
-                step={0.01}
+              <NumberInput
                 placeholder="0.00"
                 value={premium}
-                onChange={(e) => setPremium(e.target.value)}
+                onValueChange={setPremium}
                 className="border-0 shadow-none focus-visible:ring-0"
               />
             </div>

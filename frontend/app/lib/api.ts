@@ -524,6 +524,20 @@ export async function updateMotorEnquiryStatus(
   });
 }
 
+// Edit converted_premium on a converted enquiry after it's terminal
+// (creator-only). Mirrors updateSalesKPIConvertedPremium for the per-enquiry
+// "new" modules (general-new, motor-new, motor-fleet-new).
+export async function updateEnquiryConvertedPremium(
+  module: MotorEnquiryModule,
+  id: number,
+  converted_premium: string | number,
+): Promise<ApiResponse<MotorEnquiryEntry>> {
+  return fetchApi<MotorEnquiryEntry>(
+    `/api/entries/${module}/${id}/update-converted-premium/`,
+    { method: 'PATCH', body: JSON.stringify({ converted_premium }) },
+  );
+}
+
 export async function updateMotorEnquiryRevisions(
   module: MotorEnquiryModule,
   id: number,

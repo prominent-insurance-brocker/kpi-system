@@ -57,6 +57,7 @@ import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
+import { EnquiryConvertedPremiumModal } from '@/app/components/EnquiryConvertedPremiumModal';
 import { canModifyEntry } from '@/app/lib/permissions';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
@@ -288,6 +289,9 @@ export function GeneralNewEnquiryPage() {
 
   // Remarks side panel
   const [panelEntry, setPanelEntry] = useState<MotorEnquiryEntry | null>(null);
+  // Post-conversion converted-premium edit (mirrors Sales KPI "Deals").
+  const [convertedPremiumEntry, setConvertedPremiumEntry] =
+    useState<MotorEnquiryEntry | null>(null);
   const [ctMap, setCtMap] = useState<Record<string, number>>({});
   useEffect(() => {
     getRemarksContentTypes().then((res) => {
@@ -1140,6 +1144,17 @@ export function GeneralNewEnquiryPage() {
                 canDelete={(entry) =>
                   entry.added_by === currentUserId && entry.status === 'new'
                 }
+                rowActions={(entry) =>
+                  entry.status === config.successValue &&
+                  canModifyEntry(user, entry.added_by)
+                    ? [
+                        {
+                          label: 'Update Converted Premium',
+                          onClick: () => setConvertedPremiumEntry(entry),
+                        },
+                      ]
+                    : []
+                }
                 isLoading={isLoading}
               />
             </div>
@@ -1228,6 +1243,15 @@ export function GeneralNewEnquiryPage() {
           }
         />
       )}
+
+      {/* Post-conversion converted-premium edit (mirrors Sales KPI "Deals") */}
+      <EnquiryConvertedPremiumModal
+        isOpen={!!convertedPremiumEntry}
+        onClose={() => setConvertedPremiumEntry(null)}
+        module={apiSlug}
+        entry={convertedPremiumEntry}
+        onSaved={() => refreshAfterMutation()}
+      />
 
       {/* ── Client Retention edit-target modal (renewal modules only) ────── */}
       {isRenewal && (

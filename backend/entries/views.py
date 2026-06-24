@@ -78,6 +78,7 @@ from .serializers import (
     MarineRenewalEntrySerializer,
     MedicalClaimEntrySerializer,
     MedicalClaimStatusUpdateSerializer,
+    ConvertedPremiumUpdateSerializer,
 )
 from .filters import (
     EntryFilter, ClaimEntryFilter, MotorEnquiryFilter, MotorClaimEntryFilter,
@@ -235,6 +236,28 @@ def _seed_initial_remark(text, instance, user):
         content_type=ct, object_id=instance.id, text=text, author=user,
     )
     EntryRemark.objects.filter(pk=remark.pk).update(created_at=instance.added_at)
+
+
+def _update_converted_premium(viewset, request):
+    """Post-close converted-premium edit for the per-enquiry 'new' modules
+    (General New, Motor New, Motor Fleet New). Converted enquiries are
+    otherwise locked (update / destroy / update-status all reject terminal
+    rows), but the converted premium often needs correcting post-close.
+    Creator-only, mirroring the frontend canModifyEntry gate.
+    """
+    entry = viewset.get_object()
+    if entry.added_by_id != request.user.id:
+        raise PermissionDenied('You can only update enquiries you created.')
+    if entry.status != entry.STATUS_CONVERTED:
+        return Response(
+            {'error': 'Converted premium can only be updated on a converted enquiry.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    serializer = ConvertedPremiumUpdateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    entry.converted_premium = serializer.validated_data['converted_premium']
+    entry.save(update_fields=['converted_premium', 'updated_at'])
+    return Response(viewset.get_serializer(entry).data)
 
 
 class BaseEntryViewSet(viewsets.ModelViewSet):
@@ -435,6 +458,10 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
         return Response(
             GeneralNewEntrySerializer(entry, context={'request': request}).data
         )
+
+    @action(detail=True, methods=['patch'], url_path='update-converted-premium')
+    def update_converted_premium(self, request, pk=None):
+        return _update_converted_premium(self, request)
 
     @action(detail=True, methods=['patch'], url_path='update-revisions')
     def update_revisions(self, request, pk=None):
@@ -758,6 +785,10 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
         return Response(
             MotorNewEntrySerializer(entry, context={'request': request}).data
         )
+
+    @action(detail=True, methods=['patch'], url_path='update-converted-premium')
+    def update_converted_premium(self, request, pk=None):
+        return _update_converted_premium(self, request)
 
     @action(detail=True, methods=['patch'], url_path='update-revisions')
     def update_revisions(self, request, pk=None):
@@ -1354,6 +1385,10 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
         return Response(
             MotorFleetNewEntrySerializer(entry, context={'request': request}).data
         )
+
+    @action(detail=True, methods=['patch'], url_path='update-converted-premium')
+    def update_converted_premium(self, request, pk=None):
+        return _update_converted_premium(self, request)
 
     @action(detail=True, methods=['patch'], url_path='update-revisions')
     def update_revisions(self, request, pk=None):

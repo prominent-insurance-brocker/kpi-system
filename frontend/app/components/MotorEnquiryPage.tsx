@@ -53,6 +53,7 @@ import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
+import { EnquiryConvertedPremiumModal } from '@/app/components/EnquiryConvertedPremiumModal';
 import { canModifyEntry } from '@/app/lib/permissions';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
@@ -294,6 +295,9 @@ export function MotorEnquiryPage({
 
   // Remarks side panel
   const [panelEntry, setPanelEntry] = useState<MotorEnquiryEntry | null>(null);
+  // Post-conversion converted-premium edit (mirrors Sales KPI "Deals").
+  const [convertedPremiumEntry, setConvertedPremiumEntry] =
+    useState<MotorEnquiryEntry | null>(null);
   // Map of {model_name: content_type_id} for all 7 remark-supporting modules;
   // fetched once on mount and cached. Used by the shared RemarksPanel.
   const [ctMap, setCtMap] = useState<Record<string, number>>({});
@@ -1216,6 +1220,18 @@ export function MotorEnquiryPage({
                 canDelete={(entry) =>
                   entry.added_by === currentUserId && entry.status === 'new'
                 }
+                rowActions={(entry) =>
+                  !isRenewal &&
+                  entry.status === config.successValue &&
+                  canModifyEntry(user, entry.added_by)
+                    ? [
+                        {
+                          label: 'Update Converted Premium',
+                          onClick: () => setConvertedPremiumEntry(entry),
+                        },
+                      ]
+                    : []
+                }
                 isLoading={isLoading}
               />
             </div>
@@ -1298,6 +1314,15 @@ export function MotorEnquiryPage({
           }
         />
       )}
+
+      {/* Post-conversion converted-premium edit (mirrors Sales KPI "Deals") */}
+      <EnquiryConvertedPremiumModal
+        isOpen={!!convertedPremiumEntry}
+        onClose={() => setConvertedPremiumEntry(null)}
+        module={apiSlug}
+        entry={convertedPremiumEntry}
+        onSaved={() => refreshAfterMutation()}
+      />
 
       {/* ── Client Retention edit-target modal (renewal modules only) ────── */}
       {isRenewal && (

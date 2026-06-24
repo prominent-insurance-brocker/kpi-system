@@ -118,6 +118,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
   'general-new': {
     options: [
       { value: 'new', label: 'New Enquiry' },
+      { value: 'in_progress', label: 'In Progress' },
       { value: 'converted', label: 'Converted' },
       { value: 'lost', label: 'Lost' },
     ],
@@ -129,6 +130,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
   'motor-new': {
     options: [
       { value: 'new', label: 'New Enquiry' },
+      { value: 'in_progress', label: 'In Progress' },
       { value: 'converted', label: 'Converted' },
       { value: 'lost', label: 'Lost' },
     ],
@@ -151,6 +153,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
   'motor-fleet-new': {
     options: [
       { value: 'new', label: 'New Enquiry' },
+      { value: 'in_progress', label: 'In Progress' },
       { value: 'converted', label: 'Converted' },
       { value: 'lost', label: 'Lost' },
     ],
@@ -174,6 +177,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
 
 const STATUS_COLORS: Record<MotorEnquiryEntry['status'], string> = {
   new: 'bg-blue-100 text-blue-800',
+  in_progress: 'bg-amber-100 text-amber-800',
   converted: 'bg-green-100 text-green-800',
   retained: 'bg-green-100 text-green-800',
   lost: 'bg-red-100 text-red-800',
@@ -252,6 +256,7 @@ export function GeneralNewEnquiryPage() {
   // they'll update once /stats/ resolves.
   const [stats, setStats] = useState<MotorEnquiryStats>({
     total: 0,
+    in_progress: 0,
     revised: 0,
     converted: 0,
     retained: 0,
@@ -619,7 +624,7 @@ export function GeneralNewEnquiryPage() {
 
   const applyStatusChange = async (
     entry: MotorEnquiryEntry,
-    newStatus: SuccessStatus | 'lost',
+    newStatus: MotorEnquiryEntry['status'],
     revisions?: number,
     quotesCompared?: number,
     coverage?: string,
@@ -666,6 +671,9 @@ export function GeneralNewEnquiryPage() {
                   entry: item,
                   newStatus: v as SuccessStatus | 'lost',
                 });
+              } else if (v === 'new' || v === 'in_progress') {
+                // New ↔ In Progress is a free, no-confirmation transition.
+                applyStatusChange(item, v);
               }
             }}
           >
@@ -728,8 +736,9 @@ export function GeneralNewEnquiryPage() {
       key: 'revisions',
       header: 'Revisions',
       render: (item: MotorEnquiryEntry) => {
-        // Read-only once the enquiry has been closed (converted/lost).
-        if (item.status !== 'new') {
+        // Read-only once closed (converted/lost); editable while the enquiry
+        // is still active (New or In Progress).
+        if (item.status !== 'new' && item.status !== 'in_progress') {
           return <span className="text-sm text-[#374151]">{item.revisions}</span>;
         }
         // While status=new, anyone with table access can bump the counter inline.
@@ -906,6 +915,7 @@ export function GeneralNewEnquiryPage() {
               />
             )}
             <StatCard label={config.totalLabel} value={stats.total} accent="text-[#09090B]" />
+            <StatCard label="In Progress" value={stats.in_progress} accent="text-amber-600" />
             <StatCard label="Enquiries Revised" value={stats.revised} accent="text-[#A855F7]" />
             <StatCard
               label={config.successLabel}
@@ -1140,9 +1150,14 @@ export function GeneralNewEnquiryPage() {
                   setIsModalOpen(true);
                 }}
                 onDelete={handleDelete}
-                canEdit={(entry) => entry.status === 'new' && entry.is_editable && canModifyEntry(user, entry.added_by)}
+                canEdit={(entry) =>
+                  (entry.status === 'new' || entry.status === 'in_progress') &&
+                  entry.is_editable &&
+                  canModifyEntry(user, entry.added_by)
+                }
                 canDelete={(entry) =>
-                  entry.added_by === currentUserId && entry.status === 'new'
+                  entry.added_by === currentUserId &&
+                  (entry.status === 'new' || entry.status === 'in_progress')
                 }
                 rowActions={(entry) =>
                   entry.status === config.successValue &&

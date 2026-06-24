@@ -99,19 +99,24 @@ class GeneralNewEntry(BaseEntry):
     (general insurance products have no chassis).
     """
     STATUS_NEW = 'new'
+    STATUS_IN_PROGRESS = 'in_progress'
     STATUS_CONVERTED = 'converted'
     STATUS_LOST = 'lost'
 
     STATUS_CHOICES = [
         (STATUS_NEW, 'New Enquiry'),
+        (STATUS_IN_PROGRESS, 'In Progress'),
         (STATUS_CONVERTED, 'Converted'),
         (STATUS_LOST, 'Lost'),
     ]
 
     TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_LOST}
 
+    # New ↔ In Progress is a free back-and-forth; both can close to
+    # Converted/Lost (terminal). Converted/Lost are dead-ends.
     TRANSITIONS = {
-        STATUS_NEW: [STATUS_CONVERTED, STATUS_LOST],
+        STATUS_NEW: [STATUS_IN_PROGRESS, STATUS_CONVERTED, STATUS_LOST],
+        STATUS_IN_PROGRESS: [STATUS_NEW, STATUS_CONVERTED, STATUS_LOST],
         STATUS_CONVERTED: [],
         STATUS_LOST: [],
     }
@@ -381,19 +386,24 @@ class GeneralRenewalMonthlyTarget(models.Model):
 class MotorNewEntry(BaseEntry):
     """Motor New enquiry — one row per customer enquiry with status state machine."""
     STATUS_NEW = 'new'
+    STATUS_IN_PROGRESS = 'in_progress'
     STATUS_CONVERTED = 'converted'
     STATUS_LOST = 'lost'
 
     STATUS_CHOICES = [
         (STATUS_NEW, 'New Enquiry'),
+        (STATUS_IN_PROGRESS, 'In Progress'),
         (STATUS_CONVERTED, 'Converted'),
         (STATUS_LOST, 'Lost'),
     ]
 
     TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_LOST}
 
+    # New ↔ In Progress is a free back-and-forth; both can close to
+    # Converted/Lost (terminal). Converted/Lost are dead-ends.
     TRANSITIONS = {
-        STATUS_NEW: [STATUS_CONVERTED, STATUS_LOST],
+        STATUS_NEW: [STATUS_IN_PROGRESS, STATUS_CONVERTED, STATUS_LOST],
+        STATUS_IN_PROGRESS: [STATUS_NEW, STATUS_CONVERTED, STATUS_LOST],
         STATUS_CONVERTED: [],
         STATUS_LOST: [],
     }
@@ -667,19 +677,24 @@ class MotorRenewalMonthlyTarget(models.Model):
 class MotorFleetNewEntry(BaseEntry):
     """Motor Fleet New enquiry — one row per customer enquiry with status state machine."""
     STATUS_NEW = 'new'
+    STATUS_IN_PROGRESS = 'in_progress'
     STATUS_CONVERTED = 'converted'
     STATUS_LOST = 'lost'
 
     STATUS_CHOICES = [
         (STATUS_NEW, 'New Enquiry'),
+        (STATUS_IN_PROGRESS, 'In Progress'),
         (STATUS_CONVERTED, 'Converted'),
         (STATUS_LOST, 'Lost'),
     ]
 
     TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_LOST}
 
+    # New ↔ In Progress is a free back-and-forth; both can close to
+    # Converted/Lost (terminal). Converted/Lost are dead-ends.
     TRANSITIONS = {
-        STATUS_NEW: [STATUS_CONVERTED, STATUS_LOST],
+        STATUS_NEW: [STATUS_IN_PROGRESS, STATUS_CONVERTED, STATUS_LOST],
+        STATUS_IN_PROGRESS: [STATUS_NEW, STATUS_CONVERTED, STATUS_LOST],
         STATUS_CONVERTED: [],
         STATUS_LOST: [],
     }

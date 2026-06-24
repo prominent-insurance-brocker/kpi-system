@@ -467,9 +467,9 @@ class GeneralNewEntryViewSet(BaseEntryViewSet):
     def update_revisions(self, request, pk=None):
         entry = self.get_object()
 
-        if entry.status != GeneralNewEntry.STATUS_NEW:
+        if entry.status not in (GeneralNewEntry.STATUS_NEW, GeneralNewEntry.STATUS_IN_PROGRESS):
             return Response(
-                {'error': 'Revisions can only be edited while the enquiry status is New.'},
+                {'error': 'Revisions can only be edited while the enquiry is New or In Progress.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -639,6 +639,7 @@ def _build_enquiry_stats(queryset, success_status='converted'):
     viewset's select_related('agent') with .only(...) on a partial field set.
     """
     total = queryset.count()
+    in_progress = queryset.filter(status='in_progress').count()
     revised = queryset.filter(revisions__gt=0).count()
     success_count = queryset.filter(status=success_status).count()
     lost = queryset.filter(status='lost').count()
@@ -686,6 +687,7 @@ def _build_enquiry_stats(queryset, success_status='converted'):
 
     return {
         'total': total,
+        'in_progress': in_progress,
         'revised': revised,
         'converted': success_count if success_status == 'converted' else 0,
         'retained': success_count if success_status == 'retained' else 0,
@@ -795,9 +797,9 @@ class MotorNewEntryViewSet(BaseEntryViewSet):
         """Update the revisions counter. Only allowed while status='new'."""
         entry = self.get_object()
 
-        if entry.status != MotorNewEntry.STATUS_NEW:
+        if entry.status not in (MotorNewEntry.STATUS_NEW, MotorNewEntry.STATUS_IN_PROGRESS):
             return Response(
-                {'error': 'Revisions can only be edited while the enquiry status is New.'},
+                {'error': 'Revisions can only be edited while the enquiry is New or In Progress.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1395,9 +1397,9 @@ class MotorFleetNewEntryViewSet(BaseEntryViewSet):
         """Update the revisions counter. Only allowed while status='new'."""
         entry = self.get_object()
 
-        if entry.status != MotorFleetNewEntry.STATUS_NEW:
+        if entry.status not in (MotorFleetNewEntry.STATUS_NEW, MotorFleetNewEntry.STATUS_IN_PROGRESS):
             return Response(
-                {'error': 'Revisions can only be edited while the enquiry status is New.'},
+                {'error': 'Revisions can only be edited while the enquiry is New or In Progress.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

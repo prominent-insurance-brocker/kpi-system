@@ -813,6 +813,9 @@ class MotorFleetNewEntrySerializer(BaseEntrySerializer):
             'class_of_enquiry_display', 'insurance_company_name',
             'added_at', 'updated_at',
         ]
+        # Chassis No was removed from the Motor Fleet UI (TED-568), so creates
+        # arrive without it.
+        extra_kwargs = {'chassis_no': {'required': False, 'allow_blank': True}}
 
     def get_agent_name(self, obj):
         return obj.agent.get_full_name()
@@ -903,6 +906,9 @@ class MotorFleetRenewalEntrySerializer(BaseEntrySerializer):
             'class_of_enquiry_display', 'insurance_company_name',
             'added_at', 'updated_at',
         ]
+        # Chassis No was removed from the Motor Fleet UI (TED-568), so creates
+        # arrive without it.
+        extra_kwargs = {'chassis_no': {'required': False, 'allow_blank': True}}
 
     def get_agent_name(self, obj):
         return obj.agent.get_full_name()

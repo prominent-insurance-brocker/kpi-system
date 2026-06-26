@@ -418,6 +418,8 @@ export function MotorEnquiryPage({
   // Both motor-renewal and motor-fleet-renewal expose the monthly-target
   // sub-resource with the same shape, so they share this code path.
   const isRenewal = apiSlug === 'motor-renewal' || apiSlug === 'motor-fleet-renewal';
+  // Motor Fleet modules hide Chassis No + Class of Enquiry everywhere (TED-568).
+  const isFleet = moduleKey === 'motor_fleet_new' || moduleKey === 'motor_fleet_renewal';
   const renewalModule = apiSlug as MotorRenewalModule;
 
   const fetchCurrentTarget = useCallback(async () => {
@@ -880,6 +882,11 @@ export function MotorEnquiryPage({
         ),
       ];
 
+  // Motor Fleet drops the Chassis No + Class of Enquiry columns (TED-568).
+  const visibleColumns = isFleet
+    ? columns.filter((c) => c.key !== 'chassis_no' && c.key !== 'class_of_enquiry')
+    : columns;
+
   const hasActiveFilters =
     !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName ||
       insuranceCompanyFilter || classOfEnquiryFilter);
@@ -1171,21 +1178,26 @@ export function MotorEnquiryPage({
                   },
                 },
               ]}
-              extraSelects={[
-                {
-                  label: 'Class of Enquiry',
-                  value: classOfEnquiryFilter,
-                  onChange: (v) => {
-                    setClassOfEnquiryFilter(v);
-                    setPage(1);
-                  },
-                  options: [
-                    { value: 'all', label: 'All Classes' },
-                    { value: 'comprehensive', label: 'Comprehensive' },
-                    { value: 'tpl', label: 'TPL' },
-                  ],
-                },
-              ]}
+              extraSelects={
+                // Motor Fleet has no Class of Enquiry filter (TED-568).
+                isFleet
+                  ? []
+                  : [
+                      {
+                        label: 'Class of Enquiry',
+                        value: classOfEnquiryFilter,
+                        onChange: (v) => {
+                          setClassOfEnquiryFilter(v);
+                          setPage(1);
+                        },
+                        options: [
+                          { value: 'all', label: 'All Classes' },
+                          { value: 'comprehensive', label: 'Comprehensive' },
+                          { value: 'tpl', label: 'TPL' },
+                        ],
+                      },
+                    ]
+              }
               hasActiveFilters={hasActiveFilters}
               onClear={() => {
                 setDateFrom('');
@@ -1214,7 +1226,7 @@ export function MotorEnquiryPage({
           <div className="flex gap-4">
             <div className="flex-1 min-w-0">
               <DataTable
-                columns={columns}
+                columns={visibleColumns}
                 data={entries}
                 totalCount={totalCount}
                 page={page}
@@ -1286,6 +1298,7 @@ export function MotorEnquiryPage({
           <EnquiryForm
             entry={editingEntry}
             error={modalError}
+            isFleet={isFleet}
             onSave={handleSaveNew}
             onClose={() => {
               setIsModalOpen(false);
@@ -1300,7 +1313,7 @@ export function MotorEnquiryPage({
         <EnquiryStatusModal
           entry={pendingStatus.entry}
           needsConvertedPremium={pendingStatus.newStatus !== 'lost'}
-          coverage={{
+          coverage={isFleet ? undefined : {
             label: 'Class of Enquiry',
             helper: 'Confirm whether the finalized enquiry is Comprehensive or TPL.',
             initialValue: pendingStatus.entry.class_of_enquiry ?? '',
@@ -1327,7 +1340,7 @@ export function MotorEnquiryPage({
               pendingStatus.newStatus,
               revisions,
               quotes_compared,
-              coverage,
+              isFleet ? undefined : coverage,
               converted_premium,
             )
           }
@@ -1621,6 +1634,7 @@ function EnquiryForm({
   onSave,
   onClose,
   error,
+  isFleet,
 }: {
   entry: MotorEnquiryEntry | null;
   onSave: (payload: {
@@ -1635,6 +1649,8 @@ function EnquiryForm({
   }) => void;
   onClose: () => void;
   error: string;
+  // Motor Fleet hides Chassis No + Class of Enquiry (TED-568).
+  isFleet: boolean;
 }) {
   const [clientName, setClientName] = useState(entry?.client_name ?? '');
   const [agentId, setAgentId] = useState<number | null>(entry?.agent ?? null);
@@ -1738,18 +1754,20 @@ function EnquiryForm({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label>Chassis No *</Label>
-        <Input
-          type="text"
-          placeholder="Enter chassis number"
-          value={chassisNo}
-          onChange={(e) => setChassisNo(e.target.value)}
-          required
-        />
-      </div>
+      {!isFleet && (
+        <div className="space-y-2">
+          <Label>Chassis No *</Label>
+          <Input
+            type="text"
+            placeholder="Enter chassis number"
+            value={chassisNo}
+            onChange={(e) => setChassisNo(e.target.value)}
+            required
+          />
+        </div>
+      )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className={isFleet ? 'space-y-2' : 'grid grid-cols-2 gap-3'}>
         <div className="space-y-2">
           <Label>Potential Premium *</Label>
           <NumberInput
@@ -1759,22 +1777,24 @@ function EnquiryForm({
             required
           />
         </div>
-        <div className="space-y-2">
-          <Label>Class of Enquiry *</Label>
-          <Select
-            value={classOfEnquiry || '__none__'}
-            onValueChange={(v) => setClassOfEnquiry(v === '__none__' ? '' : v)}
-          >
-            <SelectTrigger className="w-full shadow-none">
-              <SelectValue placeholder="Select class" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">Select enquiry</SelectItem>
-              <SelectItem value="comprehensive">Comprehensive</SelectItem>
-              <SelectItem value="tpl">TPL</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {!isFleet && (
+          <div className="space-y-2">
+            <Label>Class of Enquiry *</Label>
+            <Select
+              value={classOfEnquiry || '__none__'}
+              onValueChange={(v) => setClassOfEnquiry(v === '__none__' ? '' : v)}
+            >
+              <SelectTrigger className="w-full shadow-none">
+                <SelectValue placeholder="Select class" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Select enquiry</SelectItem>
+                <SelectItem value="comprehensive">Comprehensive</SelectItem>
+                <SelectItem value="tpl">TPL</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -1823,7 +1843,7 @@ function EnquiryForm({
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting || !clientName || !chassisNo || !agentId || !potentialPremium.trim() || !classOfEnquiry || !insurerId}>
+        <Button type="submit" disabled={isSubmitting || !clientName || !agentId || !potentialPremium.trim() || !insurerId || (!isFleet && (!chassisNo || !classOfEnquiry))}>
           {isSubmitting ? 'Saving…' : entry ? 'Update' : 'Add Enquiry'}
         </Button>
       </DialogFooter>

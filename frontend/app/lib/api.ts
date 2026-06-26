@@ -264,9 +264,11 @@ export async function getRoles(params?: URLSearchParams): Promise<ApiResponse<Pa
 }
 
 export async function getRolesSimple(): Promise<ApiResponse<{ id: number; name: string }[]>> {
-  const result = await fetchApi<PaginatedResponse<{ id: number; name: string }>>('/api/roles/?simple=true');
+  // ?simple=true is unpaginated server-side, so the whole role list is returned
+  // as a plain array (TED-569: pagination used to truncate it at 20).
+  const result = await fetchApi<{ id: number; name: string }[]>('/api/roles/?simple=true');
   if (result.data) {
-    return { data: result.data.results };
+    return { data: result.data };
   }
   return { error: result.error };
 }

@@ -1306,5 +1306,108 @@ export async function getTrackerCounts(
   );
 }
 
+// ─── Reports (TED-567: auto-email report configs) ───────────────────────────
+
+export interface Report {
+  id: number;
+  name: string;
+  subject: string;               // email subject line (per-report)
+  report_type: string;
+  recipients: string[];          // "Email List"
+  is_active: boolean;            // "Status"
+  // Per-report schedule override; null on either field uses the global default.
+  send_weekday: number | null;   // 0=Mon .. 6=Sun
+  send_time: string | null;      // "HH:MM:SS"
+  last_sent_at: string | null;
+  created_by_email: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Global default send schedule (applies to reports that don't override it).
+export interface ReportSetting {
+  default_send_weekday: number;  // 0=Mon .. 6=Sun
+  default_send_time: string;     // "HH:MM:SS"
+}
+
+export async function getReports(
+  params?: URLSearchParams,
+): Promise<ApiResponse<PaginatedResponse<Report>>> {
+  const query = params ? `?${params.toString()}` : '';
+  return fetchApi<PaginatedResponse<Report>>(`/api/reports/${query}`);
+}
+
+export async function createReport(
+  data: Partial<Report>,
+): Promise<ApiResponse<Report>> {
+  return fetchApi<Report>('/api/reports/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateReport(
+  id: number,
+  data: Partial<Report>,
+): Promise<ApiResponse<Report>> {
+  return fetchApi<Report>(`/api/reports/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteReport(id: number): Promise<ApiResponse<void>> {
+  return fetchApi<void>(`/api/reports/${id}/`, { method: 'DELETE' });
+}
+
+export async function activateReport(
+  id: number,
+): Promise<ApiResponse<{ message: string }>> {
+  return fetchApi<{ message: string }>(`/api/reports/${id}/activate/`, {
+    method: 'POST',
+  });
+}
+
+export async function deactivateReport(
+  id: number,
+): Promise<ApiResponse<{ message: string }>> {
+  return fetchApi<{ message: string }>(`/api/reports/${id}/deactivate/`, {
+    method: 'POST',
+  });
+}
+
+export async function sendTestReport(
+  id: number,
+): Promise<ApiResponse<{ message: string }>> {
+  return fetchApi<{ message: string }>(`/api/reports/${id}/send_test/`, {
+    method: 'POST',
+  });
+}
+
+// Sends the digest to the report's REAL recipient list immediately (on-demand
+// override of the weekly cron) — distinct from sendTestReport, which only
+// emails the requesting admin.
+export async function sendReportNow(
+  id: number,
+): Promise<ApiResponse<{ message: string; sent: number; failed: string[] }>> {
+  return fetchApi<{ message: string; sent: number; failed: string[] }>(
+    `/api/reports/${id}/send_now/`,
+    { method: 'POST' },
+  );
+}
+
+export async function getReportSettings(): Promise<ApiResponse<ReportSetting>> {
+  return fetchApi<ReportSetting>('/api/reports/settings/');
+}
+
+export async function updateReportSettings(
+  data: Partial<ReportSetting>,
+): Promise<ApiResponse<ReportSetting>> {
+  return fetchApi<ReportSetting>('/api/reports/settings/', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
 // Generic fetch helper for other API calls
 export { fetchApi, API_BASE_URL };

@@ -18,7 +18,7 @@ from auth_app.models import CustomUser
 from entries.models import ClassOfInsurance, SalesKPIEntry
 from roles.models import Role, RoleModulePermission
 
-from .models import Report, ReportSendLog, ReportSetting
+from .models import Report, ReportSendEvent, ReportSendLog, ReportSetting
 from .scheduling import effective_schedule, is_due
 from .services.sales_weekly_digest import SalesWeeklyDigestService
 
@@ -261,6 +261,73 @@ class ReportAPITests(TestCase):
             format='json',
         )
         self.assertEqual(r.status_code, 400)
+
+    def _make_report(self, **kwargs):
+        defaults = {'name': 'D', 'recipients': ['a@x.com', 'b@x.com']}
+        defaults.update(kwargs)
+        r = self.client.post('/api/reports/', defaults, format='json')
+        return r.data['id']
+
+    def test_send_now_records_history_event(self):
+        self.client.force_authenticate(self.admin)
+        rid = self._make_report()
+        self.client.post(f'/api/reports/{rid}/send_now/')
+        ev = ReportSendEvent.objects.filter(report_id=rid).latest('created_at')
+        self.assertEqual(ev.trigger, 'send_now')
+        self.assertEqual(ev.triggered_by, self.admin)
+        self.assertEqual(ev.sent_count, 2)
+        self.assertEqual({r['email'] for r in ev.recipients}, {'a@x.com', 'b@x.com'})
+        self.assertTrue(all(r['ok'] for r in ev.recipients))
+
+    def test_send_test_records_history_event(self):
+        self.client.force_authenticate(self.admin)
+        rid = self._make_report(recipients=['a@x.com'])
+        self.client.post(f'/api/reports/{rid}/send_test/')
+        ev = ReportSendEvent.objects.filter(report_id=rid, trigger='test').latest('created_at')
+        self.assertEqual(ev.recipients[0]['email'], 'admin@x.com')  # to the admin, not recipients
+        self.assertEqual(ev.sent_count, 1)
+
+    def test_history_endpoint(self):
+        self.client.force_authenticate(self.admin)
+        rid = self._make_report(recipients=['a@x.com'])
+        self.client.post(f'/api/reports/{rid}/send_now/')
+        resp = self.client.get(f'/api/reports/{rid}/history/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.data), 1)
+        self.assertEqual(resp.data[0]['trigger'], 'send_now')
+        self.assertEqual(resp.data[0]['trigger_display'], 'Send now')
+
+    def test_history_requires_admin(self):
+        report = Report.objects.create(name='R', recipients=['a@x.com'])
+        self.client.force_authenticate(self.regular)
+        self.assertEqual(
+            self.client.get(f'/api/reports/{report.id}/history/').status_code, 403,
+        )
+
+    def test_all_history_paginated_and_filtered(self):
+        self.client.force_authenticate(self.admin)
+        rid1 = self._make_report(name='R1', recipients=['a@x.com'])
+        rid2 = self._make_report(name='R2', recipients=['b@x.com'])
+        self.client.post(f'/api/reports/{rid1}/send_now/')
+        self.client.post(f'/api/reports/{rid2}/send_now/')
+
+        resp = self.client.get('/api/reports/history/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['count'], 2)          # paginated shape
+        self.assertEqual(len(resp.data['results']), 2)
+
+        resp = self.client.get(f'/api/reports/history/?report={rid1}')
+        self.assertEqual(resp.data['count'], 1)
+        self.assertEqual(resp.data['results'][0]['report'], rid1)
+        self.assertEqual(resp.data['results'][0]['report_name'], 'R1')
+
+        self.assertEqual(self.client.get('/api/reports/history/?trigger=test').data['count'], 0)
+        self.assertEqual(self.client.get('/api/reports/history/?status=ok').data['count'], 2)
+        self.assertEqual(self.client.get('/api/reports/history/?status=failed').data['count'], 0)
+
+    def test_all_history_requires_admin(self):
+        self.client.force_authenticate(self.regular)
+        self.assertEqual(self.client.get('/api/reports/history/').status_code, 403)
 
 
 class SchedulingTests(TestCase):

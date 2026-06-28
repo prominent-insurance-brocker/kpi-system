@@ -1396,6 +1396,43 @@ export async function sendReportNow(
   );
 }
 
+export interface ReportSendRecipientResult {
+  email: string;
+  ok: boolean;
+  error: string;
+}
+
+export interface ReportSendEvent {
+  id: number;
+  report: number;
+  report_name: string;
+  trigger: string;               // 'scheduled' | 'send_now' | 'test'
+  trigger_display: string;
+  triggered_by_email: string | null;
+  week_label: string;
+  subject: string;
+  recipients: ReportSendRecipientResult[];
+  sent_count: number;
+  failed_count: number;
+  created_at: string;
+}
+
+// History for a single report.
+export async function getReportHistory(
+  id: number,
+): Promise<ApiResponse<ReportSendEvent[]>> {
+  return fetchApi<ReportSendEvent[]>(`/api/reports/${id}/history/`);
+}
+
+// Combined history across all reports (paginated + filterable by
+// report / trigger / status).
+export async function getAllReportHistory(
+  params?: URLSearchParams,
+): Promise<ApiResponse<PaginatedResponse<ReportSendEvent>>> {
+  const query = params ? `?${params.toString()}` : '';
+  return fetchApi<PaginatedResponse<ReportSendEvent>>(`/api/reports/history/${query}`);
+}
+
 export async function getReportSettings(): Promise<ApiResponse<ReportSetting>> {
   return fetchApi<ReportSetting>('/api/reports/settings/');
 }

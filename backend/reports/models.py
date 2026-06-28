@@ -89,6 +89,46 @@ class ReportSendLog(models.Model):
         return f"{self.report_id} @ {self.week_start} ({self.status})"
 
 
+class ReportSendEvent(models.Model):
+    """Append-only audit log of every digest send (TED-567).
+
+    Unlike ``ReportSendLog`` (one upserted row per week, used only for
+    idempotency), this records *every* individual send — a scheduled run, an
+    on-demand "Send now", or a test — with per-recipient results, so admins can
+    see in the History tab whether a report actually reached its recipients.
+    """
+    TRIGGER_SCHEDULED = 'scheduled'
+    TRIGGER_SEND_NOW = 'send_now'
+    TRIGGER_TEST = 'test'
+    TRIGGER_CHOICES = [
+        (TRIGGER_SCHEDULED, 'Scheduled'),
+        (TRIGGER_SEND_NOW, 'Send now'),
+        (TRIGGER_TEST, 'Test'),
+    ]
+
+    report = models.ForeignKey(
+        Report, on_delete=models.CASCADE, related_name='send_events',
+    )
+    trigger = models.CharField(max_length=20, choices=TRIGGER_CHOICES)
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='report_send_events',
+    )
+    week_label = models.CharField(max_length=100, blank=True)
+    subject = models.CharField(max_length=255, blank=True)
+    # list of {"email": str, "ok": bool, "error": str}
+    recipients = models.JSONField(default=list)
+    sent_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.report_id} {self.trigger} @ {self.created_at}"
+
+
 class ReportSetting(models.Model):
     """Singleton holding the global default send schedule for reports (TED-567).
 

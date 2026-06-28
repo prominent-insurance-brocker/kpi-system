@@ -6,10 +6,15 @@ from rest_framework.response import Response
 
 from roles.permissions import IsAdminUser
 
-from .delivery import deliver_sales_weekly_digest
+from .delivery import deliver_sales_weekly_digest, record_send_event
 from .emails import send_sales_weekly_digest
-from .models import Report, ReportSetting
-from .serializers import ReportSerializer, ReportSettingSerializer
+from .filters import ReportSendEventFilter
+from .models import Report, ReportSendEvent, ReportSetting
+from .serializers import (
+    ReportSendEventSerializer,
+    ReportSerializer,
+    ReportSettingSerializer,
+)
 from .services.sales_weekly_digest import SalesWeeklyDigestService
 
 logger = logging.getLogger(__name__)
@@ -22,6 +27,14 @@ class ReportSettingView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return ReportSetting.load()
+
+
+class AllReportHistoryView(generics.ListAPIView):
+    """Combined, paginated, filterable send history across all reports (admin-only)."""
+    serializer_class = ReportSendEventSerializer
+    permission_classes = [IsAdminUser]
+    filterset_class = ReportSendEventFilter
+    queryset = ReportSendEvent.objects.select_related('report', 'triggered_by').all()
 
 
 class ReportViewSet(viewsets.ModelViewSet):
@@ -63,14 +76,35 @@ class ReportViewSet(viewsets.ModelViewSet):
             )
         try:
             metrics = SalesWeeklyDigestService().build()
-            send_sales_weekly_digest(metrics, recipient, report.subject)
-        except Exception as exc:  # noqa: BLE001 - surface SMTP/render failures
-            logger.error("send_test failed for %s: %s", recipient, exc)
+        except Exception as exc:  # noqa: BLE001 - surface render failures
+            logger.error("send_test build failed: %s", exc)
             return Response(
-                {'error': f'Failed to send test email: {exc}'},
+                {'error': f'Failed to build report: {exc}'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        try:
+            send_sales_weekly_digest(metrics, recipient, report.subject)
+            ok, err = True, ''
+        except Exception as exc:  # noqa: BLE001 - surface SMTP failures
+            logger.error("send_test failed for %s: %s", recipient, exc)
+            ok, err = False, str(exc)
+        record_send_event(
+            report, trigger=ReportSendEvent.TRIGGER_TEST, triggered_by=request.user,
+            week_label=metrics['week_label'], results=[(recipient, ok, err)],
+        )
+        if not ok:
+            return Response(
+                {'error': f'Failed to send test email: {err}'},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
         return Response({'message': f'Test digest sent to {recipient}'})
+
+    @action(detail=True, methods=['get'])
+    def history(self, request, pk=None):
+        """Append-only send history for this report (most recent 50)."""
+        report = self.get_object()
+        events = report.send_events.all()[:50]
+        return Response(ReportSendEventSerializer(events, many=True).data)
 
     @action(detail=True, methods=['post'])
     def send_now(self, request, pk=None):
@@ -89,7 +123,10 @@ class ReportViewSet(viewsets.ModelViewSet):
             )
         try:
             metrics = SalesWeeklyDigestService().build()
-            sent, failed = deliver_sales_weekly_digest(report, metrics)
+            sent, failed = deliver_sales_weekly_digest(
+                report, metrics, trigger=ReportSendEvent.TRIGGER_SEND_NOW,
+                triggered_by=request.user,
+            )
         except Exception as exc:  # noqa: BLE001 - surface render/SMTP failures
             logger.error("send_now failed for report %s: %s", report.id, exc)
             return Response(

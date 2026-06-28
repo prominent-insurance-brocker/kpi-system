@@ -18,7 +18,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from reports.delivery import deliver_sales_weekly_digest
-from reports.models import Report, ReportSendLog, ReportSetting
+from reports.models import Report, ReportSendEvent, ReportSendLog, ReportSetting
 from reports.scheduling import is_due, reporting_week_start
 from reports.services.sales_weekly_digest import SalesWeeklyDigestService
 
@@ -91,7 +91,9 @@ class Command(BaseCommand):
                     self.stdout.write(f"  [DRY RUN] Would send '{report.name}' to {email}")
                 continue
 
-            sent, failed = deliver_sales_weekly_digest(report, metrics)
+            sent, failed = deliver_sales_weekly_digest(
+                report, metrics, trigger=ReportSendEvent.TRIGGER_SCHEDULED,
+            )
             for email in failed:
                 self.stderr.write(self.style.ERROR(f"  FAILED: {email}"))
             if sent == 0:

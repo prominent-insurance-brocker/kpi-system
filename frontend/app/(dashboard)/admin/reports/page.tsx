@@ -28,7 +28,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, MoreHorizontal, Pencil, Trash2, Power, PowerOff, Send, FlaskConical, Clock } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Plus, MoreHorizontal, Pencil, Trash2, Power, PowerOff, Send, FlaskConical, Clock, History } from 'lucide-react';
 import { DataTable, Tooltip } from '@/app/components/DataTable';
 import {
   getReports,
@@ -41,8 +42,11 @@ import {
   sendReportNow,
   getReportSettings,
   updateReportSettings,
+  getReportHistory,
+  getAllReportHistory,
   type Report,
   type ReportSetting,
+  type ReportSendEvent,
 } from '@/app/lib/api';
 import { formatDateTime } from '@/app/lib/date';
 import { toast } from 'sonner';
@@ -78,6 +82,8 @@ export default function ReportsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
+  const [historyReport, setHistoryReport] = useState<Report | null>(null);
+  const [sendingMessage, setSendingMessage] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   // Pagination state
@@ -162,7 +168,9 @@ export default function ReportsPage() {
   };
 
   const handleSendTest = async (report: Report) => {
+    setSendingMessage('Sending a test to your email…');
     const result = await sendTestReport(report.id);
+    setSendingMessage(null);
     if (result.error) {
       toast.error(result.error);
     } else {
@@ -182,7 +190,9 @@ export default function ReportsPage() {
       confirmLabel: 'Send now',
     });
     if (!ok) return;
+    setSendingMessage(`Sending to ${count} recipient${count === 1 ? '' : 's'}…`);
     const result = await sendReportNow(report.id);
+    setSendingMessage(null);
     if (result.error) {
       toast.error(result.error);
     } else {
@@ -269,6 +279,9 @@ export default function ReportsPage() {
               >
                 <Pencil className="h-4 w-4 mr-2" /> Edit
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setHistoryReport(report)}>
+                <History className="h-4 w-4 mr-2" /> View history
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleToggleActive(report)}>
                 {report.is_active ? (
                   <>
@@ -301,43 +314,54 @@ export default function ReportsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Sales Report</h1>
-          <p className="text-muted-foreground">
-            Configure recipients and schedule for the automated Sales Weekly Digest
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setIsScheduleOpen(true)}>
-            <Clock className="h-4 w-4 mr-2" /> Default schedule
-          </Button>
-          <Button
-            onClick={() => {
-              setEditingReport(null);
-              setError('');
-              setIsModalOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" /> Add Report
-          </Button>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold">Sales Report</h1>
+        <p className="text-muted-foreground">
+          Configure recipients and schedule for the automated Sales Weekly Digest
+        </p>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={reports}
-        totalCount={totalCount}
-        page={page}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={(size) => {
-          setPageSize(size);
-          setPage(1);
-        }}
-        isLoading={isLoading}
-        height="h-[calc(100vh-220px)]"
-      />
+      <Tabs defaultValue="configure" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="configure">Configure</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="configure" className="space-y-4 m-0">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsScheduleOpen(true)}>
+              <Clock className="h-4 w-4 mr-2" /> Default schedule
+            </Button>
+            <Button
+              onClick={() => {
+                setEditingReport(null);
+                setError('');
+                setIsModalOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Add Report
+            </Button>
+          </div>
+          <DataTable
+            columns={columns}
+            data={reports}
+            totalCount={totalCount}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+            isLoading={isLoading}
+            height="h-[calc(100vh-300px)]"
+          />
+        </TabsContent>
+
+        <TabsContent value="history" className="m-0">
+          <AllReportHistory reports={reports} />
+        </TabsContent>
+      </Tabs>
 
       <Dialog
         open={isModalOpen}
@@ -361,12 +385,41 @@ export default function ReportsPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={historyReport !== null} onOpenChange={(o) => !o && setHistoryReport(null)}>
+        <DialogContent className="p-0 max-h-[90vh] flex flex-col">
+          <DialogHeader className="border-b border-[#E4E4E4] p-4 shrink-0">
+            <DialogTitle>History — {historyReport?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {historyReport && <ReportHistory reportId={historyReport.id} />}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <DefaultScheduleDialog
         open={isScheduleOpen}
         onOpenChange={setIsScheduleOpen}
         settings={settings}
         onSaved={fetchSettings}
       />
+
+      {/* Blocking "sending…" indicator while a Send now / Send test is in flight. */}
+      <Dialog
+        open={sendingMessage !== null}
+        onOpenChange={(o) => {
+          if (!o) setSendingMessage(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Sending…</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center gap-3 py-2">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900" />
+            <span className="text-sm text-muted-foreground">{sendingMessage}</span>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -541,6 +594,210 @@ function ReportForm({
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+function ReportHistory({ reportId }: { reportId: number }) {
+  const [events, setEvents] = useState<ReportSendEvent[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getReportHistory(reportId).then((r) => {
+      if (active) setEvents(r.data ?? []);
+    });
+    return () => {
+      active = false;
+    };
+  }, [reportId]);
+
+  if (events === null) {
+    return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
+  }
+  if (events.length === 0) {
+    return <div className="p-4 text-sm text-muted-foreground">No sends yet.</div>;
+  }
+  return (
+    <div className="p-4 space-y-3">
+      {events.map((ev) => (
+        <HistoryEvent key={ev.id} ev={ev} />
+      ))}
+    </div>
+  );
+}
+
+function HistoryEvent({ ev }: { ev: ReportSendEvent }) {
+  const [open, setOpen] = useState(false);
+  const hasFailures = ev.failed_count > 0;
+  return (
+    <div className="border border-[#E4E4E4] rounded-lg p-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">{ev.trigger_display}</Badge>
+          <span className="text-sm">{formatDateTime(ev.created_at)}</span>
+        </div>
+        <span className={`text-sm font-medium ${hasFailures ? 'text-red-600' : 'text-green-600'}`}>
+          {ev.sent_count} sent{ev.failed_count ? `, ${ev.failed_count} failed` : ''}
+        </span>
+      </div>
+      <div className="text-xs text-muted-foreground mt-1">
+        {ev.triggered_by_email ? `by ${ev.triggered_by_email}` : 'by system'}
+        {ev.week_label ? ` · ${ev.week_label}` : ''}
+      </div>
+      {ev.recipients.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="text-xs text-blue-600 mt-2"
+          >
+            {open ? 'Hide' : 'Show'} recipients ({ev.recipients.length})
+          </button>
+          {open && (
+            <ul className="mt-2 space-y-1">
+              {ev.recipients.map((r, i) => (
+                <li key={i} className="text-xs flex items-center justify-between gap-2">
+                  <span className="truncate">{r.email}</span>
+                  <span className={r.ok ? 'text-green-600 shrink-0' : 'text-red-600 shrink-0'}>
+                    {r.ok ? 'Sent' : `Failed${r.error ? `: ${r.error}` : ''}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function AllReportHistory({ reports }: { reports: Report[] }) {
+  const [events, setEvents] = useState<ReportSendEvent[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [isLoading, setIsLoading] = useState(true);
+  const [reportFilter, setReportFilter] = useState('all');
+  const [triggerFilter, setTriggerFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('page_size', String(pageSize));
+    if (reportFilter !== 'all') params.set('report', reportFilter);
+    if (triggerFilter !== 'all') params.set('trigger', triggerFilter);
+    if (statusFilter !== 'all') params.set('status', statusFilter);
+    getAllReportHistory(params).then((r) => {
+      if (!active) return;
+      setEvents(r.data?.results ?? []);
+      setTotalCount(r.data?.count ?? 0);
+      setIsLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [page, pageSize, reportFilter, triggerFilter, statusFilter]);
+
+  const columns = [
+    {
+      key: 'report_name',
+      header: 'Report',
+      render: (e: ReportSendEvent) => <span className="font-medium">{e.report_name}</span>,
+    },
+    {
+      key: 'trigger',
+      header: 'Type',
+      render: (e: ReportSendEvent) => <Badge variant="secondary">{e.trigger_display}</Badge>,
+    },
+    {
+      key: 'created_at',
+      header: 'When',
+      render: (e: ReportSendEvent) => formatDateTime(e.created_at),
+    },
+    {
+      key: 'triggered_by_email',
+      header: 'By',
+      render: (e: ReportSendEvent) => e.triggered_by_email || 'system',
+    },
+    {
+      key: 'week_label',
+      header: 'Week',
+      render: (e: ReportSendEvent) => e.week_label || '—',
+    },
+    {
+      key: 'result',
+      header: 'Result',
+      render: (e: ReportSendEvent) => {
+        const failed = e.recipients.filter((r) => !r.ok).map((r) => r.email);
+        const tip = e.failed_count
+          ? `Failed: ${failed.join(', ')}`
+          : `Delivered to ${e.recipients.map((r) => r.email).join(', ') || '—'}`;
+        return (
+          <Tooltip text={tip}>
+            <span className={`cursor-help ${e.failed_count ? 'text-red-600' : 'text-green-600'}`}>
+              {e.sent_count} sent{e.failed_count ? `, ${e.failed_count} failed` : ''}
+            </span>
+          </Tooltip>
+        );
+      },
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={reportFilter} onValueChange={(v) => { setReportFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[200px] h-9 shadow-none">
+            <SelectValue placeholder="Report" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All reports</SelectItem>
+            {reports.map((r) => (
+              <SelectItem key={r.id} value={String(r.id)}>
+                {r.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={triggerFilter} onValueChange={(v) => { setTriggerFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[160px] h-9 shadow-none">
+            <SelectValue placeholder="Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types</SelectItem>
+            <SelectItem value="scheduled">Scheduled</SelectItem>
+            <SelectItem value="send_now">Send now</SelectItem>
+            <SelectItem value="test">Test</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[160px] h-9 shadow-none">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="ok">Delivered</SelectItem>
+            <SelectItem value="failed">Has failures</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <DataTable
+        columns={columns}
+        data={events}
+        totalCount={totalCount}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        isLoading={isLoading}
+        height="h-[calc(100vh-340px)]"
+      />
+    </div>
   );
 }
 

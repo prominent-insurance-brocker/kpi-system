@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from rest_framework import serializers
 
-from .models import Report, ReportSetting
+from .models import Report, ReportSendEvent, ReportSetting
 
 
 def _validate_weekday(value):
@@ -71,6 +71,20 @@ class ReportSerializer(serializers.ModelSerializer):
                 'At least one recipient email is required.'
             )
         return cleaned
+
+
+class ReportSendEventSerializer(serializers.ModelSerializer):
+    trigger_display = serializers.CharField(source='get_trigger_display', read_only=True)
+    triggered_by_email = serializers.EmailField(source='triggered_by.email', read_only=True)
+    report_name = serializers.CharField(source='report.name', read_only=True)
+
+    class Meta:
+        model = ReportSendEvent
+        fields = [
+            'id', 'report', 'report_name', 'trigger', 'trigger_display',
+            'triggered_by_email', 'week_label', 'subject', 'recipients',
+            'sent_count', 'failed_count', 'created_at',
+        ]
 
 
 class ReportSettingSerializer(serializers.ModelSerializer):

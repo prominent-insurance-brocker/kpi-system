@@ -15,59 +15,46 @@
         <!-- Header -->
         <tr>
           <td style="padding:28px 28px 8px 28px;">
-            <span style="display:inline-block; background-color:#e11d63; color:#ffffff; font-size:12px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; padding:5px 12px; border-radius:6px;">Sales Weekly Digest</span>
-            <div style="margin-top:14px; font-size:14px; color:#6b7280;">{{ m.week_label }}</div>
+            <span style="display:inline-block; background-color:#e11d63; color:#ffffff; font-size:13px; font-weight:700; padding:5px 12px; border-radius:6px;">Sales</span>
+            <span style="font-size:18px; font-weight:700; color:#111827; margin-left:8px;">Weekly Digest</span>
+            <div style="margin-top:10px; font-size:13px; color:#6b7280;">{{ m.week_label }}</div>
             <div style="margin-top:2px; font-size:12px; color:#9ca3af;">Compared with {{ m.prior_week_label }}</div>
           </td>
         </tr>
 
-        <!-- Converted Premium -->
+        <!-- Key Metrics -->
         <tr>
-          <td style="padding:16px 28px 4px 28px;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eef2ff; border-radius:10px;">
+          <td style="padding:14px 28px 4px 28px;">
+            <div style="font-size:13px; font-weight:700; color:#374151; margin-bottom:10px;">Key Metrics</div>
+            {% for metric in m.key_metrics %}
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eef2ff; border-radius:10px; margin-bottom:10px;">
               <tr>
-                <td style="padding:20px 22px;">
-                  <div style="font-size:12px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:#6366f1;">Converted Premium</div>
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;">
+                <td style="padding:16px 20px;">
+                  <div style="font-size:11px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:#6366f1;">{{ metric.label }}</div>
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;">
                     <tr>
-                      <td style="font-size:34px; font-weight:800; color:#1e1b4b;">{{ m.converted_premium.display }}</td>
+                      <td style="font-size:28px; font-weight:800; color:#1e1b4b;">{{ metric.display }}</td>
                       <td align="right" style="vertical-align:bottom;">
-                        {% with d=m.converted_premium.delta %}
-                        {% if d.direction == 'up' %}
-                          <span style="font-size:13px; font-weight:700; color:#059669;">&#9650; {{ d.display }}</span>
-                        {% elif d.direction == 'down' %}
-                          <span style="font-size:13px; font-weight:700; color:#dc2626;">&#9660; {{ d.display }}</span>
+                        {% if metric.delta.direction == 'up' %}
+                          <span style="font-size:13px; font-weight:700; color:#059669;">&#9650; {{ metric.delta.display }}</span>
+                        {% elif metric.delta.direction == 'down' %}
+                          <span style="font-size:13px; font-weight:700; color:#dc2626;">&#9660; {{ metric.delta.display }}</span>
                         {% else %}
-                          <span style="font-size:13px; font-weight:700; color:#6b7280;">{{ d.display }}</span>
+                          <span style="font-size:13px; font-weight:700; color:#6b7280;">{{ metric.delta.display }}</span>
                         {% endif %}
-                        <div style="font-size:11px; color:#9ca3af;">vs last week</div>
-                        {% endwith %}
                       </td>
                     </tr>
                   </table>
                 </td>
               </tr>
             </table>
-          </td>
-        </tr>
-
-        <!-- Pending strip -->
-        <tr>
-          <td style="padding:8px 28px 4px 28px;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb; border-radius:10px;">
-              <tr>
-                <td style="padding:14px 22px; font-size:13px; color:#6b7280;">
-                  Pending pipeline <span style="color:#9ca3af;">(Lead + Awaiting Quote + Shared with Client)</span>
-                </td>
-                <td align="right" style="padding:14px 22px; font-size:22px; font-weight:800; color:#111827;">{{ m.pending_count }}</td>
-              </tr>
-            </table>
+            {% endfor %}
           </td>
         </tr>
 
         <!-- Top Performers -->
         <tr>
-          <td style="padding:16px 28px 4px 28px;">
+          <td style="padding:12px 28px 4px 28px;">
             <div style="font-size:13px; font-weight:700; color:#374151; margin-bottom:8px;">Top 5 Performers <span style="color:#9ca3af; font-weight:400;">(ranked by premium)</span></div>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;">
               <tr style="background-color:#f9fafb;">
@@ -88,42 +75,9 @@
           </td>
         </tr>
 
-        <!-- Conversion Rate -->
-        <tr>
-          <td style="padding:16px 28px 4px 28px;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ecfdf5; border-radius:10px;">
-              <tr>
-                <td style="padding:20px 22px;">
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                    <tr>
-                      <td>
-                        <div style="font-size:12px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:#059669;">Conversion Rate</div>
-                        <div style="margin-top:6px; font-size:34px; font-weight:800; color:#064e3b;">{{ m.conversion_rate.display }}</div>
-                        <div style="font-size:11px; color:#6b7280;">{{ m.conversion_rate.won_count }} won of {{ m.conversion_rate.closed_total }} closed</div>
-                      </td>
-                      <td align="right" style="vertical-align:top;">
-                        {% with d=m.conversion_rate.delta %}
-                        {% if d.direction == 'up' %}
-                          <span style="font-size:13px; font-weight:700; color:#059669;">&#9650; {{ d.display }}</span>
-                        {% elif d.direction == 'down' %}
-                          <span style="font-size:13px; font-weight:700; color:#dc2626;">&#9660; {{ d.display }}</span>
-                        {% else %}
-                          <span style="font-size:13px; font-weight:700; color:#6b7280;">{{ d.display }}</span>
-                        {% endif %}
-                        <div style="font-size:11px; color:#9ca3af;">vs last week</div>
-                        {% endwith %}
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-
         <!-- Inactive Users -->
         <tr>
-          <td style="padding:16px 28px 8px 28px;">
+          <td style="padding:16px 28px 4px 28px;">
             <div style="font-size:13px; font-weight:700; color:#374151; margin-bottom:8px;">Inactive Users <span style="color:#9ca3af; font-weight:400;">(no entries on 4+ of Mon–Fri)</span></div>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;">
               <tr style="background-color:#f9fafb;">
@@ -138,6 +92,36 @@
               {% empty %}
               <tr><td colspan="2" style="padding:16px; font-size:13px; color:#9ca3af; text-align:center;">All sales users were active last week.</td></tr>
               {% endfor %}
+            </table>
+          </td>
+        </tr>
+
+        <!-- Conversion Rate -->
+        <tr>
+          <td style="padding:16px 28px 8px 28px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ecfdf5; border-radius:10px;">
+              <tr>
+                <td style="padding:20px 22px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td>
+                        <div style="font-size:12px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:#059669;">Conversion Rate</div>
+                        <div style="margin-top:6px; font-size:34px; font-weight:800; color:#064e3b;">{{ m.conversion_rate.display }}</div>
+                        <div style="font-size:11px; color:#6b7280;">{{ m.conversion_rate.won_count }} won of {{ m.conversion_rate.total }} enquiries</div>
+                      </td>
+                      <td align="right" style="vertical-align:top;">
+                        {% if m.conversion_rate.delta.direction == 'up' %}
+                          <span style="font-size:13px; font-weight:700; color:#059669;">&#9650; {{ m.conversion_rate.delta.display }} vs last week</span>
+                        {% elif m.conversion_rate.delta.direction == 'down' %}
+                          <span style="font-size:13px; font-weight:700; color:#dc2626;">&#9660; {{ m.conversion_rate.delta.display }} vs last week</span>
+                        {% else %}
+                          <span style="font-size:13px; font-weight:700; color:#6b7280;">{{ m.conversion_rate.delta.display }} vs last week</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
             </table>
           </td>
         </tr>

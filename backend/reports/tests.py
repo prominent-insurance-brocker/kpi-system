@@ -1,9 +1,10 @@
-"""Tests for the Sales Weekly Digest metrics service (TED-567).
+"""Tests for the Sales Weekly Digest (TED-567).
 
 Reference date is a fixed Sunday (2026-06-28), so:
   * last week  = Mon 2026-06-15 .. Sun 2026-06-21
   * prior week = Mon 2026-06-08 .. Sun 2026-06-14
   * Mon-Fri inactivity window = 2026-06-15 .. 2026-06-19
+All metrics bucket deals by ``added_at`` local day (Asia/Dubai).
 """
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
@@ -25,129 +26,122 @@ DUBAI = ZoneInfo('Asia/Dubai')
 REF = date(2026, 6, 28)
 
 
-class SalesWeeklyDigestServiceTests(TestCase):
+class MetricsTests(TestCase):
+    """Key Metrics + conversion + top performers, bucketed by added_at."""
+
     @classmethod
     def setUpTestData(cls):
+        cls.coi = ClassOfInsurance.objects.create(name='Motor')
+        # Deals are entered by an ops user; performers are credited via assignee.
+        cls.ops = CustomUser.objects.create(email='ops@x.com', full_name='Ops')
+        cls.alice = CustomUser.objects.create(email='alice@x.com', full_name='Alice A')
+        cls.bob = CustomUser.objects.create(email='bob@x.com', full_name='Bob B')
+        cls.dave = CustomUser.objects.create(email='dave@x.com', full_name='Dave D')
+
+        WON, LOST = SalesKPIEntry.STATUS_WON, SalesKPIEntry.STATUS_LOST
+        LEAD, AQ = SalesKPIEntry.STATUS_LEAD, SalesKPIEntry.STATUS_AWAITING_QUOTE
+        # Last week (added_at Jun 15-21): total 7, won 3, pending 3, lost 1.
+        cls._deal(cls.alice, WON, 100000, 16)
+        cls._deal(cls.alice, WON, 50000, 18)
+        cls._deal(cls.bob, WON, 20000, 17)
+        cls._deal(cls.dave, LOST, None, 19)
+        cls._deal(cls.dave, LEAD, None, 15)
+        cls._deal(cls.dave, LEAD, None, 16)
+        cls._deal(cls.dave, AQ, None, 17)
+        # Prior week (added_at Jun 8-14): total 1, won 1.
+        cls._deal(cls.alice, WON, 100000, 10)
+
+    @classmethod
+    def _deal(cls, assignee, status, converted, day):
+        e = SalesKPIEntry.objects.create(
+            customer_name='C', entry_type='new', class_of_insurance=cls.coi,
+            assignee=assignee, added_by=cls.ops, status=status,
+            date=date(2026, 6, 15), potential_premium=10000, converted_premium=converted,
+        )
+        SalesKPIEntry.objects.filter(id=e.id).update(
+            added_at=datetime(2026, 6, day, 12, tzinfo=DUBAI),
+        )
+
+    def setUp(self):
+        self.m = SalesWeeklyDigestService(ref_date=REF).build()
+        self.km = {c['label']: c for c in self.m['key_metrics']}
+
+    def test_key_metric_values(self):
+        self.assertEqual(self.km['Total Enquiries']['value'], 7)
+        self.assertEqual(self.km['Pending']['value'], 3)
+        self.assertEqual(self.km['Won']['value'], 3)
+        self.assertEqual(self.km['Potential Premium']['value'], 70000.0)
+        self.assertEqual(self.km['Converted Premium']['value'], 170000.0)
+        self.assertEqual(self.km['Potential Premium']['display'], '70K')
+        self.assertEqual(self.km['Converted Premium']['display'], '170K')
+
+    def test_deltas(self):
+        self.assertEqual(self.km['Total Enquiries']['delta']['display'], '+600%')
+        self.assertEqual(self.km['Won']['delta']['display'], '+200%')
+        self.assertEqual(self.km['Converted Premium']['delta']['display'], '+70%')
+        self.assertEqual(self.km['Pending']['delta']['direction'], 'new')  # prior 0
+
+    def test_conversion_rate(self):
+        cr = self.m['conversion_rate']
+        self.assertEqual(cr['value'], 42.9)   # 3 won / 7 total
+        self.assertEqual(cr['won_count'], 3)
+        self.assertEqual(cr['total'], 7)
+        self.assertEqual(cr['delta']['direction'], 'down')  # 42.9% vs 100%
+
+    def test_top_performers(self):
+        performers = self.m['top_performers']
+        self.assertEqual([p['name'] for p in performers], ['Alice A', 'Bob B'])
+        self.assertEqual(performers[0]['premium'], 150000.0)
+        self.assertEqual(performers[0]['won_count'], 2)
+
+
+class InactiveUsersTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.coi = ClassOfInsurance.objects.create(name='Motor')
         cls.role = Role.objects.create(name='Sales', data_visibility='own')
         RoleModulePermission.objects.create(role=cls.role, module='sales_kpi')
-        cls.coi = ClassOfInsurance.objects.create(name='Motor')
 
         def user(email, name):
             return CustomUser.objects.create(email=email, full_name=name, role=cls.role)
-
         cls.alice = user('alice@x.com', 'Alice A')
         cls.bob = user('bob@x.com', 'Bob B')
         cls.carol = user('carol@x.com', 'Carol C')
         cls.dave = user('dave@x.com', 'Dave D')
         cls.eve = user('eve@x.com', 'Eve E')
 
-        # --- closed deals (premium / conversion / performers) --------------
-        # Last week wins: Alice 100k + 50k (2), Bob 20k (1)  => premium 170k
-        cls._deal(cls.alice, 'won', 100000, closed_day=16)
-        cls._deal(cls.alice, 'won', 50000, closed_day=18)
-        cls._deal(cls.bob, 'won', 20000, closed_day=17)
-        # Last week loss (Dave) -> closed_total = 4, conversion = 3/4 = 75%
-        cls._deal(cls.dave, 'lost', 0, closed_day=19)
-        # Prior week win: 100k, no losses -> prior conversion = 100%
-        cls._deal(cls.alice, 'won', 100000, closed_day=10)
-
-        # --- open pipeline (pending snapshot, date-independent) ------------
-        cls._open(cls.alice, SalesKPIEntry.STATUS_LEAD)
-        cls._open(cls.alice, SalesKPIEntry.STATUS_AWAITING_QUOTE)
-        cls._open(cls.bob, SalesKPIEntry.STATUS_SHARED_WITH_CLIENT)
-
-        # --- Mon-Fri logging activity (inactive-user detection) -----------
-        # Active on >1 weekday => active; <=1 => inactive; none => Never.
         cls._activity(cls.alice, [15, 16, 17, 18, 19])
-        cls._activity(cls.bob, [15, 16])
-        # 1 weekday in last week's window (Jun 15) -> inactive; the Jun 1 / Jun 8
-        # entries are out-of-window but exercise the all-time "Last Used" = max.
-        cls._activity(cls.carol, [1, 8, 15])
         cls._activity(cls.dave, [15, 16, 17, 18, 19])
-        # eve: no activity at all -> inactive, last_used "Never"
-
-    # -- factory helpers ----------------------------------------------------
-    @classmethod
-    def _base(cls, assignee, status):
-        # `date` (the enquiry date) is required but irrelevant to these metrics,
-        # which bucket by status_changed_at / added_at.
-        return SalesKPIEntry.objects.create(
-            customer_name='C', entry_type='new', class_of_insurance=cls.coi,
-            assignee=assignee, added_by=assignee, status=status,
-            date=date(2026, 6, 15),
-        )
-
-    @classmethod
-    def _deal(cls, assignee, status, converted, closed_day):
-        e = cls._base(assignee, status)
-        SalesKPIEntry.objects.filter(id=e.id).update(
-            converted_premium=converted,
-            status_changed_at=datetime(2026, 6, closed_day, 12, tzinfo=DUBAI),
-        )
-
-    @classmethod
-    def _open(cls, assignee, status):
-        cls._base(assignee, status)
+        cls._activity(cls.bob, [15, 16])
+        cls._activity(cls.carol, [1, 8, 15])   # 1 weekday in window -> inactive
+        # eve: no activity -> inactive, Last Used "Never"
 
     @classmethod
     def _activity(cls, user, days):
-        # status_changed_at stays null -> invisible to closed/premium metrics;
-        # counts only as a logged entry on its added_at local day.
         for d in days:
-            e = cls._base(user, SalesKPIEntry.STATUS_WON)
+            e = SalesKPIEntry.objects.create(
+                customer_name='A', entry_type='new', class_of_insurance=cls.coi,
+                assignee=user, added_by=user, status=SalesKPIEntry.STATUS_LEAD,
+                date=date(2026, 6, 15),
+            )
             SalesKPIEntry.objects.filter(id=e.id).update(
                 added_at=datetime(2026, 6, d, 10, tzinfo=DUBAI),
             )
 
-    # -- tests --------------------------------------------------------------
-    def setUp(self):
-        self.m = SalesWeeklyDigestService(ref_date=REF).build()
-
-    def test_week_windows(self):
-        self.assertEqual(self.m['week_start'], date(2026, 6, 15))
-        self.assertEqual(self.m['week_end'], date(2026, 6, 21))
-
-    def test_converted_premium_and_delta(self):
-        cp = self.m['converted_premium']
-        self.assertEqual(cp['value'], 170000.0)
-        self.assertEqual(cp['prior'], 100000.0)
-        self.assertEqual(cp['delta']['pct'], 70.0)
-        self.assertEqual(cp['delta']['direction'], 'up')
-
-    def test_conversion_rate_and_delta(self):
-        cr = self.m['conversion_rate']
-        self.assertEqual(cr['value'], 75.0)        # 3 won / 4 closed
-        self.assertEqual(cr['won_count'], 3)
-        self.assertEqual(cr['closed_total'], 4)
-        self.assertEqual(cr['prior'], 100.0)
-        self.assertEqual(cr['delta']['pct'], -25.0)
-        self.assertEqual(cr['delta']['direction'], 'down')
-
-    def test_top_performers_assignee_and_order(self):
-        performers = self.m['top_performers']
-        self.assertEqual(len(performers), 2)
-        self.assertEqual(performers[0]['name'], 'Alice A')
-        self.assertEqual(performers[0]['premium'], 150000.0)
-        self.assertEqual(performers[0]['won_count'], 2)
-        self.assertEqual(performers[1]['name'], 'Bob B')
-        self.assertEqual(performers[1]['won_count'], 1)
-
-    def test_pending_snapshot(self):
-        self.assertEqual(self.m['pending_count'], 3)
-
     def test_inactive_users(self):
-        names = {u['name'] for u in self.m['inactive_users']}
+        m = SalesWeeklyDigestService(ref_date=REF).build()
+        names = {u['name'] for u in m['inactive_users']}
         self.assertEqual(names, {'Carol C', 'Eve E'})
-        eve = next(u for u in self.m['inactive_users'] if u['name'] == 'Eve E')
+        eve = next(u for u in m['inactive_users'] if u['name'] == 'Eve E')
         self.assertIsNone(eve['last_used'])
         self.assertEqual(eve['last_used_display'], 'Never')
-        # Carol logged only on Mon 2026-06-15 -> that is her all-time Last Used.
-        carol = next(u for u in self.m['inactive_users'] if u['name'] == 'Carol C')
+        # Carol logged Jun 1 / 8 / 15 -> all-time Last Used is the max (Jun 15).
+        carol = next(u for u in m['inactive_users'] if u['name'] == 'Carol C')
         self.assertEqual(carol['last_used'], '2026-06-15')
 
 
 class ReportAPITests(TestCase):
-    """Admin-only CRUD + activate/deactivate/send_test for the Reports API."""
+    """Admin-only CRUD + activate/deactivate/send_test/send_now + subject/schedule."""
 
     def setUp(self):
         self.admin = CustomUser.objects.create(
@@ -170,9 +164,8 @@ class ReportAPITests(TestCase):
         )
         self.assertEqual(r.status_code, 201, r.content)
         rid = r.data['id']
-        # Lowercased + deduped by the serializer.
         self.assertEqual(r.data['recipients'], ['a@x.com', 'b@x.com'])
-        self.assertFalse(r.data['is_active'])  # created inactive
+        self.assertFalse(r.data['is_active'])
 
         self.assertEqual(self.client.post(f'/api/reports/{rid}/activate/').status_code, 200)
         self.assertTrue(Report.objects.get(id=rid).is_active)
@@ -196,13 +189,10 @@ class ReportAPITests(TestCase):
 
     def test_empty_recipients_rejected(self):
         self.client.force_authenticate(self.admin)
-        r = self.client.post(
-            '/api/reports/', {'name': 'D', 'recipients': []}, format='json',
-        )
+        r = self.client.post('/api/reports/', {'name': 'D', 'recipients': []}, format='json')
         self.assertEqual(r.status_code, 400)
 
     def test_recipients_required_on_create(self):
-        # Omitting recipients entirely must also be rejected (not silently []).
         self.client.force_authenticate(self.admin)
         r = self.client.post('/api/reports/', {'name': 'D'}, format='json')
         self.assertEqual(r.status_code, 400)
@@ -219,23 +209,18 @@ class ReportAPITests(TestCase):
         resp = self.client.post(f'/api/reports/{rid}/send_now/')
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertEqual(resp.data['sent'], 2)
-        # Goes to the configured recipients, NOT the requesting admin.
         self.assertEqual(sorted(m.to[0] for m in mail.outbox), ['a@x.com', 'b@x.com'])
         self.assertTrue(ReportSendLog.objects.filter(report_id=rid).exists())
 
     def test_send_now_requires_recipients(self):
-        # A report with no recipients can't exist via the API, but guard anyway.
         report = Report.objects.create(name='Empty', recipients=[])
         self.client.force_authenticate(self.admin)
-        resp = self.client.post(f'/api/reports/{report.id}/send_now/')
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(self.client.post(f'/api/reports/{report.id}/send_now/').status_code, 400)
 
     def test_send_now_requires_admin(self):
         report = Report.objects.create(name='R', recipients=['a@x.com'])
         self.client.force_authenticate(self.regular)
-        self.assertEqual(
-            self.client.post(f'/api/reports/{report.id}/send_now/').status_code, 403,
-        )
+        self.assertEqual(self.client.post(f'/api/reports/{report.id}/send_now/').status_code, 403)
 
     def test_custom_subject_used_in_email(self):
         self.client.force_authenticate(self.admin)
@@ -276,9 +261,6 @@ class ReportAPITests(TestCase):
             format='json',
         )
         self.assertEqual(r.status_code, 400)
-
-
-DUBAI = ZoneInfo('Asia/Dubai')
 
 
 class SchedulingTests(TestCase):

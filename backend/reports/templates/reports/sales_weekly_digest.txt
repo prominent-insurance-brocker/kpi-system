@@ -11,7 +11,7 @@ TOP 5 PERFORMERS (ranked by premium)
 {% for p in m.top_performers %}  {{ forloop.counter }}. {{ p.name }} — Premium {{ p.premium_display }}, Won {{ p.won_count }}
 {% empty %}  No deals won last week.
 {% endfor %}
-INACTIVE USERS (no entries on 4+ of Mon-Fri)
+INACTIVE USERS
 {% for u in m.inactive_users %}  - {{ u.name }} (Last Used: {{ u.last_used_display }})
 {% empty %}  All sales users were active last week.
 {% endfor %}

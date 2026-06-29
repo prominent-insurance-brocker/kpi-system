@@ -6,55 +6,55 @@
 <meta name="color-scheme" content="light only">
 <title>{{ subject }}</title>
 <style>
-  /* Progressive enhancement: mobile clients that honour <style> tighten up;
-     others still get the fluid (width:100%/max-width:600px) layout below. */
   @media only screen and (max-width: 600px) {
     .container { width: 100% !important; }
-    .m-pad { padding-left: 16px !important; padding-right: 16px !important; }
+    .m-pad { padding-left: 18px !important; padding-right: 18px !important; }
+    .m-title { font-size: 26px !important; }
+    .m-head { font-size: 20px !important; }
     .m-big { font-size: 26px !important; }
-    .m-rate { font-size: 30px !important; }
-    .m-logo { width: 140px !important; }
+    .m-rate { font-size: 34px !important; }
+    .m-logo { width: 150px !important; }
   }
 </style>
 </head>
 <body style="margin:0; padding:0; background-color:#f3f4f6; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;">
   <tr>
-    <td align="center" style="padding:20px 8px;">
+    <td align="center" style="padding:28px 8px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="container" style="width:100%; max-width:600px; background-color:#ffffff; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb;">
 
         <!-- Header -->
         <tr>
-          <td align="center" class="m-pad" style="padding:30px 28px 10px 28px;">
-            <img src="cid:{{ logo_cid }}" alt="Prominent Insurance Brokers" width="170" class="m-logo" style="display:inline-block; width:170px; max-width:60%; height:auto; border:0;">
-            <div style="margin-top:16px;">
-              <span style="display:inline-block; background-color:#e11d63; color:#ffffff; font-size:13px; font-weight:700; padding:4px 10px; border-radius:6px;">Sales</span>
-              <span style="font-size:18px; font-weight:700; color:#111827; margin-left:6px;">Weekly Digest</span>
+          <td align="center" class="m-pad" style="padding:44px 28px 14px 28px;">
+            <img src="cid:{{ logo_cid }}" alt="Prominent Insurance Brokers" width="180" class="m-logo" style="display:inline-block; width:180px; max-width:62%; height:auto; border:0;">
+            <div style="margin-top:28px;">
+              <span style="display:inline-block; vertical-align:middle; background-color:#e11d63; color:#ffffff; font-size:15px; font-weight:700; padding:5px 12px; border-radius:7px;">Sales</span>
+              <span class="m-title" style="vertical-align:middle; font-size:30px; font-weight:800; color:#111827; margin-left:10px;">Weekly Digest</span>
             </div>
-            <div style="margin-top:8px; font-size:13px; color:#6b7280;">{{ m.week_label }}</div>
-            <div style="margin-top:2px; font-size:12px; color:#9ca3af;">Compared with {{ m.prior_week_label }}</div>
+            <div style="margin-top:14px; font-size:14px; color:#6b7280;">{{ m.week_label }}</div>
+            <div style="margin-top:3px; font-size:13px; color:#9ca3af;">Compared with {{ m.prior_week_label }}</div>
           </td>
         </tr>
 
         <!-- Key Metrics -->
         <tr>
-          <td class="m-pad" style="padding:14px 28px 4px 28px;">
-            <div style="font-size:13px; font-weight:700; color:#374151; margin-bottom:10px;">Key Metrics</div>
+          <td class="m-pad" style="padding:32px 28px 4px 28px;">
+            <div class="m-head" style="font-size:22px; font-weight:700; color:#111827; margin-bottom:14px;">Key Metrics</div>
             {% for metric in m.key_metrics %}
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eef2ff; border-radius:10px; margin-bottom:10px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eef2ff; border-radius:10px; margin-bottom:12px;">
               <tr>
-                <td style="padding:16px 20px;">
-                  <div style="font-size:11px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:#6366f1;">{{ metric.label }}</div>
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;">
+                <td style="padding:18px 22px;">
+                  <div style="font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#94a3b8;">{{ metric.label }}</div>
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;">
                     <tr>
                       <td class="m-big" style="font-size:28px; font-weight:800; color:#1e1b4b;">{{ metric.display }}</td>
                       <td align="right" style="vertical-align:bottom;">
                         {% if metric.delta.direction == 'up' %}
-                          <span style="font-size:13px; font-weight:700; color:#059669;">&#9650; {{ metric.delta.display }}</span>
+                          <span style="display:inline-block; padding:4px 9px; border-radius:7px; background-color:#e7f8f0; color:#059669; font-size:13px; font-weight:700;">&#9650; {{ metric.delta.display }}</span>
                         {% elif metric.delta.direction == 'down' %}
-                          <span style="font-size:13px; font-weight:700; color:#dc2626;">&#9660; {{ metric.delta.display }}</span>
+                          <span style="display:inline-block; padding:4px 9px; border-radius:7px; background-color:#fdecec; color:#dc2626; font-size:13px; font-weight:700;">&#9660; {{ metric.delta.display }}</span>
                         {% else %}
-                          <span style="font-size:13px; font-weight:700; color:#6b7280;">{{ metric.delta.display }}</span>
+                          <span style="display:inline-block; padding:4px 9px; border-radius:7px; background-color:#f3f4f6; color:#6b7280; font-size:13px; font-weight:700;">{{ metric.delta.display }}</span>
                         {% endif %}
                       </td>
                     </tr>
@@ -68,8 +68,13 @@
 
         <!-- Top Performers -->
         <tr>
-          <td class="m-pad" style="padding:12px 28px 4px 28px;">
-            <div style="font-size:13px; font-weight:700; color:#374151; margin-bottom:8px;">Top 5 Performers <span style="color:#9ca3af; font-weight:400;">(ranked by premium)</span></div>
+          <td class="m-pad" style="padding:30px 28px 4px 28px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;">
+              <tr>
+                <td class="m-head" style="font-size:22px; font-weight:700; color:#111827;">Top 5 Performers</td>
+                <td align="right" style="font-size:13px; color:#9ca3af; vertical-align:bottom;">ranked by premium</td>
+              </tr>
+            </table>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;">
               <tr style="background-color:#f9fafb;">
                 <td style="padding:10px 16px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#9ca3af;">Performer</td>
@@ -78,7 +83,7 @@
               </tr>
               {% for p in m.top_performers %}
               <tr style="border-top:1px solid #f3f4f6;">
-                <td style="padding:12px 16px; font-size:14px; color:#111827;"><span style="display:inline-block; width:20px; color:#9ca3af; font-weight:700;">{{ forloop.counter }}</span>{{ p.name }}</td>
+                <td style="padding:12px 16px; font-size:14px; font-weight:700; color:#111827;"><span style="display:inline-block; width:20px; color:#9ca3af; font-weight:700;">{{ forloop.counter }}</span>{{ p.name }}</td>
                 <td align="right" style="padding:12px 16px; font-size:14px; font-weight:700; color:#111827;">{{ p.premium_display }}</td>
                 <td align="right" style="padding:12px 16px; font-size:14px; font-weight:700; color:#059669;">{{ p.won_count }}</td>
               </tr>
@@ -91,8 +96,8 @@
 
         <!-- Inactive Users -->
         <tr>
-          <td class="m-pad" style="padding:16px 28px 4px 28px;">
-            <div style="font-size:13px; font-weight:700; color:#374151; margin-bottom:8px;">Inactive Users <span style="color:#9ca3af; font-weight:400;">(no entries on 4+ of Mon–Fri)</span></div>
+          <td class="m-pad" style="padding:30px 28px 4px 28px;">
+            <div class="m-head" style="font-size:22px; font-weight:700; color:#111827; margin-bottom:14px;">Inactive Users</div>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;">
               <tr style="background-color:#f9fafb;">
                 <td style="padding:10px 16px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#9ca3af;">User</td>
@@ -100,7 +105,7 @@
               </tr>
               {% for u in m.inactive_users %}
               <tr style="border-top:1px solid #f3f4f6;">
-                <td style="padding:12px 16px; font-size:14px; color:#111827;">{{ u.name }}</td>
+                <td style="padding:12px 16px; font-size:14px; font-weight:700; color:#111827;">{{ u.name }}</td>
                 <td align="right" style="padding:12px 16px; font-size:14px; color:#6b7280;">{{ u.last_used_display }}</td>
               </tr>
               {% empty %}
@@ -112,24 +117,24 @@
 
         <!-- Conversion Rate -->
         <tr>
-          <td class="m-pad" style="padding:16px 28px 8px 28px;">
+          <td class="m-pad" style="padding:30px 28px 10px 28px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ecfdf5; border-radius:10px;">
               <tr>
-                <td style="padding:20px 22px;">
+                <td style="padding:22px 22px;">
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                     <tr>
                       <td>
                         <div style="font-size:12px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:#059669;">Conversion Rate</div>
-                        <div class="m-rate" style="margin-top:6px; font-size:34px; font-weight:800; color:#064e3b;">{{ m.conversion_rate.display }}</div>
-                        <div style="font-size:11px; color:#6b7280;">{{ m.conversion_rate.won_count }} won of {{ m.conversion_rate.total }} enquiries</div>
+                        <div class="m-rate" style="margin-top:12px; font-size:36px; font-weight:800; color:#064e3b;">{{ m.conversion_rate.display }}</div>
+                        <div style="margin-top:4px; font-size:12px; color:#6b7280;">{{ m.conversion_rate.won_count }} won of {{ m.conversion_rate.total }} enquiries</div>
                       </td>
                       <td align="right" style="vertical-align:top;">
                         {% if m.conversion_rate.delta.direction == 'up' %}
                           <span style="font-size:13px; font-weight:700; color:#059669;">&#9650; {{ m.conversion_rate.delta.display }} vs last week</span>
                         {% elif m.conversion_rate.delta.direction == 'down' %}
-                          <span style="font-size:13px; font-weight:700; color:#dc2626;">&#9660; {{ m.conversion_rate.delta.display }} vs last week</span>
+                          <span style="font-size:13px; font-weight:700; color:#059669;">&#9660; {{ m.conversion_rate.delta.display }} vs last week</span>
                         {% else %}
-                          <span style="font-size:13px; font-weight:700; color:#6b7280;">{{ m.conversion_rate.delta.display }} vs last week</span>
+                          <span style="font-size:13px; font-weight:700; color:#059669;">{{ m.conversion_rate.delta.display }} vs last week</span>
                         {% endif %}
                       </td>
                     </tr>
@@ -142,7 +147,7 @@
 
         <!-- Footer -->
         <tr>
-          <td class="m-pad" style="padding:18px 28px 28px 28px;">
+          <td class="m-pad" style="padding:24px 28px 30px 28px;">
             <hr style="border:none; border-top:1px solid #e5e7eb; margin:0 0 14px 0;">
             <div style="font-size:11px; color:#9ca3af;">This is an automated, system-generated report. Generated {{ m.generated_at }}.</div>
           </td>

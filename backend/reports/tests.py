@@ -132,7 +132,10 @@ class DeltaTests(TestCase):
         self.assertEqual((down['arrow'], down['color']), (self.DOWN, self.GREEN))
 
 
-class InactiveUsersTests(TestCase):
+class ActivityTests(TestCase):
+    """TED-576: 'Activity' lists every sales-team user with their active-day
+    count as N/7 over the full Mon-Sun week, least active first."""
+
     @classmethod
     def setUpTestData(cls):
         cls.coi = ClassOfInsurance.objects.create(name='Motor')
@@ -147,14 +150,15 @@ class InactiveUsersTests(TestCase):
         cls.dave = user('dave@x.com', 'Dave D')
         cls.eve = user('eve@x.com', 'Eve E')
 
-        cls._activity(cls.alice, [15, 16, 17, 18, 19])
-        cls._activity(cls.dave, [15, 16, 17, 18, 19])
-        cls._activity(cls.bob, [15, 16])
-        cls._activity(cls.carol, [1, 8, 15])   # 1 weekday in window -> inactive
-        # eve: no activity -> inactive, Last Used "Never"
+        # Last week = Mon 2026-06-15 .. Sun 2026-06-21 (Sat=20, Sun=21).
+        cls._log(cls.alice, [15, 16, 17, 18, 19, 20, 21])  # all 7 days -> 7/7
+        cls._log(cls.bob, [15, 16])                         # 2/7
+        cls._log(cls.carol, [20, 21])                       # weekend only -> 2/7 (Mon-Sun)
+        cls._log(cls.eve, [15])                             # 1/7
+        # dave: no entries -> 0/7
 
     @classmethod
-    def _activity(cls, user, days):
+    def _log(cls, user, days):
         for d in days:
             e = SalesKPIEntry.objects.create(
                 customer_name='A', entry_type='new', class_of_insurance=cls.coi,
@@ -165,16 +169,22 @@ class InactiveUsersTests(TestCase):
                 added_at=datetime(2026, 6, d, 10, tzinfo=DUBAI),
             )
 
-    def test_inactive_users(self):
-        m = SalesWeeklyDigestService(ref_date=REF).build()
-        names = {u['name'] for u in m['inactive_users']}
-        self.assertEqual(names, {'Carol C', 'Eve E'})
-        eve = next(u for u in m['inactive_users'] if u['name'] == 'Eve E')
-        self.assertIsNone(eve['last_used'])
-        self.assertEqual(eve['last_used_display'], 'Never')
-        # Carol logged Jun 1 / 8 / 15 -> all-time Last Used is the max (Jun 15).
-        carol = next(u for u in m['inactive_users'] if u['name'] == 'Carol C')
-        self.assertEqual(carol['last_used'], '2026-06-15')
+    def test_lists_all_users_with_count_out_of_7(self):
+        activity = SalesWeeklyDigestService(ref_date=REF).build()['activity']
+        self.assertEqual(len(activity), 5)  # every sales-team user
+        by_name = {u['name']: u['display'] for u in activity}
+        self.assertEqual(by_name['Alice A'], '7/7')
+        self.assertEqual(by_name['Bob B'], '2/7')
+        self.assertEqual(by_name['Carol C'], '2/7')  # Sat+Sun counted (Mon-Sun)
+        self.assertEqual(by_name['Dave D'], '0/7')
+        self.assertEqual(by_name['Eve E'], '1/7')
+
+    def test_sorted_least_active_first(self):
+        activity = SalesWeeklyDigestService(ref_date=REF).build()['activity']
+        self.assertEqual(
+            [u['name'] for u in activity],
+            ['Dave D', 'Eve E', 'Bob B', 'Carol C', 'Alice A'],
+        )
 
 
 class ReportAPITests(TestCase):

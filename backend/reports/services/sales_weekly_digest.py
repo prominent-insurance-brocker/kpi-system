@@ -14,14 +14,14 @@ Key Metrics (each with a week-over-week delta), matching the design mockup:
   Total Enquiries, Pending (lead+awaiting_quote+shared_with_client), Won,
   Potential Premium, Converted Premium. Plus Conversion Rate (Won / Total),
   Top 5 Performers (by the logging user `added_by`, ranked by converted
-  premium — TED-575) and Inactive
-  Users (sales team with entries on <= 1 weekday of Mon-Fri).
+  premium — TED-575) and Activity (each sales-team user's active-day count
+  that week as N/7, Mon-Sun — TED-576).
 """
 from __future__ import annotations
 
 from datetime import datetime, time, timedelta
 
-from django.db.models import Count, Max, Sum
+from django.db.models import Count, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 
@@ -35,10 +35,6 @@ OPEN_STATUSES = [
     SalesKPIEntry.STATUS_AWAITING_QUOTE,
     SalesKPIEntry.STATUS_SHARED_WITH_CLIENT,
 ]
-
-# A user is "inactive" if they logged entries on at most this many weekdays of
-# the Mon->Fri working week — i.e. zero entries on more than 3 of the 5 days.
-MAX_ACTIVE_WEEKDAYS_FOR_INACTIVE = 1
 
 
 def _short_currency(value):
@@ -177,8 +173,9 @@ class SalesWeeklyDigestService:
             })
         return performers
 
-    def _inactive_users(self):
-        """Sales users who logged entries on <= 1 weekday of last Mon->Fri."""
+    def _activity(self):
+        """Every active sales-team user with their active-day count over the
+        week, as ``N/7`` (Mon-Sun) — least active first (TED-576)."""
         team = list(
             CustomUser.objects.filter(
                 is_active=True,
@@ -190,7 +187,7 @@ class SalesWeeklyDigestService:
             return []
         team_ids = [u.id for u in team]
 
-        lo, hi = self._bounds(self.last_start, self.last_friday)
+        lo, hi = self._bounds(self.last_start, self.last_end)  # full Mon-Sun week
         active_days = {}
         rows = (
             SalesKPIEntry.objects.filter(
@@ -204,36 +201,16 @@ class SalesWeeklyDigestService:
         for r in rows:
             active_days.setdefault(r['added_by_id'], set()).add(r['day'])
 
-        inactive_ids = [
-            uid for uid in team_ids
-            if len(active_days.get(uid, ())) <= MAX_ACTIVE_WEEKDAYS_FOR_INACTIVE
-        ]
-        if not inactive_ids:
-            return []
-
-        last_used = {
-            r['added_by_id']: r['last']
-            for r in (
-                SalesKPIEntry.objects.filter(added_by_id__in=inactive_ids)
-                .annotate(day=TruncDate('added_at', tzinfo=self.tz))
-                .values('added_by_id')
-                .annotate(last=Max('day'))
-                .order_by()
-            )
-        }
-
-        by_id = {u.id: u for u in team}
         result = []
-        for uid in inactive_ids:
-            user = by_id[uid]
-            day = last_used.get(uid)
+        for u in team:
+            days = len(active_days.get(u.id, ()))
             result.append({
-                'name': user.full_name or user.email,
-                'email': user.email,
-                'last_used': day.isoformat() if day else None,
-                'last_used_display': day.strftime('%b %d, %Y') if day else 'Never',
+                'name': u.full_name or u.email,
+                'days': days,
+                'display': f"{days}/7",
             })
-        result.sort(key=lambda r: (r['last_used'] is not None, r['last_used'] or ''), reverse=True)
+        # Least active first, then alphabetical.
+        result.sort(key=lambda r: (r['days'], r['name'].lower()))
         return result
 
     # -- public API ---------------------------------------------------------
@@ -273,7 +250,7 @@ class SalesWeeklyDigestService:
                 'total': last['total'],
             },
             'top_performers': self._top_performers(),
-            'inactive_users': self._inactive_users(),
+            'activity': self._activity(),
             'generated_at': timezone.localtime().strftime('%b %d, %Y %H:%M'),
         }
 

@@ -13,7 +13,8 @@ half-open ranges ``[lo, hi)`` built from local-midnight boundaries.
 Key Metrics (each with a week-over-week delta), matching the design mockup:
   Total Enquiries, Pending (lead+awaiting_quote+shared_with_client), Won,
   Potential Premium, Converted Premium. Plus Conversion Rate (Won / Total),
-  Top 5 Performers (by assignee, ranked by converted premium) and Inactive
+  Top 5 Performers (by the logging user `added_by`, ranked by converted
+  premium — TED-575) and Inactive
   Users (sales team with entries on <= 1 weekday of Mon-Fri).
 """
 from __future__ import annotations
@@ -142,13 +143,13 @@ class SalesWeeklyDigestService:
         )
         rows = (
             won_qs
-            .values('assignee_id', 'assignee__full_name', 'assignee__email')
+            .values('added_by_id', 'added_by__full_name', 'added_by__email')
             .annotate(premium=Sum('converted_premium'), won_count=Count('id'))
             .order_by('-premium', '-won_count')[:5]
         )
         performers = []
         for r in rows:
-            name = r['assignee__full_name'] or r['assignee__email']
+            name = r['added_by__full_name'] or r['added_by__email']
             premium = float(r['premium'] or 0)
             performers.append({
                 'name': name,

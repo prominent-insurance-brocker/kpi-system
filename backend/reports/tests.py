@@ -20,7 +20,7 @@ from roles.models import Role, RoleModulePermission
 
 from .models import Report, ReportSendEvent, ReportSendLog, ReportSetting
 from .scheduling import effective_schedule, is_due
-from .services.sales_weekly_digest import SalesWeeklyDigestService
+from .services.sales_weekly_digest import SalesWeeklyDigestService, _delta
 
 DUBAI = ZoneInfo('Asia/Dubai')
 REF = date(2026, 6, 28)
@@ -32,8 +32,8 @@ class MetricsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.coi = ClassOfInsurance.objects.create(name='Motor')
-        # Deals are entered by an ops user; performers are credited via assignee.
-        cls.ops = CustomUser.objects.create(email='ops@x.com', full_name='Ops')
+        # TED-575: top performers are credited to added_by (the logging user),
+        # so each deal is logged BY its performer.
         cls.alice = CustomUser.objects.create(email='alice@x.com', full_name='Alice A')
         cls.bob = CustomUser.objects.create(email='bob@x.com', full_name='Bob B')
         cls.dave = CustomUser.objects.create(email='dave@x.com', full_name='Dave D')
@@ -52,10 +52,10 @@ class MetricsTests(TestCase):
         cls._deal(cls.alice, WON, 100000, 10)
 
     @classmethod
-    def _deal(cls, assignee, status, converted, day):
+    def _deal(cls, performer, status, converted, day):
         e = SalesKPIEntry.objects.create(
             customer_name='C', entry_type='new', class_of_insurance=cls.coi,
-            assignee=assignee, added_by=cls.ops, status=status,
+            assignee=performer, added_by=performer, status=status,
             date=date(2026, 6, 15), potential_premium=10000, converted_premium=converted,
         )
         SalesKPIEntry.objects.filter(id=e.id).update(
@@ -93,6 +93,42 @@ class MetricsTests(TestCase):
         self.assertEqual([p['name'] for p in performers], ['Alice A', 'Bob B'])
         self.assertEqual(performers[0]['premium'], 150000.0)
         self.assertEqual(performers[0]['won_count'], 2)
+
+    def test_top_performers_credited_to_added_by_not_assignee(self):
+        # TED-575: a won deal logged BY 'Logger' but ASSIGNED to 'Assignee'
+        # must be credited to the logging user (added_by), not the assignee.
+        logger_u = CustomUser.objects.create(email='logger@x.com', full_name='Logger L')
+        assignee_u = CustomUser.objects.create(email='assignee@x.com', full_name='Assignee A')
+        e = SalesKPIEntry.objects.create(
+            customer_name='C', entry_type='new', class_of_insurance=self.coi,
+            assignee=assignee_u, added_by=logger_u, status=SalesKPIEntry.STATUS_WON,
+            date=date(2026, 6, 15), converted_premium=999999,
+        )
+        SalesKPIEntry.objects.filter(id=e.id).update(
+            added_at=datetime(2026, 6, 17, 12, tzinfo=DUBAI),
+        )
+        top = SalesWeeklyDigestService(ref_date=REF).build()['top_performers'][0]
+        self.assertEqual(top['name'], 'Logger L')      # added_by, not assignee
+        self.assertEqual(top['premium'], 999999.0)
+
+
+class DeltaTests(TestCase):
+    GREEN, RED = '#059669', '#dc2626'
+
+    UP, DOWN = '&#9650;', '&#9660;'
+
+    def test_normal_metric_increase_green_decrease_red(self):
+        up = _delta(10, 5)
+        self.assertEqual((up['arrow'], up['color']), (self.UP, self.GREEN))
+        down = _delta(5, 10)
+        self.assertEqual((down['arrow'], down['color']), (self.DOWN, self.RED))
+
+    def test_pending_reversed_increase_red_decrease_green(self):
+        # TED-579: Pending increase is bad (red, up arrow); decrease good (green, down arrow).
+        up = _delta(10, 5, reverse=True)
+        self.assertEqual((up['arrow'], up['color']), (self.UP, self.RED))
+        down = _delta(5, 10, reverse=True)
+        self.assertEqual((down['arrow'], down['color']), (self.DOWN, self.GREEN))
 
 
 class InactiveUsersTests(TestCase):

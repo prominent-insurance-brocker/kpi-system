@@ -35,6 +35,10 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     # TED-477: per-user opt-out for the send_daily_magic_links cron. Admins
     # can flip this in the Users table without deactivating the account.
     daily_email_enabled = models.BooleanField(default=True)
+    # TED-578: controls whether this user appears in agent/source/assignee
+    # pickers. Independent of is_active — a hidden or deactivated user is kept
+    # out of the dropdowns but still shows by name on existing entries.
+    show_in_dropdown = models.BooleanField(default=True)
     date_joined = models.DateTimeField(auto_now_add=True)
     role = models.ForeignKey(
         'roles.Role',

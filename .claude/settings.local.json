@@ -32,7 +32,15 @@
       "Bash(./.venv/Scripts/python.exe manage.py makemigrations reports)",
       "Bash(./.venv/Scripts/python.exe manage.py migrate reports)",
       "Bash(./.venv/Scripts/python.exe manage.py makemigrations --check --dry-run)",
-      "Bash(EMAIL_CONSOLE_MODE=true ./.venv/Scripts/python.exe manage.py shell -c ' *)"
+      "Bash(EMAIL_CONSOLE_MODE=true ./.venv/Scripts/python.exe manage.py shell -c ' *)",
+      "Bash(git checkout *)",
+      "Bash(./.venv/Scripts/python.exe manage.py test reports.tests.MetricsTests -v2)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(./.venv/Scripts/python.exe manage.py makemigrations auth_app)",
+      "Bash(./.venv/Scripts/python.exe manage.py migrate auth_app)",
+      "Bash(ls auth_app/tests*.py auth_app/tests/)",
+      "Bash(head -30 auth_app/tests.py)",
+      "Bash(./.venv/Scripts/python.exe manage.py test auth_app -v2)"
     ]
   }
 }

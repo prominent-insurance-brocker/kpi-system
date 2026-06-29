@@ -107,6 +107,8 @@ export interface UserAdmin {
   is_active: boolean;
   // TED-477: per-user opt-out for the daily login-reminder email.
   daily_email_enabled: boolean;
+  // TED-578: whether this user appears in agent/source/assignee pickers.
+  show_in_dropdown: boolean;
   role_id: number | null;
   role_name: string | null;
   date_joined: string;

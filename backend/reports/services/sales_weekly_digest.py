@@ -70,19 +70,37 @@ def _pct_change(curr, prior):
     return (curr - prior) / prior * 100
 
 
-def _delta(curr, prior):
-    """Render-ready delta: value, display string, and direction flag."""
+_GREEN, _GREEN_BG = '#059669', '#e7f8f0'
+_RED, _RED_BG = '#dc2626', '#fdecec'
+_GRAY, _GRAY_BG = '#6b7280', '#f3f4f6'
+
+
+def _delta(curr, prior, reverse=False):
+    """Render-ready delta: display string, arrow, and good/bad colours.
+
+    The arrow always reflects the real direction (▲ for an increase, ▼ for a
+    decrease). Colour reflects whether the change is *good*: by default an
+    increase is good (green) and a decrease bad (red). ``reverse=True`` flips
+    that — used for Pending, where an increase is bad (TED-579): increase → red,
+    decrease → green.
+    """
     pct = _pct_change(curr, prior)
     if pct is None:
-        return {'pct': None, 'display': 'New', 'direction': 'new'}
+        return {'pct': None, 'display': 'New', 'direction': 'new',
+                'arrow': '', 'color': _GRAY, 'bg': _GRAY_BG}
     rounded = round(pct, 1)
+    # HTML entities (ASCII-safe — avoids Windows console encoding errors in
+    # EMAIL_CONSOLE_MODE; render as ▲ / ▼ in HTML email).
     if rounded > 0:
-        direction, sign = 'up', '+'
+        direction, arrow, sign, good = 'up', '&#9650;', '+', (not reverse)
     elif rounded < 0:
-        direction, sign = 'down', ''
+        direction, arrow, sign, good = 'down', '&#9660;', '', reverse
     else:
-        direction, sign = 'flat', ''
-    return {'pct': rounded, 'display': f"{sign}{rounded:g}%", 'direction': direction}
+        return {'pct': 0.0, 'display': '0%', 'direction': 'flat',
+                'arrow': '', 'color': _GRAY, 'bg': _GRAY_BG}
+    color, bg = (_GREEN, _GREEN_BG) if good else (_RED, _RED_BG)
+    return {'pct': rounded, 'display': f"{sign}{rounded:g}%", 'direction': direction,
+            'arrow': arrow, 'color': color, 'bg': bg}
 
 
 class SalesWeeklyDigestService:
@@ -223,17 +241,18 @@ class SalesWeeklyDigestService:
         last = self._week_figures(self.last_start, self.last_end)
         prior = self._week_figures(self.prior_start, self.prior_end)
 
-        def card(label, key, formatter):
+        def card(label, key, formatter, reverse=False):
             return {
                 'label': label,
                 'value': last[key],
                 'display': formatter(last[key]),
-                'delta': _delta(last[key], prior[key]),
+                'delta': _delta(last[key], prior[key], reverse=reverse),
             }
 
         key_metrics = [
             card('Total Enquiries', 'total', _full_number),
-            card('Pending', 'pending', _full_number),
+            # TED-579: for Pending, an increase is bad -> reverse the colours.
+            card('Pending', 'pending', _full_number, reverse=True),
             card('Won', 'won', _full_number),
             card('Potential Premium', 'potential_premium', _short_currency),
             card('Converted Premium', 'converted_premium', _short_currency),

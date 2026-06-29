@@ -20,7 +20,7 @@ from roles.models import Role, RoleModulePermission
 
 from .models import Report, ReportSendEvent, ReportSendLog, ReportSetting
 from .scheduling import effective_schedule, is_due
-from .services.sales_weekly_digest import SalesWeeklyDigestService
+from .services.sales_weekly_digest import SalesWeeklyDigestService, _delta
 
 DUBAI = ZoneInfo('Asia/Dubai')
 REF = date(2026, 6, 28)
@@ -110,6 +110,25 @@ class MetricsTests(TestCase):
         top = SalesWeeklyDigestService(ref_date=REF).build()['top_performers'][0]
         self.assertEqual(top['name'], 'Logger L')      # added_by, not assignee
         self.assertEqual(top['premium'], 999999.0)
+
+
+class DeltaTests(TestCase):
+    GREEN, RED = '#059669', '#dc2626'
+
+    UP, DOWN = '&#9650;', '&#9660;'
+
+    def test_normal_metric_increase_green_decrease_red(self):
+        up = _delta(10, 5)
+        self.assertEqual((up['arrow'], up['color']), (self.UP, self.GREEN))
+        down = _delta(5, 10)
+        self.assertEqual((down['arrow'], down['color']), (self.DOWN, self.RED))
+
+    def test_pending_reversed_increase_red_decrease_green(self):
+        # TED-579: Pending increase is bad (red, up arrow); decrease good (green, down arrow).
+        up = _delta(10, 5, reverse=True)
+        self.assertEqual((up['arrow'], up['color']), (self.UP, self.RED))
+        down = _delta(5, 10, reverse=True)
+        self.assertEqual((down['arrow'], down['color']), (self.DOWN, self.GREEN))
 
 
 class InactiveUsersTests(TestCase):

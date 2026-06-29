@@ -49,13 +49,7 @@
                     <tr>
                       <td class="m-big" style="font-size:28px; font-weight:800; color:#1e1b4b;">{{ metric.display }}</td>
                       <td align="right" style="vertical-align:bottom;">
-                        {% if metric.delta.direction == 'up' %}
-                          <span style="display:inline-block; padding:4px 9px; border-radius:7px; background-color:#e7f8f0; color:#059669; font-size:13px; font-weight:700;">&#9650; {{ metric.delta.display }}</span>
-                        {% elif metric.delta.direction == 'down' %}
-                          <span style="display:inline-block; padding:4px 9px; border-radius:7px; background-color:#fdecec; color:#dc2626; font-size:13px; font-weight:700;">&#9660; {{ metric.delta.display }}</span>
-                        {% else %}
-                          <span style="display:inline-block; padding:4px 9px; border-radius:7px; background-color:#f3f4f6; color:#6b7280; font-size:13px; font-weight:700;">{{ metric.delta.display }}</span>
-                        {% endif %}
+                        <span style="display:inline-block; padding:4px 9px; border-radius:7px; background-color:{{ metric.delta.bg }}; color:{{ metric.delta.color }}; font-size:13px; font-weight:700;">{{ metric.delta.arrow|safe }} {{ metric.delta.display }}</span>
                       </td>
                     </tr>
                   </table>

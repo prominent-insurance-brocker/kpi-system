@@ -13,9 +13,10 @@
  * or edits is saved as final:
  *   1. Revision Count        — shown with an Edit toggle
  *   2. No. of Quotes Compared — shown with an Edit toggle
- *   3. Coverage              — a dropdown the caller supplies via `coverage`
- *      (Class of Enquiry → Comprehensive/TPL for Motor; Class of Insurance for
- *      General)
+ *   3. Coverage              — an optional dropdown the caller supplies via
+ *      `coverage` (Class of Enquiry → Comprehensive/TPL for Motor; Class of
+ *      Insurance for General). Omitted by modules without one, e.g. Motor Fleet
+ *      (TED-568).
  *   4. Converted Premium     — AED amount; required on the success transition
  *      (Converted/Retained) and optional on Lost, but saved on both.
  *
@@ -63,7 +64,9 @@ export interface EnquiryStatusModalProps {
   entry: EnquiryStatusModalEntry;
   /** True on the success transition (Converted / Retained); false on Lost. */
   needsConvertedPremium: boolean;
-  coverage: EnquiryStatusModalCoverage;
+  /** Module-specific coverage dropdown. Omitted by modules that have none
+   *  (e.g. Motor Fleet, where Class of Enquiry was removed — TED-568). */
+  coverage?: EnquiryStatusModalCoverage;
   onCancel: () => void;
   onConfirm: (payload: {
     revisions: number;
@@ -127,7 +130,7 @@ export function EnquiryStatusModal({
   const [isEditingRevisions, setIsEditingRevisions] = useState(false);
   const [editedQuotes, setEditedQuotes] = useState(entry.quotes_compared);
   const [isEditingQuotes, setIsEditingQuotes] = useState(false);
-  const [coverageValue, setCoverageValue] = useState(coverage.initialValue);
+  const [coverageValue, setCoverageValue] = useState(coverage?.initialValue ?? '');
   const [premium, setPremium] = useState(
     entry.converted_premium != null ? String(entry.converted_premium) : '',
   );
@@ -193,14 +196,17 @@ export function EnquiryStatusModal({
             </p>
           </div>
 
-          {/* 3. Coverage (Class of Enquiry / Class of Insurance) */}
-          <div className="space-y-2">
-            <Label className="text-sm font-semibold text-[#09090B]">
-              {coverage.label}
-            </Label>
-            {coverage.renderControl(coverageValue, setCoverageValue)}
-            <p className="text-xs text-muted-foreground">{coverage.helper}</p>
-          </div>
+          {/* 3. Coverage (Class of Enquiry / Class of Insurance) — omitted by
+              modules without a coverage field (e.g. Motor Fleet, TED-568). */}
+          {coverage && (
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-[#09090B]">
+                {coverage.label}
+              </Label>
+              {coverage.renderControl(coverageValue, setCoverageValue)}
+              <p className="text-xs text-muted-foreground">{coverage.helper}</p>
+            </div>
+          )}
 
           {/* 4. Converted premium — only on a successful close; hidden for Lost
               (a Lost enquiry has no converted premium and is saved as 0). */}

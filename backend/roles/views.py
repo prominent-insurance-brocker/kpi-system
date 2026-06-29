@@ -18,6 +18,13 @@ class RoleViewSet(viewsets.ModelViewSet):
             return RoleListSerializer
         return RoleSerializer
 
+    def paginate_queryset(self, queryset):
+        # The simple dropdown needs the full role list; pagination would
+        # silently truncate it at PAGE_SIZE (TED-569).
+        if self.request.query_params.get('simple'):
+            return None
+        return super().paginate_queryset(queryset)
+
     def destroy(self, request, *args, **kwargs):
         """Prevent deletion if users are assigned to the role."""
         instance = self.get_object()

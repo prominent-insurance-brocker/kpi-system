@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'entries',
     'ai_chat',
     'audit',
+    'reports',
 ]
 
 MIDDLEWARE = [
@@ -353,6 +354,13 @@ SCHEDULED_MAGIC_LINK_EXPIRY_HOURS = int(os.environ.get('SCHEDULED_MAGIC_LINK_EXP
 # Daily magic link schedule — cron expression (default: 6:30 PM IST = 13:00 UTC)
 DAILY_MAGIC_LINK_CRON = os.environ.get('DAILY_MAGIC_LINK_CRON', '0 13 * * *')
 
+# Sales Weekly Digest dispatcher (TED-567). Runs frequently and sends each
+# report at its effective scheduled time (per-report override, else the global
+# ReportSetting default — both editable in the UI). The actual send day/time is
+# stored in the DB, so this is just how often the dispatcher wakes up.
+WEEKLY_SALES_DIGEST_DISPATCH_CRON = os.environ.get('WEEKLY_SALES_DIGEST_DISPATCH_CRON', '*/15 * * * *')
+
 CRONJOBS = [
     (DAILY_MAGIC_LINK_CRON, 'django.core.management.call_command', ['send_daily_magic_links']),
+    (WEEKLY_SALES_DIGEST_DISPATCH_CRON, 'django.core.management.call_command', ['send_weekly_sales_digest']),
 ]

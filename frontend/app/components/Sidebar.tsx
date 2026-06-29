@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp, Anchor, HeartPulse, Settings, History } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp, Anchor, HeartPulse, Settings, History, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/app/context/AuthContext';
 import { AUDIT_CATEGORIES } from '@/app/lib/audit';
@@ -86,13 +86,21 @@ const navigation: NavItem[] = [
     adminOnly: true,
     children: AUDIT_CATEGORIES.map((c) => ({ name: c.label, href: `/audit/${c.key}` })),
   },
+  {
+    name: 'Reports',
+    icon: Mail,
+    adminOnly: true,
+    children: [
+      { name: 'Sales Report', href: '/admin/reports' },
+    ],
+  },
   { name: 'Settings', href: '/admin/settings', icon: Settings, moduleKey: 'settings' },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const { user, hasModulePermission } = useAuth();
-  const [expandedItems, setExpandedItems] = useState<string[]>(['General', 'Motor', 'Sales', 'Marine', 'Medical', 'User Management']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['General', 'Motor', 'Sales', 'Marine', 'Medical', 'User Management', 'Reports']);
 
   const toggleExpand = (name: string) => {
     setExpandedItems((prev) =>

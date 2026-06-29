@@ -15,7 +15,24 @@
       "Bash(python -c \"import django_filters; print\\('has django_filters'\\)\")",
       "Bash(./.venv/Scripts/python.exe manage.py check)",
       "Bash(./.venv/Scripts/python.exe manage.py makemigrations entries)",
-      "Bash(./.venv/Scripts/python.exe manage.py migrate entries)"
+      "Bash(./.venv/Scripts/python.exe manage.py migrate entries)",
+      "PowerShell($paths = @\\(\"$env:ProgramFiles\\\\Git\\\\bin\\\\bash.exe\", \"${env:ProgramFiles\\(x86\\)}\\\\Git\\\\bin\\\\bash.exe\", \"$env:LOCALAPPDATA\\\\Programs\\\\Git\\\\bin\\\\bash.exe\"\\); foreach \\($p in $paths\\) { if \\(Test-Path $p\\) { Write-Output \"FOUND: $p\" } }; $g = Get-Command git -ErrorAction SilentlyContinue; if \\($g\\) { Write-Output \"git at: $\\($g.Source\\)\" })",
+      "PowerShell($conns = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue; if \\($conns\\) { $conns | ForEach-Object { $p = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue; Write-Output \"PID $\\($_.OwningProcess\\) - $\\($p.ProcessName\\)\" } } else { Write-Output \"Nothing listening on port 3000\" })",
+      "PowerShell(& \"C:\\\\Users\\\\tedwi\\\\OneDrive\\\\Desktop\\\\kpi-system\\\\backend\\\\.venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\tedwi\\\\OneDrive\\\\Desktop\\\\kpi-system\\\\backend\\\\manage.py\" shell -c \"from auth_app.models import CustomUser, MagicLink; from django.conf import settings; u=CustomUser.objects.get\\(email='admin@example.com'\\); ml=MagicLink.create_for_user\\(u\\); print\\(settings.FRONTEND_URL + '/auth/verify?token=' + ml.token\\)\")",
+      "PowerShell(& \"C:\\\\Users\\\\tedwi\\\\OneDrive\\\\Desktop\\\\kpi-system\\\\backend\\\\.venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\tedwi\\\\OneDrive\\\\Desktop\\\\kpi-system\\\\backend\\\\manage.py\" migrate --noinput 2>&1 | Select-Object -Last 30)",
+      "PowerShell(& \"C:\\\\Users\\\\tedwi\\\\OneDrive\\\\Desktop\\\\kpi-system\\\\backend\\\\.venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\tedwi\\\\OneDrive\\\\Desktop\\\\kpi-system\\\\backend\\\\manage.py\" shell -c \"from auth_app.models import CustomUser, MagicLink; from django.conf import settings; print\\('EXISTS', CustomUser.objects.filter\\(email='admin@example.com'\\).exists\\(\\)\\); print\\('ALL', list\\(CustomUser.objects.values_list\\('email', flat=True\\)[:20]\\)\\)\")",
+      "PowerShell(& \"C:\\\\Users\\\\tedwi\\\\OneDrive\\\\Desktop\\\\kpi-system\\\\backend\\\\.venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\tedwi\\\\OneDrive\\\\Desktop\\\\kpi-system\\\\backend\\\\manage.py\" seed_superadmin 2>&1 | Select-Object -Last 10)",
+      "PowerShell(& \"C:\\\\Users\\\\tedwi\\\\OneDrive\\\\Desktop\\\\kpi-system\\\\backend\\\\.venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\tedwi\\\\OneDrive\\\\Desktop\\\\kpi-system\\\\backend\\\\manage.py\" shell -c \"from auth_app.models import MagicLink; from django.utils import timezone; print\\('NOW', timezone.now\\(\\)\\); [print\\(m.token[:12], 'used=',m.is_used, 'exp=',m.expires_at, 'valid=',m.is_valid\\(\\)\\) for m in MagicLink.objects.all\\(\\)[:5]]\")",
+      "PowerShell(Write-Output \"current shell DATABASE_URL: '$env:DATABASE_URL'\"; $p = Get-Process -Id 22924 -ErrorAction SilentlyContinue; Write-Output \"server proc start: $\\($p.StartTime\\)  path: $\\($p.Path\\)\")",
+      "Bash(./.venv/Scripts/python.exe manage.py crontab show)",
+      "Bash(./.venv/Scripts/python.exe manage.py test reports roles auth_app -v1)",
+      "Bash(./.venv/Scripts/python.exe manage.py test reports.tests.SalesWeeklyDigestServiceTests.test_inactive_users -v2)",
+      "Bash(./.venv/Scripts/python.exe manage.py shell -c ' *)",
+      "Bash(./.venv/Scripts/python.exe manage.py test reports -v1)",
+      "Bash(./.venv/Scripts/python.exe manage.py makemigrations reports)",
+      "Bash(./.venv/Scripts/python.exe manage.py migrate reports)",
+      "Bash(./.venv/Scripts/python.exe manage.py makemigrations --check --dry-run)",
+      "Bash(EMAIL_CONSOLE_MODE=true ./.venv/Scripts/python.exe manage.py shell -c ' *)"
     ]
   }
 }

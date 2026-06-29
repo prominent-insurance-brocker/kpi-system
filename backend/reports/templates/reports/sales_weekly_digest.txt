@@ -1,0 +1,19 @@
+SALES WEEKLY DIGEST
+{{ m.week_label }} (compared with {{ m.prior_week_label }})
+
+KEY METRICS
+{% for metric in m.key_metrics %}  {{ metric.label }}: {{ metric.display }} ({{ metric.delta.display }} vs last week)
+{% endfor %}
+CONVERSION RATE: {{ m.conversion_rate.display }} ({{ m.conversion_rate.delta.display }} vs last week)
+  {{ m.conversion_rate.won_count }} won of {{ m.conversion_rate.total }} enquiries
+
+TOP 5 PERFORMERS (ranked by premium)
+{% for p in m.top_performers %}  {{ forloop.counter }}. {{ p.name }} — Premium {{ p.premium_display }}, Won {{ p.won_count }}
+{% empty %}  No deals won last week.
+{% endfor %}
+INACTIVE USERS (no entries on 4+ of Mon-Fri)
+{% for u in m.inactive_users %}  - {{ u.name }} (Last Used: {{ u.last_used_display }})
+{% empty %}  All sales users were active last week.
+{% endfor %}
+---
+This is an automated, system-generated report. Generated {{ m.generated_at }}.

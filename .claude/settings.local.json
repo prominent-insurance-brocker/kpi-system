@@ -40,7 +40,10 @@
       "Bash(./.venv/Scripts/python.exe manage.py migrate auth_app)",
       "Bash(ls auth_app/tests*.py auth_app/tests/)",
       "Bash(head -30 auth_app/tests.py)",
-      "Bash(./.venv/Scripts/python.exe manage.py test auth_app -v2)"
+      "Bash(./.venv/Scripts/python.exe manage.py test auth_app -v2)",
+      "Bash(sh -n backend/entrypoint.sh)",
+      "Bash(./.venv/Scripts/python.exe manage.py test reports auth_app -v1)",
+      "Bash(./.venv/Scripts/python.exe manage.py test reports.tests.DispatcherScheduleTests -v2)"
     ]
   }
 }

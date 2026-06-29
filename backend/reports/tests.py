@@ -7,6 +7,7 @@ Reference date is a fixed Sunday (2026-06-28), so:
 All metrics bucket deals by ``added_at`` local day (Asia/Dubai).
 """
 from datetime import date, datetime, time
+from unittest import mock
 from zoneinfo import ZoneInfo
 
 from django.core import mail
@@ -392,6 +393,47 @@ class SchedulingTests(TestCase):
         mail.outbox.clear()
         call_command('send_weekly_sales_digest', '--force')
         self.assertEqual([m.to[0] for m in mail.outbox], ['a@x.com'])
+
+
+class DispatcherScheduleTests(TestCase):
+    """End-to-end: the dispatcher sends each report at its EFFECTIVE schedule —
+    the global default for un-overridden reports, the per-report day/time for
+    custom ones. 'now' is frozen so the assertions are deterministic.
+
+    Week of Mon 2026-06-29 .. Sun 2026-07-05: Tue=06-30, Wed=07-01.
+    """
+
+    def setUp(self):
+        ReportSetting.load()  # global default: Monday (0) @ 06:00
+        Report.objects.create(name='Default', recipients=['d@x.com'], is_active=True)
+        Report.objects.create(
+            name='Custom', recipients=['c@x.com'], is_active=True,
+            send_weekday=2, send_time=time(9, 0),   # Wednesday 09:00
+        )
+
+    def _run_at(self, now):
+        with mock.patch(
+            'reports.management.commands.send_weekly_sales_digest.timezone.localtime',
+            return_value=now,
+        ):
+            mail.outbox.clear()
+            call_command('send_weekly_sales_digest')
+        return {m.to[0] for m in mail.outbox}
+
+    def test_default_fires_on_its_day_custom_waits(self):
+        # Tuesday 10:00 — default (Mon 06:00) is due; custom (Wed 09:00) is not.
+        sent = self._run_at(datetime(2026, 6, 30, 10, 0, tzinfo=DUBAI))
+        self.assertEqual(sent, {'d@x.com'})
+
+    def test_custom_fires_on_its_own_day(self):
+        # Wednesday 10:00 — custom (Wed 09:00) is now due.
+        sent = self._run_at(datetime(2026, 7, 1, 10, 0, tzinfo=DUBAI))
+        self.assertIn('c@x.com', sent)
+
+    def test_nothing_fires_before_any_schedule(self):
+        # Monday 05:00 — before the default 06:00 and before Wednesday.
+        sent = self._run_at(datetime(2026, 6, 29, 5, 0, tzinfo=DUBAI))
+        self.assertEqual(sent, set())
 
 
 class ReportSettingAPITests(TestCase):

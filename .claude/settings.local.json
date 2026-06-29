@@ -32,7 +32,8 @@
       "Bash(./.venv/Scripts/python.exe manage.py makemigrations reports)",
       "Bash(./.venv/Scripts/python.exe manage.py migrate reports)",
       "Bash(./.venv/Scripts/python.exe manage.py makemigrations --check --dry-run)",
-      "Bash(EMAIL_CONSOLE_MODE=true ./.venv/Scripts/python.exe manage.py shell -c ' *)"
+      "Bash(EMAIL_CONSOLE_MODE=true ./.venv/Scripts/python.exe manage.py shell -c ' *)",
+      "Bash(git checkout *)"
     ]
   }
 }

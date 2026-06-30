@@ -374,7 +374,9 @@ export async function getUsersForModulePage(
 // module permission. Same response shape as getUsersForModulePage so
 // SearchableSelect pickers can swap between the two without other changes.
 export async function getActiveUsersPage(
-  params: { search?: string; page?: number; page_size?: number } = {}
+  // TED-578: `includeInactive` keeps deactivated-but-shown users selectable —
+  // used only by the Sales Deals assignee picker.
+  params: { search?: string; page?: number; page_size?: number; includeInactive?: boolean } = {}
 ): Promise<ApiResponse<{
   results: { id: number; email: string; full_name: string }[];
   count: number;
@@ -384,6 +386,7 @@ export async function getActiveUsersPage(
   if (params.search) qs.set('search', params.search);
   if (params.page) qs.set('page', String(params.page));
   if (params.page_size) qs.set('page_size', String(params.page_size));
+  if (params.includeInactive) qs.set('include_inactive', 'true');
   const suffix = qs.toString() ? `?${qs}` : '';
   return fetchApi<{
     results: { id: number; email: string; full_name: string }[];

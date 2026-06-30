@@ -22,16 +22,28 @@ class ShowInDropdownTests(TestCase):
             email=email, full_name=email.split('@')[0], role=self.role, **kw,
         )
 
-    def test_active_endpoint_excludes_hidden_and_inactive(self):
-        self._mk('vis@x.com')                            # active + shown
-        self._mk('hid@x.com', show_in_dropdown=False)    # active but hidden
-        self._mk('ina@x.com', is_active=False)           # deactivated
+    def test_active_endpoint_default_excludes_hidden_and_inactive(self):
+        self._mk('vis@x.com')                          # active + shown -> in
+        self._mk('hid@x.com', show_in_dropdown=False)  # active + hidden -> out
+        self._mk('ina@x.com', is_active=False)         # inactive -> out (default)
         emails = {u['email'] for u in self.client.get('/api/auth/users/active/').data['results']}
         self.assertIn('vis@x.com', emails)
         self.assertNotIn('hid@x.com', emails)
         self.assertNotIn('ina@x.com', emails)
 
+    def test_active_endpoint_include_inactive_keeps_deactivated_shown(self):
+        # TED-578 opt-in used ONLY by the Sales Deals assignee picker.
+        self._mk('vis@x.com')
+        self._mk('hid@x.com', show_in_dropdown=False)   # hidden stays out
+        self._mk('ina@x.com', is_active=False)          # deactivated + shown -> IN
+        resp = self.client.get('/api/auth/users/active/?include_inactive=true')
+        emails = {u['email'] for u in resp.data['results']}
+        self.assertIn('vis@x.com', emails)
+        self.assertIn('ina@x.com', emails)
+        self.assertNotIn('hid@x.com', emails)
+
     def test_module_members_excludes_hidden_and_inactive(self):
+        # Module-scoped pickers (motor source/agent, tracker) stay active-only.
         self._mk('vis2@x.com')
         self._mk('hid2@x.com', show_in_dropdown=False)
         self._mk('ina2@x.com', is_active=False)

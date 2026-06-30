@@ -83,7 +83,6 @@ import {
   getSalesKPIStats,
   updateSalesKPIStatus,
   getUsersForModule,
-  getUsersForModulePage,
   getActiveUsersPage,
   getClassOfInsurancePage,
   getRemarksContentTypes,
@@ -1524,7 +1523,8 @@ function EntryModal({
   // other teams who aren't on the Deals permission list.
   const assigneeFetchPage = useCallback(
     async ({ search, page }: { search: string; page: number }) => {
-      const res = await getActiveUsersPage({ search, page });
+      // TED-578: include deactivated-but-shown users in the assignee picker.
+      const res = await getActiveUsersPage({ search, page, includeInactive: true });
       return {
         results: res.data?.results ?? [],
         hasMore: res.data?.has_more ?? false,

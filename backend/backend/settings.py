@@ -364,3 +364,8 @@ CRONJOBS = [
     (DAILY_MAGIC_LINK_CRON, 'django.core.management.call_command', ['send_daily_magic_links']),
     (WEEKLY_SALES_DIGEST_DISPATCH_CRON, 'django.core.management.call_command', ['send_weekly_sales_digest']),
 ]
+
+# django-crontab is silent by default, which makes scheduled-job failures
+# invisible. Capture each job's output so it can be inspected in the container
+# (`tail -f /app/cron.log`).
+CRONTAB_COMMAND_SUFFIX = '>> /app/cron.log 2>&1'

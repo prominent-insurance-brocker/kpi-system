@@ -496,6 +496,8 @@ function UserForm({
     is_active: u?.is_active ?? true,
     // TED-477: opt the user IN to the daily login reminder by default.
     daily_email_enabled: u?.daily_email_enabled ?? true,
+    // TED-578: show in agent/source/assignee pickers by default.
+    show_in_dropdown: u?.show_in_dropdown ?? true,
   });
 
   // Lazy initializer reads the user prop on FIRST render so Radix Select
@@ -600,6 +602,16 @@ function UserForm({
           }
         />
         <Label htmlFor="daily_email_enabled">Daily email reminder</Label>
+      </div>
+      <div className="flex items-center space-x-2">
+        <Checkbox
+          id="show_in_dropdown"
+          checked={formData.show_in_dropdown}
+          onCheckedChange={(checked) =>
+            setFormData({ ...formData, show_in_dropdown: !!checked })
+          }
+        />
+        <Label htmlFor="show_in_dropdown">Show in dropdown</Label>
       </div>
       </div>
       <DialogFooter className='p-4 border-t border-[#E4E4E4] shrink-0'>

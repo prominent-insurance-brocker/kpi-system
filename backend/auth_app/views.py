@@ -492,7 +492,8 @@ class UserViewSet(viewsets.ModelViewSet):
 
         qs = (
             CustomUser.objects
-            .filter(is_active=True)
+            # TED-578: only active users that admins haven't hidden from pickers.
+            .filter(is_active=True, show_in_dropdown=True)
             .filter(
                 db_models.Q(is_staff=True) |
                 db_models.Q(role__permissions__module=module)
@@ -554,7 +555,8 @@ class UserViewSet(viewsets.ModelViewSet):
 
         qs = (
             CustomUser.objects
-            .filter(is_active=True)
+            # TED-578: only active users that admins haven't hidden from pickers.
+            .filter(is_active=True, show_in_dropdown=True)
             .order_by('full_name', 'email', 'id')
         )
         if search:

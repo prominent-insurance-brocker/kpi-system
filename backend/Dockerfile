@@ -11,8 +11,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN chmod +x entrypoint.sh
+
 RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--threads", "4", "--worker-class", "gthread", "--timeout", "60", "--graceful-timeout", "30", "backend.wsgi:application"]
+# Entrypoint starts cron + gunicorn together (see entrypoint.sh). Defined here
+# so scheduled jobs run even when the platform launches the image via this CMD
+# (e.g. Dokploy building from the Dockerfile) rather than a compose override.
+CMD ["./entrypoint.sh"]

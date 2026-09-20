@@ -105,6 +105,10 @@ import {
   type MotorEnquiryModule,
   type MotorRenewalModule,
 } from '@/app/lib/api';
+import {
+  VOIDED_FILTER_OPTION,
+  applyStatusFilter,
+} from '@/app/lib/statusFilter';
 
 // ─── Per-module configuration ────────────────────────────────────────────────
 // Motor New uses 'converted' as the positive outcome; Motor Renewal uses
@@ -378,7 +382,7 @@ export function GeneralNewEnquiryPage() {
       if (dateTo) qs.set('date_to', dateTo);
       if (userId) qs.set('user_id', userId);
       if (agentId) qs.set('agent_id', agentId);
-      if (statusFilter) qs.set('status', statusFilter);
+      applyStatusFilter(qs, statusFilter);
       if (clientName) qs.set('client_name', clientName);
       if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
       if (classOfInsuranceFilter) qs.set('class_of_insurance', classOfInsuranceFilter);
@@ -1142,7 +1146,11 @@ export function GeneralNewEnquiryPage() {
                   setStatusFilter(v);
                   setPage(1);
                 },
-                options: config.options.map((o) => ({ value: o.value, label: o.label })),
+                // TED-797: Voided is not a status — see lib/statusFilter.
+                options: [
+                  ...config.options.map((o) => ({ value: o.value, label: o.label })),
+                  VOIDED_FILTER_OPTION,
+                ],
               }}
               extraSearchableFilters={[
                 {

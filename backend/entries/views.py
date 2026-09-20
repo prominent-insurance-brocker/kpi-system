@@ -762,9 +762,12 @@ def _build_enquiry_stats(queryset, success_status='converted'):
     success_count = queryset.filter(status=success_status).count()
     lost = queryset.filter(status='lost').count()
     # TED-595: Rejected is a separate terminal bucket — counted here for its own
-    # card but deliberately kept out of the conversion/retention ratio (the
-    # frontend subtracts it from the denominator) and out of the avg TAT/accuracy
-    # `terminal` set below, so rejections don't skew quality metrics.
+    # card but deliberately kept out of the count-based conversion/retention ratio
+    # (the frontend subtracts it from that denominator) and out of the avg
+    # TAT/accuracy `terminal` set below, so rejections don't skew quality metrics.
+    # Premium-wise it IS counted as lost: the frontend adds rejected_premium to the
+    # Lost Potential Premium card and uses the full total_potential_premium as the
+    # premium-ratio denominator.
     rejected = queryset.filter(status='rejected').count()
     # TED-596: Marine New adds a 'shared_with_client' working stage. Counted
     # here for its dashboard card; 0 for every other enquiry module.
@@ -832,7 +835,8 @@ def _build_enquiry_stats(queryset, success_status='converted'):
         'avg_tat_minutes': round(avg_tat_seconds / 60, 2) if avg_tat_seconds is not None else None,
         'avg_accuracy': round(avg_accuracy, 2) if avg_accuracy is not None else None,
         # New premium aggregates: drive the Converted Premium / Lost Potential
-        # Premium / Converted-vs-Potential Premium cards.
+        # Premium (rendered as lost_premium + rejected_premium) /
+        # Converted-vs-Potential Premium cards.
         'converted_premium': round(converted_premium, 2),
         'lost_premium': round(lost_premium, 2),
         'rejected_premium': round(rejected_premium, 2),

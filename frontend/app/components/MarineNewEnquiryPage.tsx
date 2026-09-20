@@ -1012,13 +1012,17 @@ export function MarineNewEnquiryPage() {
             />
             <StatCard
               label="Lost Potential Premium"
-              value={formatPremium(stats.lost_premium)}
+              // Rejected entries are lost business: their potential premium is
+              // reported here alongside status='lost'. The label stays "Lost" by
+              // request, so this total intentionally covers more entries than the
+              // "Lost" count card.
+              value={formatPremium((stats.lost_premium ?? 0) + (stats.rejected_premium ?? 0))}
               accent="text-red-700"
             />
             <RatioCard
               label={`${config.successLabel} vs Potential Premium`}
-              // TED-595: exclude rejected potential premium from the denominator.
-              total={(stats.total_potential_premium ?? 0) - (stats.rejected_premium ?? 0)}
+              // Full potential premium, rejected included (reverses TED-595).
+              total={stats.total_potential_premium ?? 0}
               success={stats.converted_premium ?? 0}
               format={formatPremium}
             />

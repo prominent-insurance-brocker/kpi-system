@@ -929,14 +929,19 @@ export function GeneralEnquiryPage() {
               />
               <StatCard
                 label="Lost Potential Premium"
-                value={formatPremium(stats.lost_premium)}
+                // Rejected entries are lost business: their potential premium is
+                // reported here alongside status='lost'. The label stays "Lost" by
+                // request, so this total intentionally covers more entries than the
+                // "Lost" count card.
+                value={formatPremium((stats.lost_premium ?? 0) + (stats.rejected_premium ?? 0))}
                 accent="text-red-700"
               />
               <RatioCard
                 label={`${SUCCESS_LABEL} vs Potential Premium`}
-                // TED-595: exclude rejected potential premium from the denominator.
-                total={(stats.total_potential_premium ?? 0) - (stats.rejected_premium ?? 0)}
+                // Full potential premium, rejected included (reverses TED-595).
+                total={stats.total_potential_premium ?? 0}
                 success={stats.converted_premium ?? 0}
+                format={formatPremium}
               />
               <StatCard
                 label="Voided"
@@ -1527,10 +1532,12 @@ function RatioCard({
   label,
   total,
   success,
+  format = formatNumber,
 }: {
   label: string;
   total: number;
   success: number;
+  format?: (n: number) => string;
 }) {
   const pct = total > 0 ? (success / total) * 100 : 0;
   return (
@@ -1540,7 +1547,7 @@ function RatioCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold text-[#09090B]">
-          {formatNumber(success)} / {formatNumber(total)}
+          {format(success)} / {format(total)}
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">({pct.toFixed(1)}%)</div>
       </CardContent>

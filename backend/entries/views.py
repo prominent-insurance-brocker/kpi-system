@@ -762,36 +762,50 @@ def _build_enquiry_stats(queryset, success_status='converted'):
     success_count = queryset.filter(status=success_status).count()
     lost = queryset.filter(status='lost').count()
     # TED-595: Rejected is a separate terminal bucket — counted here for its own
-    # card but deliberately kept out of the count-based conversion/retention ratio
-    # (the frontend subtracts it from that denominator) and out of the avg
-    # TAT/accuracy `terminal` set below, so rejections don't skew quality metrics.
-    # Premium-wise it IS counted as lost: the frontend adds rejected_premium to the
-    # Lost Potential Premium card and uses the full total_potential_premium as the
-    # premium-ratio denominator.
+    # card and deliberately kept out of the count-based conversion/retention ratio
+    # (the frontend subtracts it from that denominator).
+    # Everywhere else it now counts as a closed enquiry: premium-wise the frontend
+    # adds rejected_premium to the Lost Potential Premium card and uses the full
+    # total_potential_premium as the premium-ratio denominator, and quality-wise it
+    # is part of the avg TAT/accuracy population below.
     rejected = queryset.filter(status='rejected').count()
     # TED-596: Marine New adds a 'shared_with_client' working stage. Counted
     # here for its dashboard card; 0 for every other enquiry module.
     shared_with_client = queryset.filter(status='shared_with_client').count()
 
+    # The quality metrics average over every CLOSED enquiry. Drive that population
+    # from the model's own TERMINAL_STATUSES — the same constant behind the
+    # per-row `is_terminal` / `get_tat_display()` / `accuracy_pct` properties — so a
+    # user hand-averaging the TAT and Accuracy columns in the Enquiries table lands
+    # on exactly these two cards. Sorted for deterministic SQL.
     terminal = queryset.filter(
-        status__in=[success_status, 'lost']
-    ).exclude(status_changed_at=None)
+        status__in=sorted(queryset.model.TERMINAL_STATUSES)
+    )
 
     avg_tat_seconds = None
     avg_accuracy = None
 
     rows = list(terminal.values_list('added_at', 'status_changed_at', 'revisions'))
     if rows:
-        decay = Decimal('0.9')
+        # Mirror the per-row property rather than hardcoding 0.9, so the card can
+        # never silently drift from the Accuracy column if a module retunes decay.
+        decay = queryset.model.ACCURACY_DECAY
+        # TAT needs the closing timestamp, so rows missing it (closed through a path
+        # that never stamped it, e.g. django-admin) are skipped for TAT only.
+        # Accuracy is 100 * decay**revisions and needs no timestamp, so it must NOT
+        # inherit that exclusion — gating it on status_changed_at silently shrank the
+        # accuracy population to the TAT population.
         deltas = [
             (status_changed_at - added_at).total_seconds()
             for added_at, status_changed_at, _ in rows
+            if status_changed_at is not None
         ]
         accuracies = [
             float(Decimal('100') * (decay ** revisions))
             for _, _, revisions in rows
         ]
-        avg_tat_seconds = sum(deltas) / len(deltas)
+        if deltas:
+            avg_tat_seconds = sum(deltas) / len(deltas)
         avg_accuracy = sum(accuracies) / len(accuracies)
 
     # Premium aggregates (added 2026-05-24). potential_premium is nullable;

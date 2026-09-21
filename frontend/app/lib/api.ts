@@ -478,8 +478,10 @@ export interface MotorEnquiryStats {
   // applies to the module.
   converted_premium: number;
   lost_premium: number;
-  // TED-595: potential premium of rejected entries — subtracted from the
-  // premium-ratio denominator on the frontend (rejected is neither won nor lost).
+  // Potential premium of rejected entries. Reported on the frontend as part of
+  // the "Lost Potential Premium" card (lost_premium + rejected_premium): rejected
+  // is lost business. It is included in total_potential_premium and is no longer
+  // subtracted from the premium-ratio denominator (this reverses TED-595).
   rejected_premium: number;
   total_potential_premium: number;
   // TED-595: count of rejected entries in the same scope (drives the Rejected card).
@@ -717,8 +719,10 @@ export interface GeneralRenewalStats {
   // Premium aggregates (sums of `potential_premium`).
   converted_premium: number;
   lost_premium: number;
-  // TED-595: potential premium of rejected entries — subtracted from the
-  // premium-ratio denominator on the frontend (rejected is neither won nor lost).
+  // Potential premium of rejected entries. Reported on the frontend as part of
+  // the "Lost Potential Premium" card (lost_premium + rejected_premium): rejected
+  // is lost business. It is included in total_potential_premium and is no longer
+  // subtracted from the premium-ratio denominator (this reverses TED-595).
   rejected_premium: number;
   total_potential_premium: number;
   // TED-595: count of rejected entries in the same scope (drives the Rejected card).

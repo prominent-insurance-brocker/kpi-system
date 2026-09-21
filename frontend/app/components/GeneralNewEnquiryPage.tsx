@@ -105,6 +105,10 @@ import {
   type MotorEnquiryModule,
   type MotorRenewalModule,
 } from '@/app/lib/api';
+import {
+  VOIDED_FILTER_OPTION,
+  applyStatusFilter,
+} from '@/app/lib/statusFilter';
 
 // ─── Per-module configuration ────────────────────────────────────────────────
 // Motor New uses 'converted' as the positive outcome; Motor Renewal uses
@@ -378,7 +382,7 @@ export function GeneralNewEnquiryPage() {
       if (dateTo) qs.set('date_to', dateTo);
       if (userId) qs.set('user_id', userId);
       if (agentId) qs.set('agent_id', agentId);
-      if (statusFilter) qs.set('status', statusFilter);
+      applyStatusFilter(qs, statusFilter);
       if (clientName) qs.set('client_name', clientName);
       if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
       if (classOfInsuranceFilter) qs.set('class_of_insurance', classOfInsuranceFilter);
@@ -1007,13 +1011,17 @@ export function GeneralNewEnquiryPage() {
             />
             <StatCard
               label="Lost Potential Premium"
-              value={formatPremium(stats.lost_premium)}
+              // Rejected entries are lost business: their potential premium is
+              // reported here alongside status='lost'. The label stays "Lost" by
+              // request, so this total intentionally covers more entries than the
+              // "Lost" count card.
+              value={formatPremium((stats.lost_premium ?? 0) + (stats.rejected_premium ?? 0))}
               accent="text-red-700"
             />
             <RatioCard
               label={`${config.successLabel} vs Potential Premium`}
-              // TED-595: exclude rejected potential premium from the denominator.
-              total={(stats.total_potential_premium ?? 0) - (stats.rejected_premium ?? 0)}
+              // Full potential premium, rejected included (reverses TED-595).
+              total={stats.total_potential_premium ?? 0}
               success={stats.converted_premium ?? 0}
               format={formatPremium}
             />
@@ -1142,7 +1150,11 @@ export function GeneralNewEnquiryPage() {
                   setStatusFilter(v);
                   setPage(1);
                 },
-                options: config.options.map((o) => ({ value: o.value, label: o.label })),
+                // TED-797: Voided is not a status — see lib/statusFilter.
+                options: [
+                  ...config.options.map((o) => ({ value: o.value, label: o.label })),
+                  VOIDED_FILTER_OPTION,
+                ],
               }}
               extraSearchableFilters={[
                 {

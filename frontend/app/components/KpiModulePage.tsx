@@ -27,10 +27,12 @@ import {
 } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { DataTable, Tooltip } from '@/app/components/DataTable';
-import { fetchApi, getUsersForModule } from '@/app/lib/api';
+import { fetchApi, getUsersForModule, voidEntry } from '@/app/lib/api';
 import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
-import { canModifyEntry } from '@/app/lib/permissions';
+import { canModifyEntry, canVoidEntry } from '@/app/lib/permissions';
+import { VoidEntryDialog } from '@/app/components/VoidEntryDialog';
+import { VoidStatusBadge } from '@/app/components/VoidStatusBadge';
 import { ChevronLeft, ChevronRight, Plus, MoreHorizontal, Users, Info } from 'lucide-react';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
@@ -53,6 +55,11 @@ export interface BaseModuleEntry {
   on_behalf_of_name: string | null;
   added_at: string;
   is_editable: boolean;
+  // TED-594: void / write-off. Present on every entry (injected server-side);
+  // optional here so consumers of BaseModuleEntry aren't forced to declare them.
+  is_voided?: boolean;
+  voided_by_name?: string | null;
+  void_reason?: string;
   [key: string]: unknown;
 }
 
@@ -593,6 +600,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
   onAddRecord,
   onEdit,
   onDelete,
+  onVoid,
   moduleUsers,
   weeklyUserFilter,
   onWeeklyUserFilterChange,
@@ -611,6 +619,7 @@ export function WeeklyView<T extends BaseModuleEntry>({
   onAddRecord: (date: string) => void;
   onEdit: (entry: T) => void;
   onDelete: (entry: T) => void;
+  onVoid?: (entry: T) => void;
   moduleUsers: ModuleUser[];
   weeklyUserFilter: string;
   onWeeklyUserFilterChange: (v: string) => void;
@@ -832,9 +841,10 @@ export function WeeklyView<T extends BaseModuleEntry>({
 
               return entries.map((entry, eIdx) => {
                 const statusType: 'submitted' | 'not_submitted' | 'upcoming' = 'submitted';
-                const canEditEntry = entry.is_editable && canModifyEntry(user, entry.added_by);
-                const canDeleteEntry = entry.added_by === currentUserId;
-                const showActions = canEditEntry || canDeleteEntry;
+                const canEditEntry = !entry.is_voided && entry.is_editable && canModifyEntry(user, entry.added_by);
+                const canDeleteEntry = !entry.is_voided && entry.added_by === currentUserId;
+                const canVoidRow = !!onVoid && canVoidEntry(user, entry.added_by, !!entry.is_voided);
+                const showActions = canEditEntry || canDeleteEntry || canVoidRow;
                 const entryRowBg = isSun
                   ? 'bg-[#F3F4F6]'
                   : isToday
@@ -872,7 +882,11 @@ export function WeeklyView<T extends BaseModuleEntry>({
                     )}
                     {eIdx > 0 && <td className="px-5 py-3" />}
                     <td className="px-5 py-3">
-                      <StatusBadge type={statusType} />
+                      {entry.is_voided ? (
+                        <VoidStatusBadge reason={entry.void_reason} voidedByName={entry.voided_by_name} />
+                      ) : (
+                        <StatusBadge type={statusType} />
+                      )}
                     </td>
                     <td className="px-5 py-3">
                       <AddedByCell entry={entry} />
@@ -908,6 +922,14 @@ export function WeeklyView<T extends BaseModuleEntry>({
                                 className="cursor-pointer px-3 py-2 text-sm text-red-600 rounded-md"
                               >
                                 Delete
+                              </DropdownMenuItem>
+                            )}
+                            {canVoidRow && (
+                              <DropdownMenuItem
+                                onClick={() => onVoid!(entry)}
+                                className="cursor-pointer px-3 py-2 text-sm text-red-600 rounded-md"
+                              >
+                                Void
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
@@ -1097,6 +1119,9 @@ export function KpiModulePage<T extends BaseModuleEntry>({
   const [editingEntry, setEditingEntry] = useState<T | null>(null);
   const [modalDate, setModalDate] = useState('');
   const [modalError, setModalError] = useState('');
+  // TED-594: void (write-off) target + in-flight flag.
+  const [voidTarget, setVoidTarget] = useState<T | null>(null);
+  const [isVoiding, setIsVoiding] = useState(false);
 
   const page = Number(searchParams.get('page')) || 1;
   const pageSize = Number(searchParams.get('pageSize')) || 10;
@@ -1285,6 +1310,22 @@ export function KpiModulePage<T extends BaseModuleEntry>({
     }
   };
 
+  const handleVoid = async (reason: string) => {
+    if (!voidTarget) return;
+    setIsVoiding(true);
+    const res = await voidEntry(apiSlug, voidTarget.id, reason);
+    setIsVoiding(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success('Entry voided');
+    setVoidTarget(null);
+    refetchAllMonths();
+    setTrackerRefreshKey((k) => k + 1);
+    if (activeView === 'data') fetchDataEntries();
+  };
+
   const openAddModal = (date?: string) => {
     setEditingEntry(null);
     setModalError('');
@@ -1318,7 +1359,15 @@ export function KpiModulePage<T extends BaseModuleEntry>({
     {
       key: 'date',
       header: 'Record date',
-      render: (item: T) => formatDate(item.date),
+      render: (item: T) =>
+        item.is_voided ? (
+          <span className="inline-flex items-center gap-2">
+            {formatDate(item.date)}
+            <VoidStatusBadge reason={item.void_reason} voidedByName={item.voided_by_name} />
+          </span>
+        ) : (
+          formatDate(item.date)
+        ),
     },
     addedByColumn,
     addedOnColumn,
@@ -1400,8 +1449,13 @@ export function KpiModulePage<T extends BaseModuleEntry>({
           onPageSizeChange={(s) => updateParams({ pageSize: s, page: 1 })}
           onEdit={openEditModal}
           onDelete={handleDelete}
-          canEdit={(entry) => entry.is_editable && canModifyEntry(user, entry.added_by)}
-          canDelete={(entry) => entry.added_by === currentUserId}
+          canEdit={(entry) => !entry.is_voided && entry.is_editable && canModifyEntry(user, entry.added_by)}
+          canDelete={(entry) => !entry.is_voided && entry.added_by === currentUserId}
+          rowActions={(entry) =>
+            canVoidEntry(user, entry.added_by, !!entry.is_voided)
+              ? [{ label: 'Void', danger: true, onClick: () => setVoidTarget(entry) }]
+              : []
+          }
           isLoading={dataLoading}
           height="h-full !border-0 !rounded-none"
         />
@@ -1421,6 +1475,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
       onAddRecord={openAddModal}
       onEdit={openEditModal}
       onDelete={handleDelete}
+      onVoid={(entry) => setVoidTarget(entry)}
       moduleUsers={moduleUsers}
       weeklyUserFilter={weeklyUserFilter}
       onWeeklyUserFilterChange={setWeeklyUserFilter}
@@ -1444,6 +1499,18 @@ export function KpiModulePage<T extends BaseModuleEntry>({
       initialDate={modalDate}
       error={modalError}
       modalFields={modalFields}
+    />
+  );
+
+  const voidDialog = (
+    <VoidEntryDialog
+      open={!!voidTarget}
+      onOpenChange={(open) => {
+        if (!open) setVoidTarget(null);
+      }}
+      isSubmitting={isVoiding}
+      noun="entry"
+      onConfirm={handleVoid}
     />
   );
 
@@ -1492,6 +1559,7 @@ export function KpiModulePage<T extends BaseModuleEntry>({
         </Tabs>
 
         {modal}
+        {voidDialog}
       </div>
     );
   }

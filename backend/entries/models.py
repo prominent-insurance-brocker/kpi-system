@@ -66,6 +66,23 @@ class BaseEntry(models.Model):
     added_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # ── Void / write-off (TED-594) ──────────────────────────────────────
+    # A voided entry is "written off": retained for audit but excluded from
+    # every dashboard metric and report. Voiding is irreversible. No db_index
+    # on is_voided — the extra `WHERE is_voided = false` is cheap at this scale
+    # and skipping the index keeps the migration a fast, lock-free metadata add
+    # on the live Postgres DB.
+    is_voided = models.BooleanField(default=False)
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name='%(class)s_voided_entries',
+        null=True,
+        blank=True,
+    )
+    void_reason = models.TextField(blank=True, default='')
+
     class Meta:
         abstract = True
         ordering = ['-date', '-added_at']
@@ -91,6 +108,14 @@ class BaseEntry(models.Model):
         """Check if user can edit this entry."""
         return self.added_by == user and self.is_editable()
 
+    def can_void(self, user):
+        """Who may void this entry: the creator (any time — no 30-min window)
+        or a super-admin. HODs are blocked at the viewset level. An entry that
+        is already voided cannot be voided again."""
+        if self.is_voided:
+            return False
+        return bool(user and (user.is_staff or self.added_by_id == user.id))
+
 
 class GeneralNewEntry(BaseEntry):
     """General New enquiry — one row per customer enquiry with status state machine.
@@ -102,23 +127,27 @@ class GeneralNewEntry(BaseEntry):
     STATUS_IN_PROGRESS = 'in_progress'
     STATUS_CONVERTED = 'converted'
     STATUS_LOST = 'lost'
+    STATUS_REJECTED = 'rejected'
 
     STATUS_CHOICES = [
         (STATUS_NEW, 'New Enquiry'),
         (STATUS_IN_PROGRESS, 'In Progress'),
         (STATUS_CONVERTED, 'Converted'),
         (STATUS_LOST, 'Lost'),
+        (STATUS_REJECTED, 'Rejected'),
     ]
 
-    TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_LOST}
+    TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_LOST, STATUS_REJECTED}
 
     # New ↔ In Progress is a free back-and-forth; both can close to
-    # Converted/Lost (terminal). Converted/Lost are dead-ends.
+    # Converted/Lost/Rejected (terminal). Rejected (TED-595) is an
+    # irreversible decline — an entry cannot leave it. All three are dead-ends.
     TRANSITIONS = {
-        STATUS_NEW: [STATUS_IN_PROGRESS, STATUS_CONVERTED, STATUS_LOST],
-        STATUS_IN_PROGRESS: [STATUS_NEW, STATUS_CONVERTED, STATUS_LOST],
+        STATUS_NEW: [STATUS_IN_PROGRESS, STATUS_CONVERTED, STATUS_LOST, STATUS_REJECTED],
+        STATUS_IN_PROGRESS: [STATUS_NEW, STATUS_CONVERTED, STATUS_LOST, STATUS_REJECTED],
         STATUS_CONVERTED: [],
         STATUS_LOST: [],
+        STATUS_REJECTED: [],
     }
 
     ACCURACY_DECAY = Decimal('0.9')
@@ -153,6 +182,22 @@ class GeneralNewEntry(BaseEntry):
         'InsuranceCompany',
         on_delete=models.PROTECT,
         related_name='general_new_entries',
+        null=True, blank=True,
+    )
+    # TED-592: insurers compared/quoted while the enquiry is open (the
+    # create-modal multi-select).
+    compared_insurance_companies = models.ManyToManyField(
+        'InsuranceCompany',
+        related_name='general_new_compared',
+        blank=True,
+    )
+    # TED-592 (corrected): the single insurer the client purchased from,
+    # captured on Won (Converted/Retained). Kept separate from the legacy
+    # `insurance_company` FK so the original column is never overwritten.
+    converted_insurer = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='general_new_converted',
         null=True, blank=True,
     )
 
@@ -236,19 +281,24 @@ class GeneralRenewalEntry(BaseEntry):
     STATUS_NEW = 'new'
     STATUS_RETAINED = 'retained'
     STATUS_LOST = 'lost'
+    STATUS_REJECTED = 'rejected'
 
     STATUS_CHOICES = [
         (STATUS_NEW, 'New Enquiry'),
         (STATUS_RETAINED, 'Retained'),
         (STATUS_LOST, 'Lost'),
+        (STATUS_REJECTED, 'Rejected'),
     ]
 
-    TERMINAL_STATUSES = {STATUS_RETAINED, STATUS_LOST}
+    TERMINAL_STATUSES = {STATUS_RETAINED, STATUS_LOST, STATUS_REJECTED}
 
+    # Rejected (TED-595) is an irreversible decline reachable from New; an
+    # entry cannot leave it. Retained/Lost/Rejected are dead-ends.
     TRANSITIONS = {
-        STATUS_NEW: [STATUS_RETAINED, STATUS_LOST],
+        STATUS_NEW: [STATUS_RETAINED, STATUS_LOST, STATUS_REJECTED],
         STATUS_RETAINED: [],
         STATUS_LOST: [],
+        STATUS_REJECTED: [],
     }
 
     ACCURACY_DECAY = Decimal('0.9')
@@ -283,6 +333,22 @@ class GeneralRenewalEntry(BaseEntry):
         'InsuranceCompany',
         on_delete=models.PROTECT,
         related_name='general_renewal_entries',
+        null=True, blank=True,
+    )
+    # TED-592: insurers compared/quoted while the enquiry is open (the
+    # create-modal multi-select).
+    compared_insurance_companies = models.ManyToManyField(
+        'InsuranceCompany',
+        related_name='general_renewal_compared',
+        blank=True,
+    )
+    # TED-592 (corrected): the single insurer the client purchased from,
+    # captured on Won (Converted/Retained). Kept separate from the legacy
+    # `insurance_company` FK so the original column is never overwritten.
+    converted_insurer = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='general_renewal_converted',
         null=True, blank=True,
     )
 
@@ -389,23 +455,27 @@ class MotorNewEntry(BaseEntry):
     STATUS_IN_PROGRESS = 'in_progress'
     STATUS_CONVERTED = 'converted'
     STATUS_LOST = 'lost'
+    STATUS_REJECTED = 'rejected'
 
     STATUS_CHOICES = [
         (STATUS_NEW, 'New Enquiry'),
         (STATUS_IN_PROGRESS, 'In Progress'),
         (STATUS_CONVERTED, 'Converted'),
         (STATUS_LOST, 'Lost'),
+        (STATUS_REJECTED, 'Rejected'),
     ]
 
-    TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_LOST}
+    TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_LOST, STATUS_REJECTED}
 
     # New ↔ In Progress is a free back-and-forth; both can close to
-    # Converted/Lost (terminal). Converted/Lost are dead-ends.
+    # Converted/Lost/Rejected (terminal). Rejected (TED-595) is an
+    # irreversible decline — an entry cannot leave it. All three are dead-ends.
     TRANSITIONS = {
-        STATUS_NEW: [STATUS_IN_PROGRESS, STATUS_CONVERTED, STATUS_LOST],
-        STATUS_IN_PROGRESS: [STATUS_NEW, STATUS_CONVERTED, STATUS_LOST],
+        STATUS_NEW: [STATUS_IN_PROGRESS, STATUS_CONVERTED, STATUS_LOST, STATUS_REJECTED],
+        STATUS_IN_PROGRESS: [STATUS_NEW, STATUS_CONVERTED, STATUS_LOST, STATUS_REJECTED],
         STATUS_CONVERTED: [],
         STATUS_LOST: [],
+        STATUS_REJECTED: [],
     }
 
     ACCURACY_DECAY = Decimal('0.9')
@@ -439,6 +509,22 @@ class MotorNewEntry(BaseEntry):
         'InsuranceCompany',
         on_delete=models.PROTECT,
         related_name='motor_new_entries',
+        null=True, blank=True,
+    )
+    # TED-592: insurers compared/quoted while the enquiry is open (the
+    # create-modal multi-select).
+    compared_insurance_companies = models.ManyToManyField(
+        'InsuranceCompany',
+        related_name='motor_new_compared',
+        blank=True,
+    )
+    # TED-592 (corrected): the single insurer the client purchased from,
+    # captured on Won (Converted/Retained). Kept separate from the legacy
+    # `insurance_company` FK so the original column is never overwritten.
+    converted_insurer = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='motor_new_converted',
         null=True, blank=True,
     )
 
@@ -521,19 +607,24 @@ class MotorRenewalEntry(BaseEntry):
     STATUS_NEW = 'new'
     STATUS_RETAINED = 'retained'
     STATUS_LOST = 'lost'
+    STATUS_REJECTED = 'rejected'
 
     STATUS_CHOICES = [
         (STATUS_NEW, 'New Enquiry'),
         (STATUS_RETAINED, 'Retained'),
         (STATUS_LOST, 'Lost'),
+        (STATUS_REJECTED, 'Rejected'),
     ]
 
-    TERMINAL_STATUSES = {STATUS_RETAINED, STATUS_LOST}
+    TERMINAL_STATUSES = {STATUS_RETAINED, STATUS_LOST, STATUS_REJECTED}
 
+    # Rejected (TED-595) is an irreversible decline reachable from New; an
+    # entry cannot leave it. Retained/Lost/Rejected are dead-ends.
     TRANSITIONS = {
-        STATUS_NEW: [STATUS_RETAINED, STATUS_LOST],
+        STATUS_NEW: [STATUS_RETAINED, STATUS_LOST, STATUS_REJECTED],
         STATUS_RETAINED: [],
         STATUS_LOST: [],
+        STATUS_REJECTED: [],
     }
 
     ACCURACY_DECAY = Decimal('0.9')
@@ -567,6 +658,22 @@ class MotorRenewalEntry(BaseEntry):
         'InsuranceCompany',
         on_delete=models.PROTECT,
         related_name='motor_renewal_entries',
+        null=True, blank=True,
+    )
+    # TED-592: insurers compared/quoted while the enquiry is open (the
+    # create-modal multi-select).
+    compared_insurance_companies = models.ManyToManyField(
+        'InsuranceCompany',
+        related_name='motor_renewal_compared',
+        blank=True,
+    )
+    # TED-592 (corrected): the single insurer the client purchased from,
+    # captured on Won (Converted/Retained). Kept separate from the legacy
+    # `insurance_company` FK so the original column is never overwritten.
+    converted_insurer = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='motor_renewal_converted',
         null=True, blank=True,
     )
 
@@ -680,23 +787,27 @@ class MotorFleetNewEntry(BaseEntry):
     STATUS_IN_PROGRESS = 'in_progress'
     STATUS_CONVERTED = 'converted'
     STATUS_LOST = 'lost'
+    STATUS_REJECTED = 'rejected'
 
     STATUS_CHOICES = [
         (STATUS_NEW, 'New Enquiry'),
         (STATUS_IN_PROGRESS, 'In Progress'),
         (STATUS_CONVERTED, 'Converted'),
         (STATUS_LOST, 'Lost'),
+        (STATUS_REJECTED, 'Rejected'),
     ]
 
-    TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_LOST}
+    TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_LOST, STATUS_REJECTED}
 
     # New ↔ In Progress is a free back-and-forth; both can close to
-    # Converted/Lost (terminal). Converted/Lost are dead-ends.
+    # Converted/Lost/Rejected (terminal). Rejected (TED-595) is an
+    # irreversible decline — an entry cannot leave it. All three are dead-ends.
     TRANSITIONS = {
-        STATUS_NEW: [STATUS_IN_PROGRESS, STATUS_CONVERTED, STATUS_LOST],
-        STATUS_IN_PROGRESS: [STATUS_NEW, STATUS_CONVERTED, STATUS_LOST],
+        STATUS_NEW: [STATUS_IN_PROGRESS, STATUS_CONVERTED, STATUS_LOST, STATUS_REJECTED],
+        STATUS_IN_PROGRESS: [STATUS_NEW, STATUS_CONVERTED, STATUS_LOST, STATUS_REJECTED],
         STATUS_CONVERTED: [],
         STATUS_LOST: [],
+        STATUS_REJECTED: [],
     }
 
     ACCURACY_DECAY = Decimal('0.9')
@@ -730,6 +841,22 @@ class MotorFleetNewEntry(BaseEntry):
         'InsuranceCompany',
         on_delete=models.PROTECT,
         related_name='motor_fleet_new_entries',
+        null=True, blank=True,
+    )
+    # TED-592: insurers compared/quoted while the enquiry is open (the
+    # create-modal multi-select).
+    compared_insurance_companies = models.ManyToManyField(
+        'InsuranceCompany',
+        related_name='motor_fleet_new_compared',
+        blank=True,
+    )
+    # TED-592 (corrected): the single insurer the client purchased from,
+    # captured on Won (Converted/Retained). Kept separate from the legacy
+    # `insurance_company` FK so the original column is never overwritten.
+    converted_insurer = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='motor_fleet_new_converted',
         null=True, blank=True,
     )
 
@@ -812,19 +939,24 @@ class MotorFleetRenewalEntry(BaseEntry):
     STATUS_NEW = 'new'
     STATUS_RETAINED = 'retained'
     STATUS_LOST = 'lost'
+    STATUS_REJECTED = 'rejected'
 
     STATUS_CHOICES = [
         (STATUS_NEW, 'New Enquiry'),
         (STATUS_RETAINED, 'Retained'),
         (STATUS_LOST, 'Lost'),
+        (STATUS_REJECTED, 'Rejected'),
     ]
 
-    TERMINAL_STATUSES = {STATUS_RETAINED, STATUS_LOST}
+    TERMINAL_STATUSES = {STATUS_RETAINED, STATUS_LOST, STATUS_REJECTED}
 
+    # Rejected (TED-595) is an irreversible decline reachable from New; an
+    # entry cannot leave it. Retained/Lost/Rejected are dead-ends.
     TRANSITIONS = {
-        STATUS_NEW: [STATUS_RETAINED, STATUS_LOST],
+        STATUS_NEW: [STATUS_RETAINED, STATUS_LOST, STATUS_REJECTED],
         STATUS_RETAINED: [],
         STATUS_LOST: [],
+        STATUS_REJECTED: [],
     }
 
     ACCURACY_DECAY = Decimal('0.9')
@@ -855,6 +987,22 @@ class MotorFleetRenewalEntry(BaseEntry):
         'InsuranceCompany',
         on_delete=models.PROTECT,
         related_name='motor_fleet_renewal_entries',
+        null=True, blank=True,
+    )
+    # TED-592: insurers compared/quoted while the enquiry is open (the
+    # create-modal multi-select).
+    compared_insurance_companies = models.ManyToManyField(
+        'InsuranceCompany',
+        related_name='motor_fleet_renewal_compared',
+        blank=True,
+    )
+    # TED-592 (corrected): the single insurer the client purchased from,
+    # captured on Won (Converted/Retained). Kept separate from the legacy
+    # `insurance_company` FK so the original column is never overwritten.
+    converted_insurer = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='motor_fleet_renewal_converted',
         null=True, blank=True,
     )
 
@@ -988,6 +1136,25 @@ class ClassOfInsurance(models.Model):
         ordering = ['name']
         verbose_name = 'Class of Insurance'
         verbose_name_plural = 'Classes of Insurance'
+
+    def __str__(self):
+        return self.name
+
+
+class MarineClassOfInsurance(models.Model):
+    """Admin-managed list of Marine insurance classes referenced by the Marine
+    New enquiry table (TED-596). Kept separate from ClassOfInsurance because
+    Marine classes are a distinct sub-category of Marine Insurance. Managed via
+    its own Settings page tab — same lookup-table shape as ClassOfInsurance."""
+    name = models.CharField(max_length=200, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Marine Class of Insurance'
+        verbose_name_plural = 'Marine Classes of Insurance'
 
     def __str__(self):
         return self.name
@@ -1286,18 +1453,159 @@ class SalesMonthlyTarget(models.Model):
 
 
 class MarineNewEntry(BaseEntry):
-    """Marine New module entry."""
-    gross_booked_premium = models.DecimalField(max_digits=15, decimal_places=2)
-    quotes_created = models.PositiveIntegerField()
-    new_clients_acquired = models.PositiveIntegerField()
-    new_policies_issued = models.PositiveIntegerField()
+    """Marine New enquiry — one row per customer enquiry with status state
+    machine (TED-596). Mirrors GeneralNewEntry's shape, with three Marine
+    differences: (1) class_of_insurance points at the dedicated
+    MarineClassOfInsurance lookup, (2) two extra statuses — 'shared_with_client'
+    (a non-terminal working stage) and 'rejected' (a terminal decline), and
+    (3) the closing modal never re-confirms the class of insurance on a Won.
+    """
+    STATUS_NEW = 'new'
+    # TED-656: 'In Progress' was removed as a status — 'Shared With Client' is
+    # its replacement. The constant is retained ONLY to decode historical
+    # MarineNewStatusTransition rows and to drive the one-off remap data
+    # migration; it is no longer a selectable choice or a reachable transition.
+    STATUS_IN_PROGRESS = 'in_progress'
+    STATUS_SHARED_WITH_CLIENT = 'shared_with_client'
+    STATUS_CONVERTED = 'converted'
+    STATUS_REJECTED = 'rejected'
+    STATUS_LOST = 'lost'
+
+    STATUS_CHOICES = [
+        (STATUS_NEW, 'New Enquiry'),
+        (STATUS_SHARED_WITH_CLIENT, 'Shared With Client'),
+        (STATUS_CONVERTED, 'Converted'),
+        (STATUS_REJECTED, 'Rejected'),
+        (STATUS_LOST, 'Lost'),
+    ]
+
+    TERMINAL_STATUSES = {STATUS_CONVERTED, STATUS_REJECTED, STATUS_LOST}
+
+    # TED-656: New / Shared With Client are the open working stages that move
+    # freely between each other; each can close to Converted (Won) / Rejected /
+    # Lost (all terminal dead-ends). 'In Progress' is no longer a stage.
+    TRANSITIONS = {
+        STATUS_NEW: [STATUS_SHARED_WITH_CLIENT, STATUS_CONVERTED, STATUS_REJECTED, STATUS_LOST],
+        STATUS_SHARED_WITH_CLIENT: [STATUS_NEW, STATUS_CONVERTED, STATUS_REJECTED, STATUS_LOST],
+        STATUS_CONVERTED: [],
+        STATUS_REJECTED: [],
+        STATUS_LOST: [],
+    }
+
+    ACCURACY_DECAY = Decimal('0.9')
+
+    client_name = models.CharField(max_length=200)
+    agent = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='marine_new_enquiries_as_agent',
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW
+    )
+    revisions = models.PositiveIntegerField(default=0)
+    quotes_compared = models.PositiveIntegerField(default=0)
+    status_changed_at = models.DateTimeField(null=True, blank=True)
+    potential_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
+    # Captured when the enquiry closes as Converted via the update-status flow.
+    # NULL when not yet closed; forced to 0 on a Rejected/Lost close.
+    converted_premium = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+    )
+    # TED-596: Marine uses its own class-of-insurance lookup, distinct from the
+    # shared ClassOfInsurance used by General / Sales.
+    class_of_insurance = models.ForeignKey(
+        'MarineClassOfInsurance',
+        on_delete=models.PROTECT,
+        related_name='%(class)s_entries',
+        null=True, blank=True,
+    )
+    insurance_company = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='marine_new_entries',
+        null=True, blank=True,
+    )
+    # Insurers compared/quoted while the enquiry is open (create-modal
+    # multi-select). insurance_company above records the single insurer the
+    # client purchased from, captured when the enquiry is Won.
+    compared_insurance_companies = models.ManyToManyField(
+        'InsuranceCompany',
+        related_name='marine_new_compared',
+        blank=True,
+    )
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Marine New Entry'
         verbose_name_plural = 'Marine New Entries'
 
     def __str__(self):
-        return f"Marine New - {self.date} by {self.added_by}"
+        return f"Marine New Enquiry - {self.client_name} ({self.status})"
+
+    @classmethod
+    def get_allowed_transitions(cls, current_status):
+        return cls.TRANSITIONS.get(current_status, [])
+
+    @property
+    def is_terminal(self):
+        return self.status in self.TERMINAL_STATUSES
+
+    def get_tat(self):
+        if not self.is_terminal or self.status_changed_at is None:
+            return None
+        return self.status_changed_at - self.added_at
+
+    def get_tat_display(self):
+        delta = self.get_tat()
+        if delta is None:
+            return '—'
+        total_seconds = int(delta.total_seconds())
+        days = total_seconds // 86400
+        hours = (total_seconds % 86400) // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        if days > 0:
+            return f"{days}d {hours}h {minutes}m"
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        if minutes > 0:
+            return f"{minutes}m {seconds}s"
+        return f"{seconds}s"
+
+    @property
+    def accuracy_pct(self):
+        if not self.is_terminal:
+            return None
+        return float(Decimal('100') * (self.ACCURACY_DECAY ** self.revisions))
+
+
+class MarineNewStatusTransition(models.Model):
+    """Records each status change for a marine new enquiry."""
+    entry = models.ForeignKey(
+        MarineNewEntry,
+        on_delete=models.CASCADE,
+        related_name='status_transitions',
+    )
+    from_status = models.CharField(
+        max_length=20, choices=MarineNewEntry.STATUS_CHOICES, blank=True
+    )
+    to_status = models.CharField(
+        max_length=20, choices=MarineNewEntry.STATUS_CHOICES
+    )
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='marine_new_status_changes',
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['changed_at']
+
+    def __str__(self):
+        return f"{self.entry_id}: {self.from_status} -> {self.to_status}"
 
 
 class MarineRenewalEntry(BaseEntry):
@@ -1420,7 +1728,18 @@ class EntryRemark(models.Model):
     object_id = models.PositiveIntegerField()
     entry = GenericForeignKey('content_type', 'object_id')
 
+    KIND_COMMENT = 'comment'
+    KIND_VOID = 'void_reason'
+    KIND_CHOICES = [
+        (KIND_COMMENT, 'Comment'),
+        (KIND_VOID, 'Void Reason'),
+    ]
+
     text = models.TextField()
+    # TED-594: 'void_reason' remarks are created automatically when an entry is
+    # voided and shown in the panel with a "Void Reason" tag. They are immutable
+    # — the serializer forces can_edit/can_delete to False for non-comment kinds.
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default=KIND_COMMENT)
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

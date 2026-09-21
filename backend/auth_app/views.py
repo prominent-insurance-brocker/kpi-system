@@ -535,12 +535,14 @@ class UserViewSet(viewsets.ModelViewSet):
         permission_classes=[IsAuthenticated],
     )
     def active_users(self, request):
-        """TED-513: paginated, searchable list of ALL active users.
+        """TED-513: paginated, searchable list of users shown in pickers.
 
         Same response shape as `module_members` so SearchableSelect can swap
-        between the two without consumer changes. Use this for pickers
-        (assignee, agent, source, etc.) when the picker should not be scoped
-        to a single module's permission set.
+        between the two; use this for pickers (assignee, agent, source) that
+        aren't scoped to a module. Excludes users hidden via show_in_dropdown
+        (TED-578). By default only active users; pass ``include_inactive=true``
+        to keep deactivated-but-shown users selectable — used only by the Sales
+        Deals assignee picker.
         """
         from django.db import models as db_models
         search = (request.query_params.get('search') or '').strip()
@@ -553,12 +555,14 @@ class UserViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        qs = (
-            CustomUser.objects
-            # TED-578: only active users that admins haven't hidden from pickers.
-            .filter(is_active=True, show_in_dropdown=True)
-            .order_by('full_name', 'email', 'id')
-        )
+        # TED-578: hide users with show_in_dropdown=False. Default to active
+        # only; include_inactive=true keeps deactivated-but-shown users (the
+        # Sales Deals assignee picker passes it).
+        include_inactive = request.query_params.get('include_inactive') in ('1', 'true', 'True')
+        qs = CustomUser.objects.filter(show_in_dropdown=True)
+        if not include_inactive:
+            qs = qs.filter(is_active=True)
+        qs = qs.order_by('full_name', 'email', 'id')
         if search:
             qs = qs.filter(
                 db_models.Q(full_name__icontains=search) |

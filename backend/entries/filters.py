@@ -11,6 +11,10 @@ class EntryFilter(django_filters.FilterSet):
     created_from = django_filters.DateFilter(field_name='added_at', lookup_expr='date__gte')
     created_to = django_filters.DateFilter(field_name='added_at', lookup_expr='date__lte')
     user_id = django_filters.NumberFilter(field_name='added_by_id')
+    # TED-594: optionally include/exclude voided entries (e.g. ?is_voided=false
+    # to hide them). Declared filters are always active regardless of each
+    # subclass's Meta.fields, so this is available on every entry list endpoint.
+    is_voided = django_filters.BooleanFilter(field_name='is_voided')
 
     class Meta:
         fields = ['date_from', 'date_to', 'created_from', 'created_to', 'user_id']
@@ -58,7 +62,14 @@ class BaseEnquiryFilter(EntryFilter):
     status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
     agent_id = django_filters.NumberFilter(field_name='agent_id')
     client_name = django_filters.CharFilter(field_name='client_name', lookup_expr='icontains')
-    insurance_company = django_filters.NumberFilter(field_name='insurance_company_id')
+    # TED-592: match any insurer that was compared on the enquiry (the create
+    # modal's multi-select). The `insurance_company` FK now records only the Won
+    # "purchased from" insurer, so filtering on it would drop open enquiries;
+    # the compared M2M is what "filter by insurer" means here. distinct() dedups
+    # the rows the M2M join would otherwise duplicate.
+    insurance_company = django_filters.NumberFilter(
+        field_name='compared_insurance_companies', distinct=True,
+    )
 
     class Meta:
         fields = [

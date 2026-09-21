@@ -55,8 +55,11 @@ import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
 import { EnquiryConvertedPremiumModal } from '@/app/components/EnquiryConvertedPremiumModal';
-import { canModifyEntry } from '@/app/lib/permissions';
+import { canModifyEntry, canVoidEntry } from '@/app/lib/permissions';
+import { VoidEntryDialog } from '@/app/components/VoidEntryDialog';
+import { VoidStatusBadge } from '@/app/components/VoidStatusBadge';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import {
   AddedByCell,
   PersonalDailyTracker,
@@ -79,21 +82,28 @@ import {
   getUsersForModule,
   getUsersForModulePage,
   getInsuranceCompaniesPage,
+  getInsuranceCompanies,
   getMotorEnquiryStats,
   updateMotorEnquiryStatus,
   updateMotorEnquiryRevisions,
   getRemarksContentTypes,
   REMARKS_MODEL_NAME_BY_API_SLUG,
+  voidEntry,
   getCurrentMotorRenewalMonthlyTarget,
   getMotorRenewalMonthlyTargets,
   createMotorRenewalMonthlyTarget,
   updateMotorRenewalMonthlyTarget,
   type MotorRenewalMonthlyTarget,
   type MotorEnquiryEntry,
+  type InsuranceCompany,
   type MotorEnquiryStats,
   type MotorEnquiryModule,
   type MotorRenewalModule,
 } from '@/app/lib/api';
+import {
+  VOIDED_FILTER_OPTION,
+  applyStatusFilter,
+} from '@/app/lib/statusFilter';
 
 // ─── Per-module configuration ────────────────────────────────────────────────
 // Motor New uses 'converted' as the positive outcome; Motor Renewal uses
@@ -121,6 +131,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
       { value: 'in_progress', label: 'In Progress' },
       { value: 'converted', label: 'Won' },
       { value: 'lost', label: 'Lost' },
+      { value: 'rejected', label: 'Rejected' },
     ],
     successValue: 'converted',
     successLabel: 'Converted',
@@ -133,6 +144,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
       { value: 'in_progress', label: 'In Progress' },
       { value: 'converted', label: 'Won' },
       { value: 'lost', label: 'Lost' },
+      { value: 'rejected', label: 'Rejected' },
     ],
     successValue: 'converted',
     successLabel: 'Converted',
@@ -144,6 +156,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
       { value: 'new', label: 'New Enquiry' },
       { value: 'retained', label: 'Retained' },
       { value: 'lost', label: 'Lost' },
+      { value: 'rejected', label: 'Rejected' },
     ],
     successValue: 'retained',
     successLabel: 'Retained',
@@ -156,6 +169,7 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
       { value: 'in_progress', label: 'In Progress' },
       { value: 'converted', label: 'Won' },
       { value: 'lost', label: 'Lost' },
+      { value: 'rejected', label: 'Rejected' },
     ],
     successValue: 'converted',
     successLabel: 'Converted',
@@ -167,20 +181,42 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
       { value: 'new', label: 'New Enquiry' },
       { value: 'retained', label: 'Retained' },
       { value: 'lost', label: 'Lost' },
+      { value: 'rejected', label: 'Rejected' },
     ],
     successValue: 'retained',
     successLabel: 'Retained',
     totalLabel: 'Total Enquiries Added',
     showRatioCard: true,
   },
+  // TED-596: 'marine-new' has its own page (MarineNewEnquiryPage). This entry
+  // exists only to satisfy the Record key requirement after MotorEnquiryModule
+  // was widened; MotorEnquiryPage is never instantiated with apiSlug='marine-new'.
+  'marine-new': {
+    options: [
+      { value: 'new', label: 'New Enquiry' },
+      { value: 'in_progress', label: 'In Progress' },
+      { value: 'shared_with_client', label: 'Shared With Client' },
+      { value: 'converted', label: 'Won' },
+      { value: 'rejected', label: 'Rejected' },
+      { value: 'lost', label: 'Lost' },
+    ],
+    successValue: 'converted',
+    successLabel: 'Converted',
+    totalLabel: 'Total Enquiries',
+    showRatioCard: false,
+  },
 };
 
 const STATUS_COLORS: Record<MotorEnquiryEntry['status'], string> = {
   new: 'bg-blue-100 text-blue-800',
   in_progress: 'bg-amber-100 text-amber-800',
+  // TED-596: Marine New's 'shared_with_client' working stage — indigo.
+  shared_with_client: 'bg-indigo-100 text-indigo-800',
   converted: 'bg-green-100 text-green-800',
   retained: 'bg-green-100 text-green-800',
   lost: 'bg-red-100 text-red-800',
+  // TED-595: rejected — dark rose, visually distinct from Lost's red.
+  rejected: 'bg-rose-200 text-rose-900',
 };
 
 function StatusBadge({
@@ -272,7 +308,10 @@ export function MotorEnquiryPage({
     avg_accuracy: null,
     converted_premium: 0,
     lost_premium: 0,
+    rejected_premium: 0,
     total_potential_premium: 0,
+    rejected: 0,
+    voided: 0,
   });
 
   // Tracker — month state + entries
@@ -298,12 +337,18 @@ export function MotorEnquiryPage({
     entry: MotorEnquiryEntry;
     newStatus: SuccessStatus | 'lost';
   } | null>(null);
+  // TED-595: the entry pending rejection — opens a field-capturing modal that
+  // requires the Revision Count + No. of Quotes Compared before the irreversible reject.
+  const [rejectingEntry, setRejectingEntry] = useState<MotorEnquiryEntry | null>(null);
 
   // Remarks side panel
   const [panelEntry, setPanelEntry] = useState<MotorEnquiryEntry | null>(null);
   // Post-conversion converted-premium edit (mirrors Sales KPI "Deals").
   const [convertedPremiumEntry, setConvertedPremiumEntry] =
     useState<MotorEnquiryEntry | null>(null);
+  // TED-594: void (write-off) confirmation target + in-flight flag.
+  const [voidTarget, setVoidTarget] = useState<MotorEnquiryEntry | null>(null);
+  const [isVoiding, setIsVoiding] = useState(false);
   // Map of {model_name: content_type_id} for all 7 remark-supporting modules;
   // fetched once on mount and cached. Used by the shared RemarksPanel.
   const [ctMap, setCtMap] = useState<Record<string, number>>({});
@@ -367,7 +412,7 @@ export function MotorEnquiryPage({
       if (dateTo) qs.set('date_to', dateTo);
       if (userId) qs.set('user_id', userId);
       if (agentId) qs.set('agent_id', agentId);
-      if (statusFilter) qs.set('status', statusFilter);
+      applyStatusFilter(qs, statusFilter);
       if (clientName) qs.set('client_name', clientName);
       if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
       if (classOfEnquiryFilter) qs.set('class_of_enquiry', classOfEnquiryFilter);
@@ -596,7 +641,7 @@ export function MotorEnquiryPage({
     quotes_compared: number;
     potential_premium: string | null;
     class_of_enquiry: string;
-    insurance_company: number | null;
+    compared_insurance_companies: number[];
   }) => {
     setModalError('');
     const isEdit = !!editingEntry;
@@ -676,6 +721,19 @@ export function MotorEnquiryPage({
     }
   };
 
+  // TED-592: page-scoped insurer fetcher for the Won modal's "Insurance
+  // Company" dropdown (the single insurer the client purchased from).
+  const insurerFetchPage = useCallback(
+    async ({ search, page }: { search: string; page: number }) => {
+      const res = await getInsuranceCompaniesPage({ search, page });
+      return {
+        results: res.data?.results ?? [],
+        hasMore: res.data?.has_more ?? false,
+      };
+    },
+    [],
+  );
+
   const applyStatusChange = async (
     entry: MotorEnquiryEntry,
     newStatus: MotorEnquiryEntry['status'],
@@ -683,22 +741,31 @@ export function MotorEnquiryPage({
     quotesCompared?: number,
     coverage?: string,
     convertedPremium?: string,
+    wonInsurer?: string,
   ) => {
     const result = await updateMotorEnquiryStatus(apiSlug, entry.id, {
       status: newStatus,
       ...(revisions != null ? { revisions } : {}),
       ...(quotesCompared != null ? { quotes_compared: quotesCompared } : {}),
       ...(coverage !== undefined ? { class_of_enquiry: coverage } : {}),
+      // TED-592 (corrected): the converted insurer (Won modal, success only).
+      ...(wonInsurer ? { converted_insurer: Number(wonInsurer) } : {}),
       ...(convertedPremium ? { converted_premium: convertedPremium } : {}),
     });
     if (result.data) {
       toast.success(`Marked as ${statusLabelFor(newStatus)}`);
       setPendingStatus(null);
+      setRejectingEntry(null);
       refreshAfterMutation();
     } else {
       toast.error(result.error || 'Failed to update status');
     }
   };
+
+  // TED-595: Rejected is an irreversible terminal close. Per the requirement it
+  // must confirm the Revision Count + No. of Quotes Compared, so it opens the
+  // field-capturing EnquiryStatusModal in reject mode (not a plain confirm).
+  const handleReject = (entry: MotorEnquiryEntry) => setRejectingEntry(entry);
 
   // ── Columns ──────────────────────────────────────────────────────────────
   // Defined in their canonical order; the renewal modules that share this
@@ -715,7 +782,9 @@ export function MotorEnquiryPage({
       key: 'status',
       header: 'Status',
       render: (item: MotorEnquiryEntry) =>
-        item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by) ? (
+        item.is_voided ? (
+          <VoidStatusBadge reason={item.void_reason} voidedByName={item.voided_by_name} />
+        ) : item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by) ? (
           <StatusBadge status={item.status} label={statusLabelFor(item.status)} />
         ) : (
           <Select
@@ -726,6 +795,9 @@ export function MotorEnquiryPage({
                   entry: item,
                   newStatus: v as SuccessStatus | 'lost',
                 });
+              } else if (v === 'rejected') {
+                // TED-595: irreversible decline — simple warning confirm.
+                handleReject(item);
               } else if (v === 'new' || v === 'in_progress') {
                 // New ↔ In Progress is a free, no-confirmation transition.
                 applyStatusChange(item, v);
@@ -780,10 +852,19 @@ export function MotorEnquiryPage({
     },
     { key: 'agent_name', header: 'Agent Name' },
     {
-      key: 'insurance_company',
-      header: 'Insurance Company',
+      key: 'compared_insurance_companies',
+      header: 'Compared Insurers',
+      // TED-592 (corrected): the insurers compared/quoted while the enquiry was open.
       render: (item: MotorEnquiryEntry) =>
-        (item.insurance_company_name as string | undefined) || '—',
+        item.compared_insurance_companies_names?.length
+          ? item.compared_insurance_companies_names.join(', ')
+          : '—',
+    },
+    {
+      key: 'converted_insurer',
+      header: 'Converted Insurer',
+      // TED-592 (corrected): the single insurer the client purchased from (Won).
+      render: (item: MotorEnquiryEntry) => item.converted_insurer_name || '—',
     },
     { key: 'chassis_no', header: 'Chassis No' },
     {
@@ -996,7 +1077,8 @@ export function MotorEnquiryPage({
             {config.showRatioCard && (
               <RatioCard
                 label={`${config.successLabel} / Total Assigned Clients`}
-                total={stats.total}
+                // TED-595: exclude rejected from the denominator (neither won nor lost).
+                total={stats.total - stats.rejected}
                 success={stats[config.successValue]}
               />
             )}
@@ -1011,6 +1093,7 @@ export function MotorEnquiryPage({
               accent="text-green-700"
             />
             <StatCard label="Lost" value={stats.lost} accent="text-red-700" />
+            <StatCard label="Rejected" value={stats.rejected} accent="text-rose-800" />
             <StatCard
               label="Avg. TAT"
               value={formatTatFromMinutes(stats.avg_tat_minutes)}
@@ -1028,14 +1111,24 @@ export function MotorEnquiryPage({
             />
             <StatCard
               label="Lost Potential Premium"
-              value={formatPremium(stats.lost_premium)}
+              // Rejected entries are lost business: their potential premium is
+              // reported here alongside status='lost'. The label stays "Lost" by
+              // request, so this total intentionally covers more entries than the
+              // "Lost" count card.
+              value={formatPremium((stats.lost_premium ?? 0) + (stats.rejected_premium ?? 0))}
               accent="text-red-700"
             />
             <RatioCard
               label={`${config.successLabel} vs Potential Premium`}
+              // Full potential premium, rejected included (reverses TED-595).
               total={stats.total_potential_premium ?? 0}
               success={stats.converted_premium ?? 0}
               format={formatPremium}
+            />
+            <StatCard
+              label="Voided"
+              value={formatNumber(stats.voided ?? 0)}
+              accent="text-gray-600"
             />
           </div>
         </TabsContent>
@@ -1157,7 +1250,11 @@ export function MotorEnquiryPage({
                   setStatusFilter(v);
                   setPage(1);
                 },
-                options: config.options.map((o) => ({ value: o.value, label: o.label })),
+                // TED-797: Voided is not a status — see lib/statusFilter.
+                options: [
+                  ...config.options.map((o) => ({ value: o.value, label: o.label })),
+                  VOIDED_FILTER_OPTION,
+                ],
               }}
               extraSearchableFilters={[
                 {
@@ -1243,26 +1340,38 @@ export function MotorEnquiryPage({
                 }}
                 onDelete={handleDelete}
                 canEdit={(entry) =>
+                  !entry.is_voided &&
                   (entry.status === 'new' || entry.status === 'in_progress') &&
                   entry.is_editable &&
                   canModifyEntry(user, entry.added_by)
                 }
                 canDelete={(entry) =>
+                  !entry.is_voided &&
                   entry.added_by === currentUserId &&
                   (entry.status === 'new' || entry.status === 'in_progress')
                 }
-                rowActions={(entry) =>
-                  !isRenewal &&
-                  entry.status === config.successValue &&
-                  canModifyEntry(user, entry.added_by)
-                    ? [
-                        {
-                          label: 'Update Converted Premium',
-                          onClick: () => setConvertedPremiumEntry(entry),
-                        },
-                      ]
-                    : []
-                }
+                rowActions={(entry) => {
+                  const actions: Array<{ label: string; onClick: () => void; danger?: boolean }> = [];
+                  if (
+                    !isRenewal &&
+                    !entry.is_voided &&
+                    entry.status === config.successValue &&
+                    canModifyEntry(user, entry.added_by)
+                  ) {
+                    actions.push({
+                      label: 'Update Converted Premium',
+                      onClick: () => setConvertedPremiumEntry(entry),
+                    });
+                  }
+                  if (canVoidEntry(user, entry.added_by, entry.is_voided)) {
+                    actions.push({
+                      label: 'Void',
+                      danger: true,
+                      onClick: () => setVoidTarget(entry),
+                    });
+                  }
+                  return actions;
+                }}
                 isLoading={isLoading}
               />
             </div>
@@ -1309,6 +1418,11 @@ export function MotorEnquiryPage({
       </Dialog>
 
       {/* ── Status transition verification modal (TED-440) ───────────── */}
+      {/* TED-593 (corrected): Motor New + Motor Renewal KEEP the Class of Enquiry
+          confirmation in the Won/Lost modal. The earlier removal (commit e0b43a3)
+          applied the ticket to the wrong modules; the correction moved the removal
+          to General New/Renewal instead. Motor Fleet still omits it (TED-568), so
+          `coverage` is gated on `!isFleet`. */}
       {pendingStatus && (
         <EnquiryStatusModal
           entry={pendingStatus.entry}
@@ -1333,8 +1447,35 @@ export function MotorEnquiryPage({
               </Select>
             ),
           }}
+          insurer={
+            pendingStatus.newStatus !== 'lost'
+              ? {
+                  label: 'Converted Insurer',
+                  helper:
+                    'Select the insurer the client purchased the policy from.',
+                  initialValue:
+                    typeof pendingStatus.entry.converted_insurer === 'number'
+                      ? String(pendingStatus.entry.converted_insurer)
+                      : '',
+                  renderControl: (value, onChange) => (
+                    <SearchableSelect
+                      value={value || null}
+                      onValueChange={(v) => onChange(v ?? '')}
+                      placeholder="Select insurance company"
+                      emptyLabel="No insurance companies found"
+                      clearLabel="None"
+                      selectedLabel={pendingStatus.entry.converted_insurer_name ?? null}
+                      getOptionValue={(c) => String(c.id)}
+                      getOptionLabel={(c) => c.name}
+                      fetchPage={insurerFetchPage}
+                    />
+                  ),
+                }
+              : undefined
+          }
+          insurerRequired={pendingStatus.newStatus !== 'lost'}
           onCancel={() => setPendingStatus(null)}
-          onConfirm={({ revisions, quotes_compared, coverage, converted_premium }) =>
+          onConfirm={({ revisions, quotes_compared, coverage, insurance_company, converted_premium }) =>
             applyStatusChange(
               pendingStatus.entry,
               pendingStatus.newStatus,
@@ -1342,6 +1483,29 @@ export function MotorEnquiryPage({
               quotes_compared,
               isFleet ? undefined : coverage,
               converted_premium,
+              insurance_company,
+            )
+          }
+        />
+      )}
+
+      {/* TED-595: reject-mode modal — confirms Revision Count + No. of Quotes
+          Compared (the only two required fields), then irreversibly rejects. */}
+      {rejectingEntry && (
+        <EnquiryStatusModal
+          entry={rejectingEntry}
+          needsConvertedPremium={false}
+          title="Reject this enquiry?"
+          warning="This action cannot be reversed. Are you sure you want to proceed?"
+          confirmLabel="Reject"
+          danger
+          onCancel={() => setRejectingEntry(null)}
+          onConfirm={({ revisions, quotes_compared }) =>
+            applyStatusChange(
+              rejectingEntry,
+              'rejected',
+              revisions,
+              quotes_compared,
             )
           }
         />
@@ -1354,6 +1518,30 @@ export function MotorEnquiryPage({
         module={apiSlug}
         entry={convertedPremiumEntry}
         onSaved={() => refreshAfterMutation()}
+      />
+
+      {/* ── Void (write-off) confirmation (TED-594) ──────────────────────── */}
+      <VoidEntryDialog
+        open={!!voidTarget}
+        onOpenChange={(open) => {
+          if (!open) setVoidTarget(null);
+        }}
+        isSubmitting={isVoiding}
+        noun="enquiry"
+        entryLabel={voidTarget?.pib_id}
+        onConfirm={async (reason) => {
+          if (!voidTarget) return;
+          setIsVoiding(true);
+          const res = await voidEntry(apiSlug, voidTarget.id, reason);
+          setIsVoiding(false);
+          if (res.error) {
+            toast.error(res.error);
+            return;
+          }
+          toast.success('Entry voided');
+          setVoidTarget(null);
+          refreshAfterMutation();
+        }}
       />
 
       {/* ── Client Retention edit-target modal (renewal modules only) ────── */}
@@ -1645,7 +1833,7 @@ function EnquiryForm({
     quotes_compared: number;
     potential_premium: string | null;
     class_of_enquiry: string;
-    insurance_company: number | null;
+    compared_insurance_companies: number[];
   }) => void;
   onClose: () => void;
   error: string;
@@ -1663,9 +1851,11 @@ function EnquiryForm({
     entry?.potential_premium != null ? String(entry.potential_premium) : ''
   );
   const [classOfEnquiry, setClassOfEnquiry] = useState<string>(entry?.class_of_enquiry ?? '');
-  const [insurerId, setInsurerId] = useState<number | null>(
-    typeof entry?.insurance_company === 'number' ? entry.insurance_company : null
+  // TED-592: multi-select of the insurers being compared/quoted on this enquiry.
+  const [insurerIds, setInsurerIds] = useState<number[]>(
+    entry?.compared_insurance_companies ?? []
   );
+  const [insurerOptions, setInsurerOptions] = useState<InsuranceCompany[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // TED-484: Ctrl+Enter / Cmd+Enter submits via the form's onSubmit handler.
   const formRef = useRef<HTMLFormElement>(null);
@@ -1682,16 +1872,13 @@ function EnquiryForm({
     []
   );
 
-  const insurerFetchPage = useCallback(
-    async ({ search, page }: { search: string; page: number }) => {
-      const res = await getInsuranceCompaniesPage({ search, page });
-      return {
-        results: res.data?.results ?? [],
-        hasMore: res.data?.has_more ?? false,
-      };
-    },
-    []
-  );
+  // TED-592: the create modal now picks multiple insurers being compared.
+  // MultiSelect is in-memory, so load the full active list once on mount.
+  useEffect(() => {
+    getInsuranceCompanies({ is_active: true }).then((res) => {
+      if (res.data) setInsurerOptions(res.data);
+    });
+  }, []);
 
   useEffect(() => {
     setClientName(entry?.client_name ?? '');
@@ -1701,7 +1888,7 @@ function EnquiryForm({
     setQuotesCompared(entry?.quotes_compared != null ? String(entry.quotes_compared) : '0');
     setPotentialPremium(entry?.potential_premium != null ? String(entry.potential_premium) : '');
     setClassOfEnquiry(entry?.class_of_enquiry ?? '');
-    setInsurerId(typeof entry?.insurance_company === 'number' ? entry.insurance_company : null);
+    setInsurerIds(entry?.compared_insurance_companies ?? []);
   }, [entry]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1716,7 +1903,7 @@ function EnquiryForm({
       quotes_compared: Math.max(0, Number(quotesCompared || 0)),
       potential_premium: potentialPremium.trim() === '' ? null : potentialPremium.trim(),
       class_of_enquiry: classOfEnquiry,
-      insurance_company: insurerId,
+      compared_insurance_companies: insurerIds,
     });
     setIsSubmitting(false);
   };
@@ -1798,17 +1985,17 @@ function EnquiryForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Insurance Company *</Label>
-        <SearchableSelect
-          value={insurerId ? String(insurerId) : null}
-          onValueChange={(v) => setInsurerId(v ? Number(v) : null)}
-          placeholder="Select insurance company"
-          emptyLabel="No insurance companies found"
-          clearLabel="None"
-          selectedLabel={entry?.insurance_company_name ?? null}
+        <Label>Compared Insurers *</Label>
+        <MultiSelect
+          options={insurerOptions}
+          value={insurerIds.map(String)}
+          onChange={(vals) => setInsurerIds(vals.map(Number))}
           getOptionValue={(c) => String(c.id)}
           getOptionLabel={(c) => c.name}
-          fetchPage={insurerFetchPage}
+          placeholder="Select insurance company"
+          searchPlaceholder="Search insurers…"
+          emptyLabel="No insurance companies found"
+          summarize={(n) => `${n} insurers selected`}
         />
       </div>
 
@@ -1843,7 +2030,7 @@ function EnquiryForm({
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting || !clientName || !agentId || !potentialPremium.trim() || !insurerId || (!isFleet && (!chassisNo || !classOfEnquiry))}>
+        <Button type="submit" disabled={isSubmitting || !clientName || !agentId || !potentialPremium.trim() || insurerIds.length === 0 || (!isFleet && (!chassisNo || !classOfEnquiry))}>
           {isSubmitting ? 'Saving…' : entry ? 'Update' : 'Add Enquiry'}
         </Button>
       </DialogFooter>

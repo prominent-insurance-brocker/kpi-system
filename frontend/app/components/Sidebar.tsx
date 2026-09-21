@@ -91,7 +91,7 @@ const navigation: NavItem[] = [
     icon: Mail,
     adminOnly: true,
     children: [
-      { name: 'Sales Report', href: '/admin/reports' },
+      { name: 'Report Config', href: '/admin/reports' },
     ],
   },
   { name: 'Settings', href: '/admin/settings', icon: Settings, moduleKey: 'settings' },

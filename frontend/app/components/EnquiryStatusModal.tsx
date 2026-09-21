@@ -67,11 +67,26 @@ export interface EnquiryStatusModalProps {
   /** Module-specific coverage dropdown. Omitted by modules that have none
    *  (e.g. Motor Fleet, where Class of Enquiry was removed — TED-568). */
   coverage?: EnquiryStatusModalCoverage;
+  /** TED-592: the insurer the client purchased from. Rendered ABOVE `coverage`
+   *  (i.e. above Class of Insurance). Supplied only on the success transition;
+   *  the Lost modal omits it. Reuses the coverage slot shape. */
+  insurer?: EnquiryStatusModalCoverage;
+  /** TED-592: when true, the Confirm button is gated on an insurer selection. */
+  insurerRequired?: boolean;
+  /** TED-595: dialog title (default "Confirm enquiry details"). */
+  title?: string;
+  /** TED-595: warning banner text (default "This action cannot be reversed."). */
+  warning?: string;
+  /** TED-595: confirm-button label (default "Confirm & Save"). */
+  confirmLabel?: string;
+  /** TED-595: render the confirm button as destructive (e.g. the Reject flow). */
+  danger?: boolean;
   onCancel: () => void;
   onConfirm: (payload: {
     revisions: number;
     quotes_compared: number;
     coverage: string;
+    insurance_company: string;
     converted_premium?: string;
   }) => void;
 }
@@ -123,6 +138,12 @@ export function EnquiryStatusModal({
   entry,
   needsConvertedPremium,
   coverage,
+  insurer,
+  insurerRequired,
+  title = 'Confirm enquiry details',
+  warning = 'This action cannot be reversed.',
+  confirmLabel = 'Confirm & Save',
+  danger = false,
   onCancel,
   onConfirm,
 }: EnquiryStatusModalProps) {
@@ -131,12 +152,15 @@ export function EnquiryStatusModal({
   const [editedQuotes, setEditedQuotes] = useState(entry.quotes_compared);
   const [isEditingQuotes, setIsEditingQuotes] = useState(false);
   const [coverageValue, setCoverageValue] = useState(coverage?.initialValue ?? '');
+  const [insurerValue, setInsurerValue] = useState(insurer?.initialValue ?? '');
   const [premium, setPremium] = useState(
     entry.converted_premium != null ? String(entry.converted_premium) : '',
   );
 
   const premiumValid = premium.trim() !== '' && Number(premium) > 0;
-  const canSave = !needsConvertedPremium || premiumValid;
+  // TED-592: on a Won the purchased insurer is required (frontend-enforced).
+  const insurerOk = !insurer || !insurerRequired || insurerValue.trim() !== '';
+  const canSave = (!needsConvertedPremium || premiumValid) && insurerOk;
 
   const handleSave = () => {
     if (!canSave) return;
@@ -144,6 +168,7 @@ export function EnquiryStatusModal({
       revisions: Math.max(0, editedRevisions),
       quotes_compared: Math.max(0, editedQuotes),
       coverage: coverageValue,
+      insurance_company: insurerValue,
       converted_premium: premium.trim() || undefined,
     });
   };
@@ -152,12 +177,12 @@ export function EnquiryStatusModal({
     <Dialog open onOpenChange={(open) => { if (!open) onCancel(); }}>
       <DialogContent className="p-0">
         <DialogHeader className="border-b border-[#E4E4E4] p-4">
-          <DialogTitle>Confirm enquiry details</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
         <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
           <div className="bg-[#F3F4F6] rounded-md px-4 py-2 text-center text-sm text-[#374151]">
-            This action cannot be reversed.
+            {warning}
           </div>
 
           {/* 1. Revision count */}
@@ -195,6 +220,20 @@ export function EnquiryStatusModal({
               Verify that the Number of Quotes Compared are correct. update them if needed
             </p>
           </div>
+
+          {/* TED-592: Insurance Company — the insurer the client purchased
+              from. Rendered ABOVE Class of Insurance (the coverage slot below).
+              Supplied only on the success transition; the Lost modal omits it. */}
+          {insurer && (
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-[#09090B]">
+                {insurer.label}
+                {insurerRequired && <span className="text-red-500"> *</span>}
+              </Label>
+              {insurer.renderControl(insurerValue, setInsurerValue)}
+              <p className="text-xs text-muted-foreground">{insurer.helper}</p>
+            </div>
+          )}
 
           {/* 3. Coverage (Class of Enquiry / Class of Insurance) — omitted by
               modules without a coverage field (e.g. Motor Fleet, TED-568). */}
@@ -237,8 +276,13 @@ export function EnquiryStatusModal({
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleSave} disabled={!canSave}>
-            Confirm &amp; Save
+          <Button
+            type="button"
+            variant={danger ? 'destructive' : 'default'}
+            onClick={handleSave}
+            disabled={!canSave}
+          >
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

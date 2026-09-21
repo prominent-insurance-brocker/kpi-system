@@ -34,17 +34,24 @@ import {
   getAccidentTypes,
   getInsuranceCompanies,
   getClassOfInsurance,
+  getMarineClassOfInsurance,
   createAccidentType,
   createInsuranceCompany,
   createClassOfInsurance,
+  createMarineClassOfInsurance,
   updateAccidentType,
   updateInsuranceCompany,
   updateClassOfInsurance,
+  updateMarineClassOfInsurance,
   type SettingsLookup,
   type ApiResponse,
 } from '@/app/lib/api';
 
-type LookupResource = 'accident-types' | 'insurance-companies' | 'class-of-insurance';
+type LookupResource =
+  | 'accident-types'
+  | 'insurance-companies'
+  | 'class-of-insurance'
+  | 'marine-class-of-insurance';
 
 interface LookupResourceConfig {
   list: (params?: { is_active?: boolean }) => Promise<ApiResponse<SettingsLookup[]>>;
@@ -78,6 +85,13 @@ const RESOURCES: Record<LookupResource, LookupResourceConfig> = {
     update: updateClassOfInsurance,
     singularLabel: 'Class of Insurance',
     pluralLabel: 'Class of Insurance',
+  },
+  'marine-class-of-insurance': {
+    list: getMarineClassOfInsurance,
+    create: createMarineClassOfInsurance,
+    update: updateMarineClassOfInsurance,
+    singularLabel: 'Marine Class of Insurance',
+    pluralLabel: 'Marine Class of Insurance',
   },
 };
 
@@ -126,6 +140,12 @@ export default function SettingsPage() {
           >
             Class of Insurance
           </TabsTrigger>
+          <TabsTrigger
+            value="marine-class-of-insurance"
+            className="rounded-md px-4 py-1.5 data-[state=active]:bg-white"
+          >
+            Marine Class of Insurance
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="accident-types" className="mt-4">
@@ -136,6 +156,9 @@ export default function SettingsPage() {
         </TabsContent>
         <TabsContent value="class-of-insurance" className="mt-4">
           <LookupTab resource="class-of-insurance" />
+        </TabsContent>
+        <TabsContent value="marine-class-of-insurance" className="mt-4">
+          <LookupTab resource="marine-class-of-insurance" />
         </TabsContent>
       </Tabs>
     </div>

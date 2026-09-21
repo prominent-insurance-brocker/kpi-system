@@ -111,7 +111,9 @@ def entry_counts(model, start, end, tz, user_ids, can_see_all, user):
     Aggregated entirely in the database, so there is no pagination cap — the
     whole window is counted regardless of volume.
     """
-    qs = model.objects.all()
+    # TED-594: voided (written-off) entries don't count as productive activity,
+    # so keep them out of the daily tracker grid + export.
+    qs = model.objects.filter(is_voided=False)
     if not can_see_all:
         qs = qs.filter(Q(added_by=user) | Q(on_behalf_of=user))
     # Coarse UTC window (+/- 1 day) so the DB can use the added_at index;

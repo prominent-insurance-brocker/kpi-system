@@ -58,6 +58,7 @@ import { Progress } from '@/components/ui/progress';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import {
   AddedByCell,
   PersonalDailyTracker,
@@ -72,7 +73,9 @@ import { useTrackerCounts } from '@/app/lib/useTrackerCounts';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
-import { canModifyEntry } from '@/app/lib/permissions';
+import { canModifyEntry, canVoidEntry } from '@/app/lib/permissions';
+import { VoidEntryDialog } from '@/app/components/VoidEntryDialog';
+import { VoidStatusBadge } from '@/app/components/VoidStatusBadge';
 import { formatDate, businessToday } from '@/app/lib/date';
 import { formatPremium, formatNumber } from '@/app/lib/number';
 import { formatTatFromMinutes } from '@/app/lib/tat';
@@ -83,6 +86,7 @@ import {
   getUsersForModule,
   getUsersForModulePage,
   getInsuranceCompaniesPage,
+  getInsuranceCompanies,
   getClassOfInsurancePage,
   getGeneralRenewalStats,
   updateGeneralRenewalStatus,
@@ -93,10 +97,16 @@ import {
   updateGeneralRenewalMonthlyTarget,
   getRemarksContentTypes,
   REMARKS_MODEL_NAME_BY_API_SLUG,
+  voidEntry,
   type GeneralRenewalMonthlyTarget,
   type GeneralRenewalEntry,
+  type InsuranceCompany,
   type GeneralRenewalStats,
 } from '@/app/lib/api';
+import {
+  VOIDED_FILTER_OPTION,
+  applyStatusFilter,
+} from '@/app/lib/statusFilter';
 
 // ─── Module configuration (hardcoded — this file serves general_renewal only) ─
 const MODULE_KEY = 'general_renewal';
@@ -111,12 +121,15 @@ const STATUS_OPTIONS: Array<{ value: GeneralRenewalEntry['status']; label: strin
   { value: 'new', label: 'New Enquiry' },
   { value: 'retained', label: 'Retained' },
   { value: 'lost', label: 'Lost' },
+  { value: 'rejected', label: 'Rejected' },
 ];
 
 const STATUS_COLORS: Record<GeneralRenewalEntry['status'], string> = {
   new: 'bg-blue-100 text-blue-800',
   retained: 'bg-green-100 text-green-800',
   lost: 'bg-red-100 text-red-800',
+  // TED-595: rejected — dark rose, visually distinct from Lost's red.
+  rejected: 'bg-rose-200 text-rose-900',
 };
 
 function statusLabelFor(value: GeneralRenewalEntry['status']) {
@@ -191,7 +204,10 @@ export function GeneralEnquiryPage() {
     avg_accuracy: null,
     converted_premium: 0,
     lost_premium: 0,
+    rejected_premium: 0,
     total_potential_premium: 0,
+    rejected: 0,
+    voided: 0,
   });
 
   // Tracker — month state + entries
@@ -217,9 +233,15 @@ export function GeneralEnquiryPage() {
     entry: GeneralRenewalEntry;
     newStatus: SuccessStatus | 'lost';
   } | null>(null);
+  // TED-595: the entry pending rejection — opens a field-capturing modal that
+  // requires the Revision Count + No. of Quotes Compared before the irreversible reject.
+  const [rejectingEntry, setRejectingEntry] = useState<GeneralRenewalEntry | null>(null);
 
   // Remarks side panel
   const [panelEntry, setPanelEntry] = useState<GeneralRenewalEntry | null>(null);
+  // TED-594: void (write-off) confirmation target + in-flight flag.
+  const [voidTarget, setVoidTarget] = useState<GeneralRenewalEntry | null>(null);
+  const [isVoiding, setIsVoiding] = useState(false);
   const [ctMap, setCtMap] = useState<Record<string, number>>({});
   useEffect(() => {
     getRemarksContentTypes().then((res) => {
@@ -276,7 +298,7 @@ export function GeneralEnquiryPage() {
       if (dateTo) qs.set('date_to', dateTo);
       if (userId) qs.set('user_id', userId);
       if (agentId) qs.set('agent_id', agentId);
-      if (statusFilter) qs.set('status', statusFilter);
+      applyStatusFilter(qs, statusFilter);
       if (clientName) qs.set('client_name', clientName);
       if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
       if (classOfInsuranceFilter) qs.set('class_of_insurance', classOfInsuranceFilter);
@@ -481,7 +503,7 @@ export function GeneralEnquiryPage() {
     quotes_compared: number;
     potential_premium: string | null;
     class_of_insurance: number | null;
-    insurance_company: number | null;
+    compared_insurance_companies: number[];
   }) => {
     setModalError('');
     const isEdit = !!editingEntry;
@@ -558,11 +580,11 @@ export function GeneralEnquiryPage() {
     }
   };
 
-  // TED-530: page-scoped fetcher so the closing modal's Class-of-Insurance
-  // dropdown can page/search the same lookup the add/edit form uses.
-  const coverageFetchPage = useCallback(
+  // TED-592: page-scoped insurer fetcher for the Won modal's "Insurance
+  // Company" dropdown (the single insurer the client purchased from).
+  const insurerFetchPage = useCallback(
     async ({ search, page }: { search: string; page: number }) => {
-      const res = await getClassOfInsurancePage({ search, page });
+      const res = await getInsuranceCompaniesPage({ search, page });
       return {
         results: res.data?.results ?? [],
         hasMore: res.data?.has_more ?? false,
@@ -573,11 +595,12 @@ export function GeneralEnquiryPage() {
 
   const applyStatusChange = async (
     entry: GeneralRenewalEntry,
-    newStatus: SuccessStatus | 'lost',
+    newStatus: SuccessStatus | 'lost' | 'rejected',
     revisions?: number,
     quotesCompared?: number,
     coverage?: string,
     convertedPremium?: string,
+    wonInsurer?: string,
   ) => {
     const result = await updateGeneralRenewalStatus(entry.id, {
       status: newStatus,
@@ -586,16 +609,24 @@ export function GeneralEnquiryPage() {
       ...(coverage !== undefined
         ? { class_of_insurance: coverage ? Number(coverage) : null }
         : {}),
+      // TED-592 (corrected): the converted insurer (Won modal, success only).
+      ...(wonInsurer ? { converted_insurer: Number(wonInsurer) } : {}),
       ...(convertedPremium ? { converted_premium: convertedPremium } : {}),
     });
     if (result.data) {
       toast.success(`Marked as ${statusLabelFor(newStatus)}`);
       setPendingStatus(null);
+      setRejectingEntry(null);
       refreshAfterMutation();
     } else {
       toast.error(result.error || 'Failed to update status');
     }
   };
+
+  // TED-595: Rejected is an irreversible terminal close. Per the requirement it
+  // must confirm the Revision Count + No. of Quotes Compared, so it opens the
+  // field-capturing EnquiryStatusModal in reject mode (not a plain confirm).
+  const handleReject = (entry: GeneralRenewalEntry) => setRejectingEntry(entry);
 
   // ── Columns ──────────────────────────────────────────────────────────────
   const columns = [
@@ -609,7 +640,9 @@ export function GeneralEnquiryPage() {
       key: 'status',
       header: 'Status',
       render: (item: GeneralRenewalEntry) =>
-        item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by) ? (
+        item.is_voided ? (
+          <VoidStatusBadge reason={item.void_reason} voidedByName={item.voided_by_name} />
+        ) : item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by) ? (
           <StatusBadge status={item.status} label={statusLabelFor(item.status)} />
         ) : (
           <Select
@@ -620,6 +653,9 @@ export function GeneralEnquiryPage() {
                   entry: item,
                   newStatus: v as SuccessStatus | 'lost',
                 });
+              } else if (v === 'rejected') {
+                // TED-595: irreversible decline — simple warning confirm.
+                handleReject(item);
               }
             }}
           >
@@ -671,10 +707,19 @@ export function GeneralEnquiryPage() {
     },
     { key: 'agent_name', header: 'Agent Name' },
     {
-      key: 'insurance_company',
-      header: 'Insurance Company',
+      key: 'compared_insurance_companies',
+      header: 'Compared Insurers',
+      // TED-592 (corrected): the insurers compared/quoted while the enquiry was open.
       render: (item: GeneralRenewalEntry) =>
-        (item.insurance_company_name as string | undefined) || '—',
+        item.compared_insurance_companies_names?.length
+          ? item.compared_insurance_companies_names.join(', ')
+          : '—',
+    },
+    {
+      key: 'converted_insurer',
+      header: 'Converted Insurer',
+      // TED-592 (corrected): the single insurer the client purchased from (Won).
+      render: (item: GeneralRenewalEntry) => item.converted_insurer_name || '—',
     },
     {
       key: 'revisions',
@@ -854,7 +899,8 @@ export function GeneralEnquiryPage() {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 xl:grid-cols-7">
               <RatioCard
                 label={`${SUCCESS_LABEL} / Total Assigned Clients`}
-                total={stats.total}
+                // TED-595: exclude rejected from the denominator (neither retained nor lost).
+                total={stats.total - stats.rejected}
                 success={stats.retained}
               />
               <StatCard label={TOTAL_LABEL} value={stats.total} accent="text-[#09090B]" />
@@ -865,6 +911,7 @@ export function GeneralEnquiryPage() {
                 accent="text-green-700"
               />
               <StatCard label="Lost" value={stats.lost} accent="text-red-700" />
+              <StatCard label="Rejected" value={stats.rejected} accent="text-rose-800" />
               <StatCard
                 label="Avg. TAT"
                 value={formatTatFromMinutes(stats.avg_tat_minutes)}
@@ -882,13 +929,24 @@ export function GeneralEnquiryPage() {
               />
               <StatCard
                 label="Lost Potential Premium"
-                value={formatPremium(stats.lost_premium)}
+                // Rejected entries are lost business: their potential premium is
+                // reported here alongside status='lost'. The label stays "Lost" by
+                // request, so this total intentionally covers more entries than the
+                // "Lost" count card.
+                value={formatPremium((stats.lost_premium ?? 0) + (stats.rejected_premium ?? 0))}
                 accent="text-red-700"
               />
               <RatioCard
                 label={`${SUCCESS_LABEL} vs Potential Premium`}
+                // Full potential premium, rejected included (reverses TED-595).
                 total={stats.total_potential_premium ?? 0}
                 success={stats.converted_premium ?? 0}
+                format={formatPremium}
+              />
+              <StatCard
+                label="Voided"
+                value={formatNumber(stats.voided ?? 0)}
+                accent="text-gray-600"
               />
             </div>
           </TabsContent>
@@ -1010,7 +1068,11 @@ export function GeneralEnquiryPage() {
                     setStatusFilter(v);
                     setPage(1);
                   },
-                  options: STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+                  // TED-797: Voided is not a status — see lib/statusFilter.
+                  options: [
+                    ...STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+                    VOIDED_FILTER_OPTION,
+                  ],
                 }}
                 extraSearchableFilters={[
                   {
@@ -1092,10 +1154,21 @@ export function GeneralEnquiryPage() {
                     setIsModalOpen(true);
                   }}
                   onDelete={handleDelete}
-                  canEdit={(entry) => entry.status === 'new' && entry.is_editable && canModifyEntry(user, entry.added_by)}
+                  canEdit={(entry) => !entry.is_voided && entry.status === 'new' && entry.is_editable && canModifyEntry(user, entry.added_by)}
                   canDelete={(entry) =>
-                    entry.added_by === currentUserId && entry.status === 'new'
+                    !entry.is_voided && entry.added_by === currentUserId && entry.status === 'new'
                   }
+                  rowActions={(entry) => {
+                    const actions: Array<{ label: string; onClick: () => void; danger?: boolean }> = [];
+                    if (canVoidEntry(user, entry.added_by, entry.is_voided)) {
+                      actions.push({
+                        label: 'Void',
+                        danger: true,
+                        onClick: () => setVoidTarget(entry),
+                      });
+                    }
+                    return actions;
+                  }}
                   isLoading={isLoading}
                 />
               </div>
@@ -1141,45 +1214,75 @@ export function GeneralEnquiryPage() {
         </Dialog>
 
         {/* ── Status transition verification modal (TED-440) ─────────────── */}
+        {/* TED-593 (corrected): the Class of Insurance confirmation was removed from
+            the Won/Lost modal for General New + General Renewal — the class chosen in
+            the add-enquiry modal is authoritative. `coverage` is omitted so the modal
+            no longer renders the dropdown, and `class_of_insurance` is left out of the
+            status PATCH entirely (passing '' would wipe the stored value), preserving
+            whatever was set at creation. */}
         {pendingStatus && (
           <EnquiryStatusModal
             entry={pendingStatus.entry}
             needsConvertedPremium={pendingStatus.newStatus !== 'lost'}
-            coverage={{
-              label: 'Class of Insurance',
-              helper: 'Confirm the class of insurance for this enquiry.',
-              initialValue:
-                typeof pendingStatus.entry.class_of_insurance === 'number'
-                  ? String(pendingStatus.entry.class_of_insurance)
-                  : '',
-              renderControl: (value, onChange) => (
-                <SearchableSelect
-                  value={value || null}
-                  onValueChange={(v) => onChange(v ?? '')}
-                  placeholder="Select class"
-                  emptyLabel="No classes found"
-                  clearLabel="None"
-                  selectedLabel={
-                    (pendingStatus.entry.class_of_insurance_display as
-                      | string
-                      | null
-                      | undefined) ?? null
+            insurer={
+              pendingStatus.newStatus !== 'lost'
+                ? {
+                    label: 'Converted Insurer',
+                    helper:
+                      'Select the insurer the client purchased the policy from.',
+                    initialValue:
+                      typeof pendingStatus.entry.converted_insurer === 'number'
+                        ? String(pendingStatus.entry.converted_insurer)
+                        : '',
+                    renderControl: (value, onChange) => (
+                      <SearchableSelect
+                        value={value || null}
+                        onValueChange={(v) => onChange(v ?? '')}
+                        placeholder="Select insurance company"
+                        emptyLabel="No insurance companies found"
+                        clearLabel="None"
+                        selectedLabel={pendingStatus.entry.converted_insurer_name ?? null}
+                        getOptionValue={(c) => String(c.id)}
+                        getOptionLabel={(c) => c.name}
+                        fetchPage={insurerFetchPage}
+                      />
+                    ),
                   }
-                  getOptionValue={(c) => String(c.id)}
-                  getOptionLabel={(c) => c.name}
-                  fetchPage={coverageFetchPage}
-                />
-              ),
-            }}
+                : undefined
+            }
+            insurerRequired={pendingStatus.newStatus !== 'lost'}
             onCancel={() => setPendingStatus(null)}
-            onConfirm={({ revisions, quotes_compared, coverage, converted_premium }) =>
+            onConfirm={({ revisions, quotes_compared, insurance_company, converted_premium }) =>
               applyStatusChange(
                 pendingStatus.entry,
                 pendingStatus.newStatus,
                 revisions,
                 quotes_compared,
-                coverage,
+                undefined, // TED-593: Class of Insurance no longer sent from the modal
                 converted_premium,
+                insurance_company,
+              )
+            }
+          />
+        )}
+
+        {/* TED-595: reject-mode modal — confirms Revision Count + No. of Quotes
+            Compared (the only two required fields), then irreversibly rejects. */}
+        {rejectingEntry && (
+          <EnquiryStatusModal
+            entry={rejectingEntry}
+            needsConvertedPremium={false}
+            title="Reject this enquiry?"
+            warning="This action cannot be reversed. Are you sure you want to proceed?"
+            confirmLabel="Reject"
+            danger
+            onCancel={() => setRejectingEntry(null)}
+            onConfirm={({ revisions, quotes_compared }) =>
+              applyStatusChange(
+                rejectingEntry,
+                'rejected',
+                revisions,
+                quotes_compared,
               )
             }
           />
@@ -1206,6 +1309,30 @@ export function GeneralEnquiryPage() {
             fetchCurrentTarget();
             fetchTargetCard();
             fetchSheetTargets();
+          }}
+        />
+
+        {/* ── Void (write-off) confirmation (TED-594) ──────────────────────── */}
+        <VoidEntryDialog
+          open={!!voidTarget}
+          onOpenChange={(open) => {
+            if (!open) setVoidTarget(null);
+          }}
+          isSubmitting={isVoiding}
+          noun="enquiry"
+          entryLabel={voidTarget?.pib_id}
+          onConfirm={async (reason) => {
+            if (!voidTarget) return;
+            setIsVoiding(true);
+            const res = await voidEntry(API_SLUG, voidTarget.id, reason);
+            setIsVoiding(false);
+            if (res.error) {
+              toast.error(res.error);
+              return;
+            }
+            toast.success('Entry voided');
+            setVoidTarget(null);
+            refreshAfterMutation();
           }}
         />
       </div>
@@ -1405,10 +1532,12 @@ function RatioCard({
   label,
   total,
   success,
+  format = formatNumber,
 }: {
   label: string;
   total: number;
   success: number;
+  format?: (n: number) => string;
 }) {
   const pct = total > 0 ? (success / total) * 100 : 0;
   return (
@@ -1418,7 +1547,7 @@ function RatioCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold text-[#09090B]">
-          {formatNumber(success)} / {formatNumber(total)}
+          {format(success)} / {format(total)}
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">({pct.toFixed(1)}%)</div>
       </CardContent>
@@ -1463,7 +1592,7 @@ function EnquiryForm({
     quotes_compared: number;
     potential_premium: string | null;
     class_of_insurance: number | null;
-    insurance_company: number | null;
+    compared_insurance_companies: number[];
   }) => void;
   onClose: () => void;
   error: string;
@@ -1480,9 +1609,11 @@ function EnquiryForm({
   const [classOfInsuranceId, setClassOfInsuranceId] = useState<number | null>(
     typeof entry?.class_of_insurance === 'number' ? entry.class_of_insurance : null,
   );
-  const [insurerId, setInsurerId] = useState<number | null>(
-    typeof entry?.insurance_company === 'number' ? entry.insurance_company : null
+  // TED-592: multi-select of the insurers being compared/quoted on this enquiry.
+  const [insurerIds, setInsurerIds] = useState<number[]>(
+    entry?.compared_insurance_companies ?? []
   );
+  const [insurerOptions, setInsurerOptions] = useState<InsuranceCompany[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // TED-484: Ctrl+Enter / Cmd+Enter submits via the form's onSubmit handler.
   const formRef = useRef<HTMLFormElement>(null);
@@ -1499,16 +1630,13 @@ function EnquiryForm({
     []
   );
 
-  const insurerFetchPage = useCallback(
-    async ({ search, page }: { search: string; page: number }) => {
-      const res = await getInsuranceCompaniesPage({ search, page });
-      return {
-        results: res.data?.results ?? [],
-        hasMore: res.data?.has_more ?? false,
-      };
-    },
-    []
-  );
+  // TED-592: the create modal now picks multiple insurers being compared.
+  // MultiSelect is in-memory, so load the full active list once on mount.
+  useEffect(() => {
+    getInsuranceCompanies({ is_active: true }).then((res) => {
+      if (res.data) setInsurerOptions(res.data);
+    });
+  }, []);
 
   const classOfInsuranceFetchPage = useCallback(
     async ({ search, page }: { search: string; page: number }) => {
@@ -1530,7 +1658,7 @@ function EnquiryForm({
     setClassOfInsuranceId(
       typeof entry?.class_of_insurance === 'number' ? entry.class_of_insurance : null,
     );
-    setInsurerId(typeof entry?.insurance_company === 'number' ? entry.insurance_company : null);
+    setInsurerIds(entry?.compared_insurance_companies ?? []);
   }, [entry]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1544,7 +1672,7 @@ function EnquiryForm({
       quotes_compared: Math.max(0, Number(quotesCompared || 0)),
       potential_premium: potentialPremium.trim() === '' ? null : potentialPremium.trim(),
       class_of_insurance: classOfInsuranceId,
-      insurance_company: insurerId,
+      compared_insurance_companies: insurerIds,
     });
     setIsSubmitting(false);
   };
@@ -1611,17 +1739,17 @@ function EnquiryForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Insurance Company</Label>
-        <SearchableSelect
-          value={insurerId ? String(insurerId) : null}
-          onValueChange={(v) => setInsurerId(v ? Number(v) : null)}
-          placeholder="Select insurance company"
-          emptyLabel="No insurance companies found"
-          clearLabel="None"
-          selectedLabel={entry?.insurance_company_name ?? null}
+        <Label>Compared Insurers</Label>
+        <MultiSelect
+          options={insurerOptions}
+          value={insurerIds.map(String)}
+          onChange={(vals) => setInsurerIds(vals.map(Number))}
           getOptionValue={(c) => String(c.id)}
           getOptionLabel={(c) => c.name}
-          fetchPage={insurerFetchPage}
+          placeholder="Select insurance company"
+          searchPlaceholder="Search insurers…"
+          emptyLabel="No insurance companies found"
+          summarize={(n) => `${n} insurers selected`}
         />
       </div>
 

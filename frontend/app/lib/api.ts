@@ -374,7 +374,9 @@ export async function getUsersForModulePage(
 // module permission. Same response shape as getUsersForModulePage so
 // SearchableSelect pickers can swap between the two without other changes.
 export async function getActiveUsersPage(
-  params: { search?: string; page?: number; page_size?: number } = {}
+  // TED-578: `includeInactive` keeps deactivated-but-shown users selectable —
+  // used only by the Sales Deals assignee picker.
+  params: { search?: string; page?: number; page_size?: number; includeInactive?: boolean } = {}
 ): Promise<ApiResponse<{
   results: { id: number; email: string; full_name: string }[];
   count: number;
@@ -384,6 +386,7 @@ export async function getActiveUsersPage(
   if (params.search) qs.set('search', params.search);
   if (params.page) qs.set('page', String(params.page));
   if (params.page_size) qs.set('page_size', String(params.page_size));
+  if (params.includeInactive) qs.set('include_inactive', 'true');
   const suffix = qs.toString() ? `?${qs}` : '';
   return fetchApi<{
     results: { id: number; email: string; full_name: string }[];
@@ -406,7 +409,8 @@ export interface MotorEnquiryEntry {
   chassis_no?: string;
   // Motor New uses 'converted'; Motor Renewal uses 'retained'. Both modules
   // share the same row type; the page's per-module STATUS_CONFIG narrows it.
-  status: 'new' | 'in_progress' | 'converted' | 'retained' | 'lost';
+  // TED-596: 'shared_with_client' is a Marine New-only working stage.
+  status: 'new' | 'in_progress' | 'shared_with_client' | 'converted' | 'retained' | 'lost' | 'rejected';
   revisions: number;
   quotes_compared: number;
   status_changed_at: string | null;
@@ -424,9 +428,17 @@ export interface MotorEnquiryEntry {
   // general_new uses class_of_insurance — FK to the admin-managed ClassOfInsurance lookup.
   class_of_insurance?: number | null;
   class_of_insurance_display?: string | null;
-  // Insurance Company FK to the admin-managed lookup table.
+  // Insurance Company FK — legacy single insurer (create-time, pre-TED-592).
+  // TED-592 (corrected): no longer written by create or Won; kept for history.
   insurance_company?: number | null;
   insurance_company_name?: string | null;
+  // TED-592 (corrected): the single insurer the client purchased from, captured
+  // on the Won modal. Stored separately so insurance_company is never overwritten.
+  converted_insurer?: number | null;
+  converted_insurer_name?: string | null;
+  // TED-592: insurers compared while the enquiry was open (create multi-select).
+  compared_insurance_companies?: number[];
+  compared_insurance_companies_names?: string[];
   added_by: number;
   added_by_name: string;
   on_behalf_of: number | null;
@@ -436,6 +448,14 @@ export interface MotorEnquiryEntry {
   is_editable: boolean;
   // Count of EntryRemark rows. Tints the Notes icon indigo when > 0.
   remark_count: number;
+  // TED-594: void / write-off. When is_voided, the row shows a "Void" status,
+  // is excluded from every dashboard metric, and is frozen (no edit/delete/
+  // status change). voided_by_name + void_reason power the badge tooltip + panel tag.
+  is_voided: boolean;
+  voided_at: string | null;
+  voided_by: number | null;
+  voided_by_name: string | null;
+  void_reason: string;
   // Index signature required for compatibility with shared BaseModuleEntry-based
   // components (PersonalDailyTracker, TrackerView).
   [key: string]: unknown;
@@ -458,7 +478,19 @@ export interface MotorEnquiryStats {
   // applies to the module.
   converted_premium: number;
   lost_premium: number;
+  // Potential premium of rejected entries. Reported on the frontend as part of
+  // the "Lost Potential Premium" card (lost_premium + rejected_premium): rejected
+  // is lost business. It is included in total_potential_premium and is no longer
+  // subtracted from the premium-ratio denominator (this reverses TED-595).
+  rejected_premium: number;
   total_potential_premium: number;
+  // TED-595: count of rejected entries in the same scope (drives the Rejected card).
+  rejected: number;
+  // TED-596: count of enquiries at the 'shared_with_client' stage (Marine New's
+  // dashboard card). 0 for every other enquiry module.
+  shared_with_client?: number;
+  // TED-594: count of voided entries in the same scope (drives the Voided card).
+  voided: number;
 }
 
 export interface MotorRenewalMonthlyTarget {
@@ -480,7 +512,8 @@ export type MotorEnquiryModule =
   | 'motor-renewal'
   | 'motor-fleet-new'
   | 'motor-fleet-renewal'
-  | 'general-new';  // general_new shares the per-enquiry shape (minus chassis_no)
+  | 'general-new'  // general_new shares the per-enquiry shape (minus chassis_no)
+  | 'marine-new';  // TED-596: marine_new rebuilt on the same per-enquiry shape
 
 // Renewal-style modules that have monthly retention targets (clients_assigned).
 export type MotorRenewalModule = 'motor-renewal' | 'motor-fleet-renewal';
@@ -515,11 +548,13 @@ export async function updateMotorEnquiryStatus(
   // class_of_enquiry is used by the Motor modules, class_of_insurance by
   // general-new; converted_premium is now saved on every transition incl. Lost.
   payload: {
-    status: 'new' | 'in_progress' | 'converted' | 'retained' | 'lost';
+    status: 'new' | 'in_progress' | 'shared_with_client' | 'converted' | 'retained' | 'lost' | 'rejected';
     revisions?: number;
     quotes_compared?: number;
     class_of_enquiry?: string;
     class_of_insurance?: number | null;
+    // TED-592 (corrected): the insurer the client purchased from (Won modal).
+    converted_insurer?: number | null;
     converted_premium?: string | number;
   }
 ): Promise<ApiResponse<MotorEnquiryEntry>> {
@@ -628,7 +663,7 @@ export interface GeneralRenewalEntry {
   client_name: string;
   agent: number;                     // FK id
   agent_name: string;
-  status: 'new' | 'retained' | 'lost';
+  status: 'new' | 'retained' | 'lost' | 'rejected';
   revisions: number;
   quotes_compared: number;
   status_changed_at: string | null;
@@ -643,8 +678,17 @@ export interface GeneralRenewalEntry {
   // FK to the admin-managed ClassOfInsurance lookup (TED-446 migration 0035).
   class_of_insurance?: number | null;
   class_of_insurance_display?: string | null;
+  // Legacy single insurer (create-time, pre-TED-592). TED-592 (corrected): no
+  // longer written by create or Won; kept for history.
   insurance_company?: number | null;
   insurance_company_name?: string | null;
+  // TED-592 (corrected): the single insurer the client purchased from, captured
+  // on the Won modal. Stored separately so insurance_company is never overwritten.
+  converted_insurer?: number | null;
+  converted_insurer_name?: string | null;
+  // TED-592: insurers compared while the enquiry was open (create multi-select).
+  compared_insurance_companies?: number[];
+  compared_insurance_companies_names?: string[];
   added_by: number;
   added_by_name: string;
   on_behalf_of: number | null;
@@ -654,6 +698,12 @@ export interface GeneralRenewalEntry {
   is_editable: boolean;
   // Count of EntryRemark rows. Tints the Notes icon indigo when > 0.
   remark_count: number;
+  // TED-594: void / write-off (see MotorEnquiryEntry for semantics).
+  is_voided: boolean;
+  voided_at: string | null;
+  voided_by: number | null;
+  voided_by_name: string | null;
+  void_reason: string;
   // Index signature for compatibility with shared tracker components.
   [key: string]: unknown;
 }
@@ -669,7 +719,19 @@ export interface GeneralRenewalStats {
   // Premium aggregates (sums of `potential_premium`).
   converted_premium: number;
   lost_premium: number;
+  // Potential premium of rejected entries. Reported on the frontend as part of
+  // the "Lost Potential Premium" card (lost_premium + rejected_premium): rejected
+  // is lost business. It is included in total_potential_premium and is no longer
+  // subtracted from the premium-ratio denominator (this reverses TED-595).
+  rejected_premium: number;
   total_potential_premium: number;
+  // TED-595: count of rejected entries in the same scope (drives the Rejected card).
+  rejected: number;
+  // TED-596: count of enquiries at the 'shared_with_client' stage (Marine New's
+  // dashboard card). 0 for every other enquiry module.
+  shared_with_client?: number;
+  // TED-594: count of voided entries in the same scope (drives the Voided card).
+  voided: number;
 }
 
 export interface GeneralRenewalMonthlyTarget {
@@ -698,10 +760,12 @@ export async function updateGeneralRenewalStatus(
   id: number,
   // TED-530: the confirmation modal confirms/edits all of these while closing.
   payload: {
-    status: 'retained' | 'lost';
+    status: 'retained' | 'lost' | 'rejected';
     revisions?: number;
     quotes_compared?: number;
     class_of_insurance?: number | null;
+    // TED-592 (corrected): the insurer the client purchased from (Won modal).
+    converted_insurer?: number | null;
     converted_premium?: string | number;
   }
 ): Promise<ApiResponse<GeneralRenewalEntry>> {
@@ -811,6 +875,12 @@ export interface MotorClaimEntry {
   is_terminal: boolean;
   // Count of EntryRemark rows. Tints the Notes icon indigo when > 0.
   remark_count: number;
+  // TED-594: void / write-off (see MotorEnquiryEntry for semantics).
+  is_voided: boolean;
+  voided_at: string | null;
+  voided_by: number | null;
+  voided_by_name: string | null;
+  void_reason: string;
   // Index signature for compatibility with shared BaseModuleEntry-based
   // components (PersonalDailyTracker, TrackerView).
   [key: string]: unknown;
@@ -825,6 +895,8 @@ export interface MotorClaimStats {
   claims_in_progress: number;
   claims_resolved: number;
   claims_rejected: number;
+  // TED-594: count of voided claims in the same scope (drives the Voided card).
+  voided: number;
 }
 
 // ─── Settings: lookup tables (Type of Accident + Insurance Company) ──────────
@@ -840,8 +912,13 @@ export interface SettingsLookup {
 export type AccidentType = SettingsLookup;
 export type InsuranceCompany = SettingsLookup;
 export type ClassOfInsurance = SettingsLookup;
+export type MarineClassOfInsurance = SettingsLookup;
 
-type LookupResource = 'accident-types' | 'insurance-companies' | 'class-of-insurance';
+type LookupResource =
+  | 'accident-types'
+  | 'insurance-companies'
+  | 'class-of-insurance'
+  | 'marine-class-of-insurance';
 
 async function _listLookup(
   resource: LookupResource,
@@ -868,6 +945,9 @@ export const getInsuranceCompanies = (params?: { is_active?: boolean }) =>
 
 export const getClassOfInsurance = (params?: { is_active?: boolean }) =>
   _listLookup('class-of-insurance', params);
+
+export const getMarineClassOfInsurance = (params?: { is_active?: boolean }) =>
+  _listLookup('marine-class-of-insurance', params);
 
 // Paginated + searchable variants for SearchableSelect dropdowns.
 async function _listLookupPage(
@@ -906,6 +986,10 @@ export const getClassOfInsurancePage = (
   params: { search?: string; page?: number; page_size?: number; is_active?: boolean } = {}
 ) => _listLookupPage('class-of-insurance', params);
 
+export const getMarineClassOfInsurancePage = (
+  params: { search?: string; page?: number; page_size?: number; is_active?: boolean } = {}
+) => _listLookupPage('marine-class-of-insurance', params);
+
 export async function createClassOfInsurance(
   name: string,
 ): Promise<ApiResponse<ClassOfInsurance>> {
@@ -921,6 +1005,25 @@ export async function updateClassOfInsurance(
 ): Promise<ApiResponse<ClassOfInsurance>> {
   return fetchApi<ClassOfInsurance>(
     `/api/entries/settings/class-of-insurance/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(data) },
+  );
+}
+
+export async function createMarineClassOfInsurance(
+  name: string,
+): Promise<ApiResponse<MarineClassOfInsurance>> {
+  return fetchApi<MarineClassOfInsurance>('/api/entries/settings/marine-class-of-insurance/', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function updateMarineClassOfInsurance(
+  id: number,
+  data: { name?: string; is_active?: boolean },
+): Promise<ApiResponse<MarineClassOfInsurance>> {
+  return fetchApi<MarineClassOfInsurance>(
+    `/api/entries/settings/marine-class-of-insurance/${id}/`,
     { method: 'PATCH', body: JSON.stringify(data) },
   );
 }
@@ -1053,6 +1156,12 @@ export interface SalesKPIEntry {
   is_editable: boolean;
   // Count of EntryRemark rows. Tints the Notes icon indigo when > 0.
   remark_count: number;
+  // TED-594: void / write-off (see MotorEnquiryEntry for semantics).
+  is_voided: boolean;
+  voided_at: string | null;
+  voided_by: number | null;
+  voided_by_name: string | null;
+  void_reason: string;
   // Index signature for compatibility with shared tracker components.
   [key: string]: unknown;
 }
@@ -1071,6 +1180,8 @@ export interface SalesKPIStats {
   new_clients_acquired: number;
   potential_premium_total: number;
   converted_premium_total: number;
+  // TED-594: count of voided deals in the same scope (drives the Voided card).
+  voided: number;
 }
 
 export async function getSalesKPIStats(params: {
@@ -1143,6 +1254,9 @@ export interface EntryRemark {
   content_type: number;
   object_id: number;
   text: string;
+  // TED-594: 'void_reason' remarks are system-generated when an entry is voided
+  // (shown with a "Void Reason" tag and immutable); normal comments are 'comment'.
+  kind: 'comment' | 'void_reason';
   author: number;
   author_name: string;
   can_edit: boolean;
@@ -1185,6 +1299,20 @@ export async function deleteRemark(id: number): Promise<ApiResponse<void>> {
   return fetchApi<void>(`/api/entries/remarks/${id}/`, { method: 'DELETE' });
 }
 
+// TED-594: Void (write off) an entry. Generic across all modules — pass the
+// module's apiSlug (e.g. 'motor-new', 'sales-kpi', 'medical-claim'). The reason
+// is required. The entry is retained for audit but excluded from all metrics.
+export async function voidEntry<T = unknown>(
+  apiSlug: string,
+  id: number,
+  voidReason: string,
+): Promise<ApiResponse<T>> {
+  return fetchApi<T>(`/api/entries/${apiSlug}/${id}/void/`, {
+    method: 'POST',
+    body: JSON.stringify({ void_reason: voidReason }),
+  });
+}
+
 // Map of {modelname: content_type_id} for the 7 modules that support remarks.
 // Frontend fetches once on mount and caches it.
 export async function getRemarksContentTypes(): Promise<ApiResponse<Record<string, number>>> {
@@ -1203,6 +1331,7 @@ export const REMARKS_MODEL_NAME_BY_API_SLUG: Record<string, string> = {
   'motor-fleet-renewal': 'motorfleetrenewalentry',
   'motor-claim': 'motorclaimentry',
   'sales-kpi': 'saleskpientry',
+  'marine-new': 'marinenewentry',
 };
 
 // ─── TED-554: Tracker export (.xlsx) ─────────────────────────────────────────

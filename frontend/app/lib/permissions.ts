@@ -26,3 +26,22 @@ export function canModifyEntry(
 ): boolean {
   return !isOversightViewer(user) || user?.id === addedById;
 }
+
+/**
+ * TED-594 — whether `user` may void the given entry. Mirrors the backend
+ * `BaseEntry.can_void` + the HOD write block:
+ *   - already-voided entries can never be voided again;
+ *   - super-admins (is_staff) may void ANY entry;
+ *   - HODs may void nothing (they are view-only, blocked server-side);
+ *   - everyone else may void only entries they created.
+ */
+export function canVoidEntry(
+  user: User | null | undefined,
+  addedById: number,
+  isVoided: boolean,
+): boolean {
+  if (!user || isVoided) return false;
+  if (user.is_staff) return true;
+  if (user.role?.is_hod) return false;
+  return user.id === addedById;
+}

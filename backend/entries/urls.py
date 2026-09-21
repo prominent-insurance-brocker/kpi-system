@@ -20,6 +20,7 @@ from .views import (
     TypeOfAccidentViewSet,
     InsuranceCompanyViewSet,
     ClassOfInsuranceViewSet,
+    MarineClassOfInsuranceViewSet,
     remarks_content_types,
 )
 from .tracker_export import TrackerExportView
@@ -48,6 +49,7 @@ router.register(r'medical-claim', MedicalClaimEntryViewSet, basename='medical-cl
 router.register(r'settings/accident-types', TypeOfAccidentViewSet, basename='accident-types')
 router.register(r'settings/insurance-companies', InsuranceCompanyViewSet, basename='insurance-companies')
 router.register(r'settings/class-of-insurance', ClassOfInsuranceViewSet, basename='class-of-insurance')
+router.register(r'settings/marine-class-of-insurance', MarineClassOfInsuranceViewSet, basename='marine-class-of-insurance')
 # Cross-module per-entry comments. The router-driven /remarks/ resource lives
 # at the entries API root; the helper endpoint exposes the {model: ct_id} map.
 router.register(r'remarks', EntryRemarkViewSet, basename='remarks')

@@ -212,9 +212,17 @@ export function RemarksPanel({
                   ) : (
                     <>
                       <div className="rounded-md bg-zinc-50 px-3 py-2 flex items-start gap-2">
-                        <p className="text-sm text-zinc-800 whitespace-pre-wrap flex-1 break-words">
-                          {r.text}
-                        </p>
+                        <div className="flex-1 min-w-0">
+                          {/* TED-594: system-generated void reasons carry a tag. */}
+                          {r.kind === 'void_reason' && (
+                            <span className="inline-flex items-center rounded-full bg-red-50 text-red-700 text-[11px] font-medium px-2 py-0.5 mb-1">
+                              Void Reason
+                            </span>
+                          )}
+                          <p className="text-sm text-zinc-800 whitespace-pre-wrap break-words">
+                            {r.text}
+                          </p>
+                        </div>
                         {(r.can_edit || r.can_delete) && (
                           <div className="flex items-center gap-1 shrink-0">
                             {r.can_edit && (

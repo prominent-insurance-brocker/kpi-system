@@ -371,13 +371,15 @@ def sales_kpi_payload(date_iso, added_by_id):
 
 
 def marine_new_payload(date_iso, added_by_id):
+    """TED-596: marine_new is now a per-enquiry module — same shape as
+    general_enquiry_payload (no chassis_no)."""
     return {
         'date': date_iso,
         'added_by': added_by_id,
-        'gross_booked_premium': str(round(random.uniform(2_000, 80_000), 2)),
-        'quotes_created': random.randint(2, 15),
-        'new_clients_acquired': random.randint(0, 5),
-        'new_policies_issued': random.randint(0, 8),
+        'client_name': random.choice(_MOTOR_CLIENT_POOL),
+        'agent': added_by_id,
+        'quotes_compared': random.randint(0, 5),
+        'initial_remark': random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
     }
 
 

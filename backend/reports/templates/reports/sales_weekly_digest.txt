@@ -1,6 +1,11 @@
 SALES WEEKLY DIGEST
 {{ m.week_label }} (compared with {{ m.prior_week_label }})
 
+HOW TO READ THIS
+Every figure is compared with the previous week: an up or down change vs last
+week, where green is good and red needs attention. For Pending this is reversed
+(a rise is bad). "New" means there was no prior-week activity to compare.
+
 KEY METRICS
 {% for metric in m.key_metrics %}  {{ metric.label }}: {{ metric.display }} ({{ metric.delta.display }} vs last week)
 {% endfor %}
@@ -11,9 +16,12 @@ TOP 5 PERFORMERS (ranked by premium)
 {% for p in m.top_performers %}  {{ forloop.counter }}. {{ p.name }} — Premium {{ p.premium_display }}, Won {{ p.won_count }}
 {% empty %}  No deals won last week.
 {% endfor %}
-ACTIVITY (active days, Mon-Sun)
+ACTIVITY (LESS ACTIVE USERS)
 {% for u in m.activity %}  - {{ u.name }}: {{ u.display }}
-{% empty %}  No sales users.
+{% empty %}  No users with 2 or fewer active days.
 {% endfor %}
 ---
+pibsecure.com
+Prominent Insurance Brokers LLC
+
 This is an automated, system-generated report. Generated {{ m.generated_at }}.

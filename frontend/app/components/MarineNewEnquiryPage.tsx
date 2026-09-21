@@ -87,7 +87,7 @@ import {
   getUsersForModulePage,
   getInsuranceCompaniesPage,
   getInsuranceCompanies,
-  getClassOfInsurancePage,
+  getMarineClassOfInsurancePage,
   getMotorEnquiryStats,
   updateMotorEnquiryStatus,
   updateMotorEnquiryRevisions,
@@ -189,13 +189,11 @@ const STATUS_CONFIG: Record<MotorEnquiryModule, ModuleStatusConfig> = {
     totalLabel: 'Total Enquiries Added',
     showRatioCard: true,
   },
-  // TED-596: 'marine-new' has its own page (MarineNewEnquiryPage). This entry
-  // exists only to satisfy the Record key requirement after MotorEnquiryModule
-  // was widened; this page is never instantiated with apiSlug='marine-new'.
+  // TED-596 / TED-656: the module this page actually renders. New / Shared With
+  // Client are open working stages; Won / Rejected / Lost are terminal.
   'marine-new': {
     options: [
       { value: 'new', label: 'New Enquiry' },
-      { value: 'in_progress', label: 'In Progress' },
       { value: 'shared_with_client', label: 'Shared With Client' },
       { value: 'converted', label: 'Won' },
       { value: 'rejected', label: 'Rejected' },
@@ -241,10 +239,10 @@ function formatAccuracy(pct: number | null | undefined): string {
   return `${pct.toFixed(1)}%`;
 }
 
-export function GeneralNewEnquiryPage() {
-  const moduleKey = 'general_new' as const;
-  const apiSlug: MotorEnquiryModule = 'general-new';
-  const title = 'General New';
+export function MarineNewEnquiryPage() {
+  const moduleKey = 'marine_new' as const;
+  const apiSlug: MotorEnquiryModule = 'marine-new';
+  const title = 'Marine New';
   const config = STATUS_CONFIG[apiSlug];
   const statusLabelFor = useCallback(
     (value: MotorEnquiryEntry['status']) => {
@@ -331,9 +329,6 @@ export function GeneralNewEnquiryPage() {
     entry: MotorEnquiryEntry;
     newStatus: SuccessStatus | 'lost';
   } | null>(null);
-  // TED-595: the entry pending rejection — opens a field-capturing modal that
-  // requires the Revision Count + No. of Quotes Compared before the irreversible reject.
-  const [rejectingEntry, setRejectingEntry] = useState<MotorEnquiryEntry | null>(null);
 
   // Remarks side panel
   const [panelEntry, setPanelEntry] = useState<MotorEnquiryEntry | null>(null);
@@ -684,24 +679,33 @@ export function GeneralNewEnquiryPage() {
       ...(coverage !== undefined
         ? { class_of_insurance: coverage ? Number(coverage) : null }
         : {}),
-      // TED-592 (corrected): the converted insurer (Won modal, success only).
-      ...(wonInsurer ? { converted_insurer: Number(wonInsurer) } : {}),
+      // TED-592: the insurer the client purchased from (Won modal, success only).
+      ...(wonInsurer ? { insurance_company: Number(wonInsurer) } : {}),
       ...(convertedPremium ? { converted_premium: convertedPremium } : {}),
     });
     if (result.data) {
       toast.success(`Marked as ${statusLabelFor(newStatus)}`);
       setPendingStatus(null);
-      setRejectingEntry(null);
       refreshAfterMutation();
     } else {
       toast.error(result.error || 'Failed to update status');
     }
   };
 
-  // TED-595: Rejected is an irreversible terminal close. Per the requirement it
-  // must confirm the Revision Count + No. of Quotes Compared, so it opens the
-  // field-capturing EnquiryStatusModal in reject mode (not a plain confirm).
-  const handleReject = (entry: MotorEnquiryEntry) => setRejectingEntry(entry);
+  // TED-595: Rejected is an irreversible terminal close. Unlike Won/Lost it
+  // captures no extra fields, so it uses the simple confirm dialog (not the
+  // field-capturing EnquiryStatusModal) and posts only { status: 'rejected' }.
+  const handleReject = async (entry: MotorEnquiryEntry) => {
+    const ok = await confirm({
+      title: 'Reject this enquiry?',
+      description: 'This action cannot be reversed. Are you sure you want to proceed?',
+      confirmLabel: 'Reject',
+      cancelLabel: 'Cancel',
+      danger: true,
+    });
+    if (!ok) return;
+    applyStatusChange(entry, 'rejected');
+  };
 
   // ── Columns ──────────────────────────────────────────────────────────────
   const columns = [
@@ -731,8 +735,9 @@ export function GeneralNewEnquiryPage() {
               } else if (v === 'rejected') {
                 // TED-595: irreversible decline — simple warning confirm.
                 handleReject(item);
-              } else if (v === 'new' || v === 'in_progress') {
-                // New ↔ In Progress is a free, no-confirmation transition.
+              } else if (v === 'new' || v === 'shared_with_client') {
+                // TED-596 / TED-656: New / Shared With Client are open
+                // stages — free, no-confirmation transitions.
                 applyStatusChange(item, v);
               }
             }}
@@ -797,8 +802,8 @@ export function GeneralNewEnquiryPage() {
       header: 'Revisions',
       render: (item: MotorEnquiryEntry) => {
         // Read-only once closed (converted/lost); editable while the enquiry
-        // is still active (New or In Progress).
-        if (item.status !== 'new' && item.status !== 'in_progress') {
+        // is still active (New or Shared With Client).
+        if (item.status !== 'new' && item.status !== 'shared_with_client') {
           return <span className="text-sm text-[#374151]">{item.revisions}</span>;
         }
         // While status=new, anyone with table access can bump the counter inline.
@@ -856,19 +861,15 @@ export function GeneralNewEnquiryPage() {
         (item.class_of_insurance_display as string | null | undefined) || '—',
     },
     {
-      key: 'compared_insurance_companies',
-      header: 'Compared Insurers',
-      // TED-592 (corrected): the insurers compared/quoted while the enquiry was open.
+      key: 'insurance_company',
+      header: 'Insurance Company',
+      // TED-592: show the purchased insurer once Won; before that, the insurers
+      // compared while the enquiry was open.
       render: (item: MotorEnquiryEntry) =>
-        item.compared_insurance_companies_names?.length
+        item.insurance_company_name ||
+        (item.compared_insurance_companies_names?.length
           ? item.compared_insurance_companies_names.join(', ')
-          : '—',
-    },
-    {
-      key: 'converted_insurer',
-      header: 'Converted Insurer',
-      // TED-592 (corrected): the single insurer the client purchased from (Won).
-      render: (item: MotorEnquiryEntry) => item.converted_insurer_name || '—',
+          : '—'),
     },
     {
       key: 'added_at',
@@ -985,7 +986,7 @@ export function GeneralNewEnquiryPage() {
               />
             )}
             <StatCard label={config.totalLabel} value={stats.total} accent="text-[#09090B]" />
-            <StatCard label="In Progress" value={stats.in_progress} accent="text-amber-600" />
+            <StatCard label="Shared With Client" value={stats.shared_with_client ?? 0} accent="text-indigo-600" />
             <StatCard label="Enquiries Revised" value={stats.revised} accent="text-[#A855F7]" />
             <StatCard
               label={statusLabelFor(config.successValue)}
@@ -1184,7 +1185,7 @@ export function GeneralNewEnquiryPage() {
                   placeholder: 'All Classes',
                   clearLabel: 'All Classes',
                   fetchPage: async ({ search, page }) => {
-                    const res = await getClassOfInsurancePage({ search, page });
+                    const res = await getMarineClassOfInsurancePage({ search, page });
                     return {
                       results: res.data?.results ?? [],
                       hasMore: res.data?.has_more ?? false,
@@ -1238,14 +1239,14 @@ export function GeneralNewEnquiryPage() {
                 onDelete={handleDelete}
                 canEdit={(entry) =>
                   !entry.is_voided &&
-                  (entry.status === 'new' || entry.status === 'in_progress') &&
+                  (entry.status === 'new' || entry.status === 'shared_with_client') &&
                   entry.is_editable &&
                   canModifyEntry(user, entry.added_by)
                 }
                 canDelete={(entry) =>
                   !entry.is_voided &&
                   entry.added_by === currentUserId &&
-                  (entry.status === 'new' || entry.status === 'in_progress')
+                  (entry.status === 'new' || entry.status === 'shared_with_client')
                 }
                 rowActions={(entry) => {
                   const actions: Array<{ label: string; onClick: () => void; danger?: boolean }> = [];
@@ -1312,26 +1313,24 @@ export function GeneralNewEnquiryPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Status transition verification modal (TED-440) ───────────── */}
-      {/* TED-593 (corrected): the Class of Insurance confirmation was removed from
-          the Won/Lost modal for General New + General Renewal — the class chosen in
-          the add-enquiry modal is authoritative. `coverage` is omitted so the modal
-          no longer renders the dropdown, and `class_of_insurance` is left out of the
-          status PATCH entirely (passing '' would wipe the stored value), preserving
-          whatever was set at creation. */}
+      {/* ── Status transition verification modal ─────────────────────────
+          TED-596: Marine does NOT re-confirm the Class of Insurance on a Won
+          (the `coverage` slot is omitted — class is captured at creation).
+          Only Won captures the insurer + converted premium; Lost captures
+          neither, and Rejected never reaches this modal. */}
       {pendingStatus && (
         <EnquiryStatusModal
           entry={pendingStatus.entry}
-          needsConvertedPremium={pendingStatus.newStatus !== 'lost'}
+          needsConvertedPremium={pendingStatus.newStatus === config.successValue}
           insurer={
-            pendingStatus.newStatus !== 'lost'
+            pendingStatus.newStatus === config.successValue
               ? {
-                  label: 'Converted Insurer',
+                  label: 'Insurance Company',
                   helper:
                     'Select the insurer the client purchased the policy from.',
                   initialValue:
-                    typeof pendingStatus.entry.converted_insurer === 'number'
-                      ? String(pendingStatus.entry.converted_insurer)
+                    typeof pendingStatus.entry.insurance_company === 'number'
+                      ? String(pendingStatus.entry.insurance_company)
                       : '',
                   renderControl: (value, onChange) => (
                     <SearchableSelect
@@ -1340,7 +1339,7 @@ export function GeneralNewEnquiryPage() {
                       placeholder="Select insurance company"
                       emptyLabel="No insurance companies found"
                       clearLabel="None"
-                      selectedLabel={pendingStatus.entry.converted_insurer_name ?? null}
+                      selectedLabel={pendingStatus.entry.insurance_company_name ?? null}
                       getOptionValue={(c) => String(c.id)}
                       getOptionLabel={(c) => c.name}
                       fetchPage={insurerFetchPage}
@@ -1349,7 +1348,7 @@ export function GeneralNewEnquiryPage() {
                 }
               : undefined
           }
-          insurerRequired={pendingStatus.newStatus !== 'lost'}
+          insurerRequired={pendingStatus.newStatus === config.successValue}
           onCancel={() => setPendingStatus(null)}
           onConfirm={({ revisions, quotes_compared, insurance_company, converted_premium }) =>
             applyStatusChange(
@@ -1357,31 +1356,11 @@ export function GeneralNewEnquiryPage() {
               pendingStatus.newStatus,
               revisions,
               quotes_compared,
-              undefined, // TED-593: Class of Insurance no longer sent from the modal
+              // coverage omitted (undefined) — never re-sends class_of_insurance,
+              // so the class set at creation is preserved on a Won.
+              undefined,
               converted_premium,
               insurance_company,
-            )
-          }
-        />
-      )}
-
-      {/* TED-595: reject-mode modal — confirms Revision Count + No. of Quotes
-          Compared (the only two required fields), then irreversibly rejects. */}
-      {rejectingEntry && (
-        <EnquiryStatusModal
-          entry={rejectingEntry}
-          needsConvertedPremium={false}
-          title="Reject this enquiry?"
-          warning="This action cannot be reversed. Are you sure you want to proceed?"
-          confirmLabel="Reject"
-          danger
-          onCancel={() => setRejectingEntry(null)}
-          onConfirm={({ revisions, quotes_compared }) =>
-            applyStatusChange(
-              rejectingEntry,
-              'rejected',
-              revisions,
-              quotes_compared,
             )
           }
         />
@@ -1724,7 +1703,7 @@ function EnquiryForm({
 
   const classOfInsuranceFetchPage = useCallback(
     async ({ search, page }: { search: string; page: number }) => {
-      const res = await getClassOfInsurancePage({ search, page });
+      const res = await getMarineClassOfInsurancePage({ search, page });
       return {
         results: res.data?.results ?? [],
         hasMore: res.data?.has_more ?? false,
@@ -1822,7 +1801,7 @@ function EnquiryForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Compared Insurers *</Label>
+        <Label>Insurance Company *</Label>
         <MultiSelect
           options={insurerOptions}
           value={insurerIds.map(String)}

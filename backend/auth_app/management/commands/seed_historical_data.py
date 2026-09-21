@@ -40,6 +40,7 @@ from entries.models import (
     SalesKPIEntry,
     SalesMonthlyTarget,
     MarineNewEntry,
+    MarineNewStatusTransition,
     MarineRenewalEntry,
     MedicalClaimEntry,
     MedicalClaimStatusTransition,
@@ -384,22 +385,9 @@ class Command(BaseCommand):
         return count
 
     def _seed_marine_new(self, users, dates):
-        count = 0
-        for user in users:
-            for d in dates:
-                entry, created = MarineNewEntry.objects.get_or_create(
-                    date=d, added_by=user,
-                    defaults=dict(
-                        gross_booked_premium=Decimal(str(round(random.uniform(2_000, 80_000), 2))),
-                        quotes_created=random.randint(2, 15),
-                        new_clients_acquired=random.randint(0, 5),
-                        new_policies_issued=random.randint(0, 8),
-                    ),
-                )
-                if created:
-                    self._backdate(MarineNewEntry, entry.pk, _aware_dt(d))
-                    count += 1
-        return count
+        # TED-596: marine_new is now a per-enquiry module (like general/motor),
+        # so it goes through the shared enquiry seeder.
+        return self._seed_motor_enquiry(users, dates, MarineNewEntry, MarineNewStatusTransition)
 
     def _seed_marine_renewal(self, users, dates):
         count = 0

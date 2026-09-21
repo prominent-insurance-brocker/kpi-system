@@ -36,6 +36,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
+import { VoidEntryDialog } from '@/app/components/VoidEntryDialog';
+import { VoidStatusBadge } from '@/app/components/VoidStatusBadge';
 import {
   AddedByCell,
   PersonalDailyTracker,
@@ -45,7 +47,7 @@ import {
 } from '@/app/components/KpiModulePage';
 import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
-import { canModifyEntry } from '@/app/lib/permissions';
+import { canModifyEntry, canVoidEntry } from '@/app/lib/permissions';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { formatDate, businessToday } from '@/app/lib/date';
 import { useTrackerCounts } from '@/app/lib/useTrackerCounts';
@@ -66,6 +68,7 @@ import {
   getInsuranceCompaniesPage,
   getRemarksContentTypes,
   REMARKS_MODEL_NAME_BY_API_SLUG,
+  voidEntry,
   type MotorClaimEntry,
   type MotorClaimStats,
   type AccidentType,
@@ -152,6 +155,7 @@ export default function MotorClaimPage() {
     claims_in_progress: 0,
     claims_resolved: 0,
     claims_rejected: 0,
+    voided: 0,
   });
 
   // Tracker state
@@ -173,6 +177,9 @@ export default function MotorClaimPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<MotorClaimEntry | null>(null);
   const [modalError, setModalError] = useState('');
+  // TED-594: void (write-off) confirmation target + in-flight flag.
+  const [voidTarget, setVoidTarget] = useState<MotorClaimEntry | null>(null);
+  const [isVoiding, setIsVoiding] = useState(false);
 
   // Cross-module comments panel
   const [panelEntry, setPanelEntry] = useState<MotorClaimEntry | null>(null);
@@ -408,6 +415,9 @@ export default function MotorClaimPage() {
       key: 'status',
       header: 'Status',
       render: (item: MotorClaimEntry) => {
+        if (item.is_voided) {
+          return <VoidStatusBadge reason={item.void_reason} voidedByName={item.voided_by_name} />;
+        }
         if (item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by)) {
           return <StatusBadge status={item.status} />;
         }
@@ -581,7 +591,7 @@ export default function MotorClaimPage() {
           {/* Breakdown — single-status current counts */}
           <div className="space-y-3">
             <h2 className="text-base font-semibold text-[#09090B]">Breakdown</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
               <StatCard
                 label="Claims In Progress"
                 value={stats.claims_in_progress}
@@ -596,6 +606,11 @@ export default function MotorClaimPage() {
                 label="Claims Rejected"
                 value={stats.claims_rejected}
                 accent="text-red-700"
+              />
+              <StatCard
+                label="Voided"
+                value={stats.voided}
+                accent="text-gray-600"
               />
             </div>
           </div>
@@ -823,10 +838,21 @@ export default function MotorClaimPage() {
                   setIsModalOpen(true);
                 }}
                 onDelete={handleDelete}
-                canEdit={(entry) => entry.is_editable && canModifyEntry(user, entry.added_by)}
+                canEdit={(entry) => !entry.is_voided && entry.is_editable && canModifyEntry(user, entry.added_by)}
                 canDelete={(entry) =>
-                  entry.added_by === currentUserId && entry.status === 'claims_opened'
+                  !entry.is_voided && entry.added_by === currentUserId && entry.status === 'claims_opened'
                 }
+                rowActions={(entry) => {
+                  const actions: Array<{ label: string; onClick: () => void; danger?: boolean }> = [];
+                  if (canVoidEntry(user, entry.added_by, entry.is_voided)) {
+                    actions.push({
+                      label: 'Void',
+                      danger: true,
+                      onClick: () => setVoidTarget(entry),
+                    });
+                  }
+                  return actions;
+                }}
                 isLoading={isLoading}
               />
             </div>
@@ -870,6 +896,30 @@ export default function MotorClaimPage() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* ── Void (write-off) confirmation (TED-594) ──────────────────────── */}
+      <VoidEntryDialog
+        open={!!voidTarget}
+        onOpenChange={(open) => {
+          if (!open) setVoidTarget(null);
+        }}
+        isSubmitting={isVoiding}
+        noun="claim"
+        entryLabel={voidTarget?.pib_id}
+        onConfirm={async (reason) => {
+          if (!voidTarget) return;
+          setIsVoiding(true);
+          const res = await voidEntry('motor-claim', voidTarget.id, reason);
+          setIsVoiding(false);
+          if (res.error) {
+            toast.error(res.error);
+            return;
+          }
+          toast.success('Entry voided');
+          setVoidTarget(null);
+          refreshAfterMutation();
+        }}
+      />
     </div>
   );
 }

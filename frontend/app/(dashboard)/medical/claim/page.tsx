@@ -8,9 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DataTable } from '@/app/components/DataTable';
-import { fetchApi, getUsersForFilter } from '@/app/lib/api';
+import { fetchApi, getUsersForFilter, voidEntry } from '@/app/lib/api';
 import { useAuth } from '@/app/context/AuthContext';
-import { canModifyEntry } from '@/app/lib/permissions';
+import { canModifyEntry, canVoidEntry } from '@/app/lib/permissions';
 import { Plus } from 'lucide-react';
 import { DateRangeFilter } from '@/components/ui/date-range-filter';
 import { FormDatePicker } from '@/components/ui/form-date-picker';
@@ -21,6 +21,8 @@ import { toast } from 'sonner';
 import { useConfirm } from '@/app/components/ConfirmDialog';
 import { AddedByCell } from '@/app/components/KpiModulePage';
 import { FilterBar } from '@/app/components/FilterBar';
+import { VoidEntryDialog } from '@/app/components/VoidEntryDialog';
+import { VoidStatusBadge } from '@/app/components/VoidStatusBadge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 interface MedicalClaimEntry {
@@ -38,6 +40,9 @@ interface MedicalClaimEntry {
   tat_display: string;
   allowed_transitions: string[];
   is_terminal: boolean;
+  is_voided: boolean;
+  voided_by_name: string | null;
+  void_reason: string;
 }
 
 interface FilterUser {
@@ -51,6 +56,7 @@ interface MedicalClaimStats {
   claims_in_progress: number;
   claims_resolved: number;
   claims_rejected: number;
+  voided: number;
 }
 
 const STATUS_OPTIONS = [
@@ -123,6 +129,8 @@ export default function MedicalClaimPage() {
   const [error, setError] = useState('');
   const [users, setUsers] = useState<FilterUser[]>([]);
   const [stats, setStats] = useState<MedicalClaimStats | null>(null);
+  const [voidTarget, setVoidTarget] = useState<MedicalClaimEntry | null>(null);
+  const [isVoiding, setIsVoiding] = useState(false);
 
   const page = Number(searchParams.get('page')) || 1;
   const pageSize = Number(searchParams.get('pageSize')) || 20;
@@ -245,6 +253,9 @@ export default function MedicalClaimPage() {
       key: 'status',
       header: 'Status',
       render: (item: MedicalClaimEntry) => {
+        if (item.is_voided) {
+          return <VoidStatusBadge reason={item.void_reason} voidedByName={item.voided_by_name} />;
+        }
         if (item.is_terminal || item.allowed_transitions.length === 0 || !canModifyEntry(user, item.added_by)) {
           return <StatusBadge status={item.status} />;
         }
@@ -300,7 +311,7 @@ export default function MedicalClaimPage() {
         onClear={() => updateFilters({ dateFrom: '', dateTo: '', userId: '', status: '', customerName: '', page: 1 })}
       />
       {stats && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Claims Opened</CardTitle>
@@ -333,15 +344,48 @@ export default function MedicalClaimPage() {
               <div className="text-2xl font-bold text-red-700">{stats.claims_rejected}</div>
             </CardContent>
           </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Voided</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-gray-600">{stats.voided}</div>
+            </CardContent>
+          </Card>
         </div>
       )}
-      <DataTable columns={columns} data={entries} totalCount={totalCount} page={page} pageSize={pageSize} onPageChange={(p) => updateFilters({ page: p })} onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })} onEdit={(entry) => { setEditingEntry(entry); setError(''); setIsModalOpen(true); }} onDelete={handleDelete} canEdit={(entry) => entry.is_editable && canModifyEntry(user, entry.added_by)} canDelete={(entry) => entry.added_by === currentUserId} isLoading={isLoading} />
+      <DataTable columns={columns} data={entries} totalCount={totalCount} page={page} pageSize={pageSize} onPageChange={(p) => updateFilters({ page: p })} onPageSizeChange={(s) => updateFilters({ pageSize: s, page: 1 })} onEdit={(entry) => { setEditingEntry(entry); setError(''); setIsModalOpen(true); }} onDelete={handleDelete} canEdit={(entry) => !entry.is_voided && entry.is_editable && canModifyEntry(user, entry.added_by)} canDelete={(entry) => !entry.is_voided && entry.added_by === currentUserId} rowActions={(entry) => { const actions: Array<{ label: string; onClick: () => void; danger?: boolean }> = []; if (canVoidEntry(user, entry.added_by, entry.is_voided)) { actions.push({ label: 'Void', danger: true, onClick: () => setVoidTarget(entry) }); } return actions; }} isLoading={isLoading} />
       <Dialog open={isModalOpen} onOpenChange={() => { setIsModalOpen(false); setEditingEntry(null); setError(''); }}>
         <DialogContent className='p-0'>
           <DialogHeader className='border-b border-[#E4E4E4] p-4'><DialogTitle>{editingEntry ? 'Edit Entry' : 'Add New Entry'}</DialogTitle></DialogHeader>
           <EntryForm entry={editingEntry} onSave={handleSave} onClose={() => setIsModalOpen(false)} error={error} />
         </DialogContent>
       </Dialog>
+
+      {/* ── Void (write-off) confirmation (TED-594) ──────────────────────── */}
+      <VoidEntryDialog
+        open={!!voidTarget}
+        onOpenChange={(open) => {
+          if (!open) setVoidTarget(null);
+        }}
+        isSubmitting={isVoiding}
+        noun="claim"
+        entryLabel={voidTarget?.pib_id}
+        onConfirm={async (reason) => {
+          if (!voidTarget) return;
+          setIsVoiding(true);
+          const res = await voidEntry('medical-claim', voidTarget.id, reason);
+          setIsVoiding(false);
+          if (res.error) {
+            toast.error(res.error);
+            return;
+          }
+          toast.success('Entry voided');
+          setVoidTarget(null);
+          fetchEntries();
+          fetchStats();
+        }}
+      />
     </div>
   );
 }

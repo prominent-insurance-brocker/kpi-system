@@ -21,7 +21,12 @@ from roles.models import Role, RoleModulePermission
 
 from .models import Report, ReportSendEvent, ReportSendLog, ReportSetting
 from .scheduling import effective_schedule, is_due
-from .services.sales_weekly_digest import SalesWeeklyDigestService, _delta
+from .services.sales_weekly_digest import (
+    SalesWeeklyDigestService,
+    _delta,
+    _full_number_2dp,
+    _generated_at_label,
+)
 
 DUBAI = ZoneInfo('Asia/Dubai')
 REF = date(2026, 6, 28)
@@ -93,6 +98,7 @@ class MetricsTests(TestCase):
         performers = self.m['top_performers']
         self.assertEqual([p['name'] for p in performers], ['Alice A', 'Bob B'])
         self.assertEqual(performers[0]['premium'], 150000.0)
+        self.assertEqual(performers[0]['premium_display'], '150,000.00')  # TED-582: 2 decimals
         self.assertEqual(performers[0]['won_count'], 2)
 
     def test_top_performers_credited_to_added_by_not_assignee(self):
@@ -132,9 +138,32 @@ class DeltaTests(TestCase):
         self.assertEqual((down['arrow'], down['color']), (self.DOWN, self.GREEN))
 
 
+class FormattingTests(TestCase):
+    def test_generated_at_is_12_hour(self):
+        # TED-574: footer timestamp is 12-hour, no leading zero on the hour.
+        self.assertEqual(
+            _generated_at_label(datetime(2026, 7, 3, 14, 5, tzinfo=DUBAI)),
+            'Jul 03, 2026 2:05 PM',
+        )
+        self.assertEqual(
+            _generated_at_label(datetime(2026, 7, 3, 6, 0, tzinfo=DUBAI)),
+            'Jul 03, 2026 6:00 AM',
+        )
+        self.assertEqual(
+            _generated_at_label(datetime(2026, 7, 3, 0, 30, tzinfo=DUBAI)),
+            'Jul 03, 2026 12:30 AM',
+        )
+
+    def test_premium_uses_two_decimals(self):
+        # TED-582: premium figures keep their decimals instead of rounding.
+        self.assertEqual(_full_number_2dp(240341.5), '240,341.50')
+        self.assertEqual(_full_number_2dp(0), '0.00')
+
+
 class ActivityTests(TestCase):
-    """TED-576: 'Activity' lists every sales-team user with their active-day
-    count as N/7 over the full Mon-Sun week, least active first."""
+    """TED-576/TED-580: 'Activity (Less active users)' lists sales-team users
+    with <= 2 active days that week as N/7 over the full Mon-Sun week, least
+    active first."""
 
     @classmethod
     def setUpTestData(cls):
@@ -169,11 +198,12 @@ class ActivityTests(TestCase):
                 added_at=datetime(2026, 6, d, 10, tzinfo=DUBAI),
             )
 
-    def test_lists_all_users_with_count_out_of_7(self):
+    def test_lists_only_less_active_users(self):
         activity = SalesWeeklyDigestService(ref_date=REF).build()['activity']
-        self.assertEqual(len(activity), 5)  # every sales-team user
+        # TED-580: only users with <= 2 active days; Alice (7/7) is excluded.
+        self.assertEqual(len(activity), 4)
         by_name = {u['name']: u['display'] for u in activity}
-        self.assertEqual(by_name['Alice A'], '7/7')
+        self.assertNotIn('Alice A', by_name)
         self.assertEqual(by_name['Bob B'], '2/7')
         self.assertEqual(by_name['Carol C'], '2/7')  # Sat+Sun counted (Mon-Sun)
         self.assertEqual(by_name['Dave D'], '0/7')
@@ -183,7 +213,7 @@ class ActivityTests(TestCase):
         activity = SalesWeeklyDigestService(ref_date=REF).build()['activity']
         self.assertEqual(
             [u['name'] for u in activity],
-            ['Dave D', 'Eve E', 'Bob B', 'Carol C', 'Alice A'],
+            ['Dave D', 'Eve E', 'Bob B', 'Carol C'],  # Alice (7/7) filtered out
         )
 
 

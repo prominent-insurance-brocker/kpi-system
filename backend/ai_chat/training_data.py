@@ -21,7 +21,7 @@ def get_ddl_statements():
                 date DATE NOT NULL,
                 client_name VARCHAR(200) NOT NULL,
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
-                status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
+                status VARCHAR(20) NOT NULL,         -- 'new' | 'in_progress' | 'converted' | 'lost' | 'rejected' (rejected = terminal decline, excluded from conversion rate)
                 revisions INTEGER NOT NULL DEFAULT 0,
                 quotes_compared INTEGER NOT NULL DEFAULT 0,
                 status_changed_at TIMESTAMPTZ NULL,
@@ -51,7 +51,7 @@ def get_ddl_statements():
                 client_name VARCHAR(200) NOT NULL,
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 chassis_no VARCHAR(100) NOT NULL,
-                status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
+                status VARCHAR(20) NOT NULL,         -- 'new' | 'in_progress' | 'converted' | 'lost' | 'rejected' (rejected = terminal decline, excluded from conversion rate)
                 revisions INTEGER NOT NULL DEFAULT 0,
                 quotes_compared INTEGER NOT NULL DEFAULT 0,
                 status_changed_at TIMESTAMPTZ NULL,
@@ -67,7 +67,7 @@ def get_ddl_statements():
                 client_name VARCHAR(200) NOT NULL,
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 chassis_no VARCHAR(100) NOT NULL,
-                status VARCHAR(20) NOT NULL,         -- 'new' | 'retained' | 'lost'
+                status VARCHAR(20) NOT NULL,         -- 'new' | 'retained' | 'lost' | 'rejected' (rejected = terminal decline, excluded from retention rate)
                 revisions INTEGER NOT NULL DEFAULT 0,
                 quotes_compared INTEGER NOT NULL DEFAULT 0,
                 status_changed_at TIMESTAMPTZ NULL,
@@ -217,7 +217,7 @@ def get_ddl_statements():
                 client_name VARCHAR(200) NOT NULL,
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 chassis_no VARCHAR(100) NOT NULL,
-                status VARCHAR(20) NOT NULL,         -- 'new' | 'converted' | 'lost'
+                status VARCHAR(20) NOT NULL,         -- 'new' | 'in_progress' | 'converted' | 'lost' | 'rejected' (rejected = terminal decline, excluded from conversion rate)
                 revisions INTEGER UNSIGNED NOT NULL DEFAULT 0,
                 quotes_compared INTEGER UNSIGNED NOT NULL DEFAULT 0,
                 status_changed_at DATETIME NULL,
@@ -233,7 +233,7 @@ def get_ddl_statements():
                 client_name VARCHAR(200) NOT NULL,
                 agent_id INTEGER NOT NULL REFERENCES auth_app_customuser(id),
                 chassis_no VARCHAR(100) NOT NULL,
-                status VARCHAR(20) NOT NULL,         -- 'new' | 'retained' | 'lost'
+                status VARCHAR(20) NOT NULL,         -- 'new' | 'retained' | 'lost' | 'rejected' (rejected = terminal decline, excluded from retention rate)
                 revisions INTEGER UNSIGNED NOT NULL DEFAULT 0,
                 quotes_compared INTEGER UNSIGNED NOT NULL DEFAULT 0,
                 status_changed_at DATETIME NULL,
@@ -353,7 +353,7 @@ def get_documentation():
 
         "The 'General New' module (entries_generalnewentry) tracks new general insurance ENQUIRIES — one row per customer enquiry. "
         "Each row has client_name, an agent_id (the salesperson source), "
-        "a status (one of 'new', 'converted', 'lost'), a revisions counter, quotes_compared, and a status_changed_at timestamp set when the status becomes terminal. "
+        "a status (one of 'new', 'in_progress', 'converted', 'lost', 'rejected'; 'rejected' is a terminal decline excluded from conversion metrics), a revisions counter, quotes_compared, and a status_changed_at timestamp set when the status becomes terminal. "
         "TAT for an enquiry = status_changed_at - added_at (only meaningful when status != 'new'). "
         "Accuracy = 100 * (0.9 ^ revisions), only meaningful when status != 'new'. "
         "Same per-enquiry shape as Motor New but without chassis_no (general insurance has no chassis).",
@@ -364,13 +364,13 @@ def get_documentation():
 
         "The 'Motor New' module (entries_motornewentry) tracks new motor insurance ENQUIRIES — one row per customer enquiry. "
         "Each row has client_name, an agent_id (the salesperson source), chassis_no, "
-        "a status (one of 'new', 'converted', 'lost'), a revisions counter, and a status_changed_at timestamp set when the status becomes terminal. "
+        "a status (one of 'new', 'in_progress', 'converted', 'lost', 'rejected'; 'rejected' is a terminal decline excluded from conversion metrics), a revisions counter, and a status_changed_at timestamp set when the status becomes terminal. "
         "TAT for an enquiry = status_changed_at - added_at (only meaningful when status != 'new'). "
         "Accuracy = 100 * (0.9 ^ revisions), only meaningful when status != 'new'.",
 
         "The 'Motor Renewal' module (entries_motorrenewalentry) tracks renewal ENQUIRIES with the same per-enquiry shape "
         "as Motor New (client_name, agent_id, chassis_no, status, revisions, quotes_compared, status_changed_at). "
-        "Critical difference: status is one of 'new', 'retained' (positive outcome), 'lost' — NOT 'converted'. "
+        "Critical difference: status is one of 'new', 'retained' (positive outcome), 'lost', 'rejected' (terminal decline, excluded from retention rate) — NOT 'converted'."
         "A separate table entries_motorrenewalmonthlytarget tracks each user's monthly retention target (clients_assigned).",
 
         "The 'Motor Claim' module (entries_motorclaimentry) tracks motor insurance claims one row per claim: "
@@ -389,6 +389,13 @@ def get_documentation():
 
         "All entry tables have an added_by_id foreign key to auth_app_customuser. "
         "To find who entered data, JOIN with auth_app_customuser ON added_by_id = auth_app_customuser.id.",
+
+        "Every entry table has an is_voided BOOLEAN column (default FALSE). A voided "
+        "entry has been written off — retained only for audit and NOT counted in any "
+        "business metric. Unless the user explicitly asks about voided / written-off "
+        "entries, ALWAYS exclude them: add 'WHERE is_voided = false' (or 'AND NOT is_voided') "
+        "to every count, sum, and average over an entry table. The columns voided_by_id, "
+        "voided_at, and void_reason record who voided it, when, and why.",
 
         "Per-entry comments live in entries_entryremark (one row per remark, many remarks per entry). "
         "It uses a generic FK: content_type_id + object_id together identify the parent entry. "

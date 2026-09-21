@@ -56,8 +56,17 @@ const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satur
 
 // "06:00:00" -> "06:00" (for <input type="time">)
 const fmtTime = (hms: string | null | undefined) => (hms ?? '').slice(0, 5);
+// "06:00:00" -> "6:00 AM", "12:30:00" -> "12:30 PM" (display label only, TED-572)
+const fmtTime12 = (hms: string | null | undefined) => {
+  const [h, m] = (hms ?? '').split(':');
+  const hour = Number(h);
+  if (Number.isNaN(hour)) return '';
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${m ?? '00'} ${period}`;
+};
 const scheduleLabel = (weekday: number, time: string) =>
-  `${WEEKDAYS[weekday] ?? '?'} ${fmtTime(time)}`;
+  `${WEEKDAYS[weekday] ?? '?'} ${fmtTime12(time)}`;
 
 // Split a free-text email list (commas / semicolons / newlines / spaces) into a
 // deduped array. Email addresses never contain whitespace, so this is safe.
@@ -315,9 +324,9 @@ export default function ReportsPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Sales Report</h1>
+        <h1 className="text-2xl font-bold">Report Config</h1>
         <p className="text-muted-foreground">
-          Configure recipients and schedule for the automated Sales Weekly Digest
+          Configure recipients and schedule for automated reports
         </p>
       </div>
 

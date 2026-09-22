@@ -1528,13 +1528,23 @@ class MarineNewEntry(BaseEntry):
         related_name='marine_new_entries',
         null=True, blank=True,
     )
-    # Insurers compared/quoted while the enquiry is open (create-modal
-    # multi-select). insurance_company above records the single insurer the
-    # client purchased from, captured when the enquiry is Won.
+    # TED-592: insurers compared/quoted while the enquiry is open (the
+    # create-modal multi-select).
     compared_insurance_companies = models.ManyToManyField(
         'InsuranceCompany',
         related_name='marine_new_compared',
         blank=True,
+    )
+    # TED-592 (corrected): the single insurer the client purchased from,
+    # captured on Won (Converted). Kept separate from the legacy
+    # `insurance_company` FK so the original column is never overwritten.
+    # Marine New was created after migration 0049 and so missed that sweep;
+    # 0051 backfills it from `insurance_company` for already-Won rows.
+    converted_insurer = models.ForeignKey(
+        'InsuranceCompany',
+        on_delete=models.PROTECT,
+        related_name='marine_new_converted',
+        null=True, blank=True,
     )
 
     class Meta(BaseEntry.Meta):

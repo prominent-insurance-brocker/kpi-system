@@ -1204,6 +1204,11 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
     insurance_company_name = serializers.CharField(
         source='insurance_company.name', read_only=True, default=None,
     )
+    # TED-592 (corrected): the converted insurer chosen in the Won modal.
+    converted_insurer_name = serializers.CharField(
+        source='converted_insurer.name', read_only=True, default=None,
+    )
+    # TED-592: names of the insurers compared while the enquiry was open.
     compared_insurance_companies_names = serializers.SlugRelatedField(
         source='compared_insurance_companies', slug_field='name',
         many=True, read_only=True,
@@ -1222,6 +1227,7 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
             'potential_premium', 'converted_premium',
             'class_of_insurance', 'class_of_insurance_display',
             'insurance_company', 'insurance_company_name',
+            'converted_insurer', 'converted_insurer_name',
             'compared_insurance_companies', 'compared_insurance_companies_names',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
@@ -1233,6 +1239,7 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'class_of_insurance_display', 'insurance_company_name',
+            'converted_insurer', 'converted_insurer_name',
             'compared_insurance_companies_names',
             'converted_premium',
             'added_at', 'updated_at',
@@ -1263,7 +1270,11 @@ class MarineNewStatusUpdateSerializer(serializers.Serializer):
     class_of_insurance = serializers.PrimaryKeyRelatedField(
         queryset=MarineClassOfInsurance.objects.all(), required=False, allow_null=True,
     )
-    insurance_company = serializers.PrimaryKeyRelatedField(
+    # TED-592 (corrected): the single insurer the client purchased from, chosen
+    # in the Won modal, saved to `converted_insurer` (the legacy
+    # `insurance_company` is never overwritten). Optional server-side (frontend
+    # requires it on a Won); a Lost transition never sends it.
+    converted_insurer = serializers.PrimaryKeyRelatedField(
         queryset=InsuranceCompany.objects.all(), required=False, allow_null=True,
     )
     converted_premium = serializers.DecimalField(

@@ -679,8 +679,8 @@ export function MarineNewEnquiryPage() {
       ...(coverage !== undefined
         ? { class_of_insurance: coverage ? Number(coverage) : null }
         : {}),
-      // TED-592: the insurer the client purchased from (Won modal, success only).
-      ...(wonInsurer ? { insurance_company: Number(wonInsurer) } : {}),
+      // TED-592 (corrected): the converted insurer (Won modal, success only).
+      ...(wonInsurer ? { converted_insurer: Number(wonInsurer) } : {}),
       ...(convertedPremium ? { converted_premium: convertedPremium } : {}),
     });
     if (result.data) {
@@ -861,15 +861,19 @@ export function MarineNewEnquiryPage() {
         (item.class_of_insurance_display as string | null | undefined) || '—',
     },
     {
-      key: 'insurance_company',
-      header: 'Insurance Company',
-      // TED-592: show the purchased insurer once Won; before that, the insurers
-      // compared while the enquiry was open.
+      key: 'compared_insurance_companies',
+      header: 'Compared Insurers',
+      // TED-592 (corrected): the insurers compared/quoted while the enquiry was open.
       render: (item: MotorEnquiryEntry) =>
-        item.insurance_company_name ||
-        (item.compared_insurance_companies_names?.length
+        item.compared_insurance_companies_names?.length
           ? item.compared_insurance_companies_names.join(', ')
-          : '—'),
+          : '—',
+    },
+    {
+      key: 'converted_insurer',
+      header: 'Converted Insurer',
+      // TED-592 (corrected): the single insurer the client purchased from (Won).
+      render: (item: MotorEnquiryEntry) => item.converted_insurer_name || '—',
     },
     {
       key: 'added_at',
@@ -1325,12 +1329,12 @@ export function MarineNewEnquiryPage() {
           insurer={
             pendingStatus.newStatus === config.successValue
               ? {
-                  label: 'Insurance Company',
+                  label: 'Converted Insurer',
                   helper:
                     'Select the insurer the client purchased the policy from.',
                   initialValue:
-                    typeof pendingStatus.entry.insurance_company === 'number'
-                      ? String(pendingStatus.entry.insurance_company)
+                    typeof pendingStatus.entry.converted_insurer === 'number'
+                      ? String(pendingStatus.entry.converted_insurer)
                       : '',
                   renderControl: (value, onChange) => (
                     <SearchableSelect
@@ -1339,7 +1343,7 @@ export function MarineNewEnquiryPage() {
                       placeholder="Select insurance company"
                       emptyLabel="No insurance companies found"
                       clearLabel="None"
-                      selectedLabel={pendingStatus.entry.insurance_company_name ?? null}
+                      selectedLabel={pendingStatus.entry.converted_insurer_name ?? null}
                       getOptionValue={(c) => String(c.id)}
                       getOptionLabel={(c) => c.name}
                       fetchPage={insurerFetchPage}
@@ -1727,7 +1731,7 @@ function EnquiryForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // Client Name, Source / Agent, Potential Premium, Class of Insurance and
-    // at least one Insurance Company are all required for General New.
+    // at least one Compared Insurer are all required for Marine New.
     if (!agentId || !(Number(potentialPremium) > 0) || !classOfInsuranceId || insurerIds.length === 0) return;
     setIsSubmitting(true);
     onSave({
@@ -1801,7 +1805,7 @@ function EnquiryForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Insurance Company *</Label>
+        <Label>Compared Insurers *</Label>
         <MultiSelect
           options={insurerOptions}
           value={insurerIds.map(String)}

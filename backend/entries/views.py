@@ -1835,10 +1835,13 @@ class MarineNewEntryViewSet(BaseEntryViewSet):
             entry.class_of_insurance = serializer.validated_data['class_of_insurance']
             update_fields.append('class_of_insurance')
 
-        # The Won modal records the single insurer the client purchased from.
-        if 'insurance_company' in serializer.validated_data:
-            entry.insurance_company = serializer.validated_data['insurance_company']
-            update_fields.append('insurance_company')
+        # TED-592 (corrected): the Won modal records the single insurer the
+        # client purchased from, saved to `converted_insurer` (never overwriting
+        # the legacy `insurance_company`). Lost never sends it, so Lost is
+        # unaffected.
+        if 'converted_insurer' in serializer.validated_data:
+            entry.converted_insurer = serializer.validated_data['converted_insurer']
+            update_fields.append('converted_insurer')
 
         if new_converted_premium is not None:
             entry.converted_premium = new_converted_premium

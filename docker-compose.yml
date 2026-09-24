@@ -4,6 +4,14 @@ services:
     container_name: kpi-db
     hostname: db
     restart: unless-stopped
+    # Security hardening: no privilege escalation, non-executable /tmp
+    # (blocks dropped binaries such as the Sept 2026 cryptominer) and a
+    # memory cap so one container can never take down the whole server.
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    mem_limit: 1g
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
@@ -24,8 +32,10 @@ services:
     container_name: kpi-metabase
     hostname: metabase
     restart: unless-stopped
-    ports:
-      - "3001:3000"
+    # No published ports: Metabase must only be served via Traefik (HTTPS domain).
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
     environment:
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: kpi_system
@@ -33,6 +43,7 @@ services:
       MB_DB_USER: kpi_user
       MB_DB_PASS: ${DB_PASSWORD}
       MB_DB_HOST: db
+      JAVA_OPTS: "-Xmx1g"
     depends_on:
       db:
         condition: service_healthy
@@ -44,6 +55,7 @@ services:
     container_name: kpi-backend
     hostname: backend
     restart: unless-stopped
+    mem_limit: 1g
     expose:
       - "8000"
     environment:
@@ -83,6 +95,7 @@ services:
     container_name: kpi-frontend
     hostname: frontend
     restart: unless-stopped
+    mem_limit: 512m
     expose:
       - "3000"
     environment:

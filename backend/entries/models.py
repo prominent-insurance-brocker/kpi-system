@@ -117,7 +117,70 @@ class BaseEntry(models.Model):
         return bool(user and (user.is_staff or self.added_by_id == user.id))
 
 
-class GeneralNewEntry(BaseEntry):
+class StoredQualityMixin(models.Model):
+    """Persists each enquiry's TAT and Accuracy as real columns, so the values
+    the Enquiries table shows (`get_tat()` / `accuracy_pct`) are queryable in
+    the database (e.g. from Metabase). Re-derived on every save, so they can
+    never drift from the UI. NULL wherever the UI shows '—'.
+
+    Mixed into the per-enquiry models (General / Motor / Motor Fleet New &
+    Renewal, Marine New); each supplies get_tat(), accuracy_pct and
+    TERMINAL_STATUSES.
+    """
+    tat_minutes = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+    )
+    accuracy = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+    )
+
+    class Meta:
+        abstract = True
+
+    def compute_stored_quality(self):
+        """(tat_minutes, accuracy) as stored: 2-dp Decimals, or None."""
+        if self.added_at is None:
+            return None, None
+        delta = self.get_tat()
+        tat = (
+            Decimal(delta.total_seconds() / 60).quantize(Decimal('0.01'))
+            if delta is not None else None
+        )
+        acc = self.accuracy_pct
+        acc = Decimal(acc).quantize(Decimal('0.01')) if acc is not None else None
+        return tat, acc
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # After the insert/update so auto_now_add `added_at` is populated.
+        # Derive from a fresh read of the row, not this instance: a save with
+        # update_fields on a stale instance (e.g. revisions written after a
+        # concurrent close) must still store values matching the row's real
+        # state. A direct UPDATE keeps the derived columns out of callers'
+        # update_fields lists and only runs when a value actually changed.
+        fresh = type(self).objects.filter(pk=self.pk).first()
+        if fresh is None:
+            return
+        tat, acc = fresh.compute_stored_quality()
+        if (tat, acc) != (fresh.tat_minutes, fresh.accuracy):
+            type(self).objects.filter(pk=self.pk).update(
+                tat_minutes=tat, accuracy=acc,
+            )
+        self.tat_minutes, self.accuracy = tat, acc
+
+    @classmethod
+    def tat_spans(cls, queryset):
+        """(start, end) pairs behind the dashboard's Avg. TAT — exactly the rows
+        whose get_tat() is not None. Default: closed rows with a close stamp."""
+        return list(
+            queryset.filter(
+                status__in=sorted(cls.TERMINAL_STATUSES),
+                status_changed_at__isnull=False,
+            ).values_list('added_at', 'status_changed_at')
+        )
+
+
+class GeneralNewEntry(StoredQualityMixin, BaseEntry):
     """General New enquiry — one row per customer enquiry with status state machine.
 
     Mirrors MotorNewEntry's shape but without the motor-specific chassis number
@@ -272,7 +335,7 @@ class GeneralNewStatusTransition(models.Model):
         return f"{self.entry_id}: {self.from_status} -> {self.to_status}"
 
 
-class GeneralRenewalEntry(BaseEntry):
+class GeneralRenewalEntry(StoredQualityMixin, BaseEntry):
     """General Renewal enquiry — one row per renewal opportunity with status state machine.
 
     Mirrors MotorRenewalEntry's shape but without the motor-specific chassis
@@ -449,7 +512,7 @@ class GeneralRenewalMonthlyTarget(models.Model):
         return f"General Renewal Target {self.year}/{self.month} - {self.user}"
 
 
-class MotorNewEntry(BaseEntry):
+class MotorNewEntry(StoredQualityMixin, BaseEntry):
     """Motor New enquiry — one row per customer enquiry with status state machine."""
     STATUS_NEW = 'new'
     STATUS_IN_PROGRESS = 'in_progress'
@@ -602,7 +665,7 @@ class MotorNewStatusTransition(models.Model):
         return f"{self.entry_id}: {self.from_status} -> {self.to_status}"
 
 
-class MotorRenewalEntry(BaseEntry):
+class MotorRenewalEntry(StoredQualityMixin, BaseEntry):
     """Motor Renewal enquiry — one row per renewal opportunity with status state machine."""
     STATUS_NEW = 'new'
     STATUS_RETAINED = 'retained'
@@ -781,7 +844,7 @@ class MotorRenewalMonthlyTarget(models.Model):
         return f"Motor Renewal Target {self.year}/{self.month} - {self.user}"
 
 
-class MotorFleetNewEntry(BaseEntry):
+class MotorFleetNewEntry(StoredQualityMixin, BaseEntry):
     """Motor Fleet New enquiry — one row per customer enquiry with status state machine."""
     STATUS_NEW = 'new'
     STATUS_IN_PROGRESS = 'in_progress'
@@ -934,7 +997,7 @@ class MotorFleetNewStatusTransition(models.Model):
         return f"{self.entry_id}: {self.from_status} -> {self.to_status}"
 
 
-class MotorFleetRenewalEntry(BaseEntry):
+class MotorFleetRenewalEntry(StoredQualityMixin, BaseEntry):
     """Motor Fleet Renewal enquiry — one row per renewal opportunity with status state machine."""
     STATUS_NEW = 'new'
     STATUS_RETAINED = 'retained'
@@ -1452,7 +1515,7 @@ class SalesMonthlyTarget(models.Model):
         return f"Sales Target {self.year}/{self.month} - {self.user}"
 
 
-class MarineNewEntry(BaseEntry):
+class MarineNewEntry(StoredQualityMixin, BaseEntry):
     """Marine New enquiry — one row per customer enquiry with status state
     machine (TED-596). Mirrors GeneralNewEntry's shape, with three Marine
     differences: (1) class_of_insurance points at the dedicated
@@ -1506,6 +1569,9 @@ class MarineNewEntry(BaseEntry):
     revisions = models.PositiveIntegerField(default=0)
     quotes_compared = models.PositiveIntegerField(default=0)
     status_changed_at = models.DateTimeField(null=True, blank=True)
+    # When the enquiry FIRST reached Shared With Client (a later re-share after
+    # going back to New does not move it). Marine TAT ends here, not at close.
+    shared_with_client_at = models.DateTimeField(null=True, blank=True)
     potential_premium = models.DecimalField(
         max_digits=15, decimal_places=2, null=True, blank=True,
     )
@@ -1563,9 +1629,28 @@ class MarineNewEntry(BaseEntry):
         return self.status in self.TERMINAL_STATUSES
 
     def get_tat(self):
+        """Marine TAT runs from creation to the first Shared With Client — it is
+        fixed (and shown) as soon as the enquiry is shared, even while open.
+        An enquiry closed without ever being shared falls back to the close
+        time (creation → Won / Lost / Rejected)."""
+        if self.shared_with_client_at is not None:
+            return self.shared_with_client_at - self.added_at
         if not self.is_terminal or self.status_changed_at is None:
             return None
         return self.status_changed_at - self.added_at
+
+    @classmethod
+    def tat_spans(cls, queryset):
+        """Mirror get_tat(): every shared row (open or closed), plus closed
+        rows that were never shared (ending at their close stamp)."""
+        rows = queryset.filter(
+            models.Q(shared_with_client_at__isnull=False)
+            | models.Q(
+                status__in=sorted(cls.TERMINAL_STATUSES),
+                status_changed_at__isnull=False,
+            )
+        ).values_list('added_at', 'shared_with_client_at', 'status_changed_at')
+        return [(added, shared or closed) for added, shared, closed in rows]
 
     def get_tat_display(self):
         delta = self.get_tat()

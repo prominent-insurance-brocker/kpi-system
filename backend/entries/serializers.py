@@ -827,6 +827,14 @@ class ConvertedPremiumUpdateSerializer(serializers.Serializer):
         return value
 
 
+class MarineNewConvertedPremiumUpdateSerializer(serializers.Serializer):
+    """Marine New variant of ConvertedPremiumUpdateSerializer: 0 is allowed,
+    since the premium may already have been paid as a minimum deposit."""
+    converted_premium = serializers.DecimalField(
+        max_digits=15, decimal_places=2, min_value=0,
+    )
+
+
 class SalesKPIStatusUpdateSerializer(serializers.Serializer):
     """Validates the TED-533 workflow on a Sales KPI status change.
 
@@ -1222,6 +1230,7 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
             'id', 'pib_id', 'date',
             'client_name', 'agent', 'agent_name', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
+            'shared_with_client_at', 'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'potential_premium', 'converted_premium',
@@ -1236,6 +1245,7 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
             'status', 'status_changed_at',
+            'shared_with_client_at', 'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'class_of_insurance_display', 'insurance_company_name',

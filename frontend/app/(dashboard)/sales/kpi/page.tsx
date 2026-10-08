@@ -1627,7 +1627,12 @@ function EntryModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="p-0 sm:max-w-md">
+      {/* Clicking outside must not close the form and lose entered data;
+          close only via Cancel / X / Esc. */}
+      <DialogContent
+        className="p-0 sm:max-w-md"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader className="border-b border-[#E4E4E4] p-4">
           <DialogTitle>{isEdit ? 'Edit Enquiry' : 'Add Enquiry'}</DialogTitle>
         </DialogHeader>

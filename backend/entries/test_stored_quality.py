@@ -365,3 +365,54 @@ class BackfillMigrationTests(_Base):
         self.assertEqual(
             first, list(MarineNewEntry.objects.values_list('tat_minutes', 'accuracy')),
         )
+
+
+class StoredQualityApiExposureTests(_Base):
+    """Every enquiry module's API returns the stored tat_minutes / accuracy
+    (read-only), matching the row's tat_display / accuracy_pct."""
+    modules = (
+        'general_new', 'general_renewal', 'motor_new', 'motor_renewal',
+        'motor_fleet_new', 'motor_fleet_renewal', 'marine_new',
+    )
+    CASES = (
+        ('general-new', GeneralNewEntry, 'converted', {}),
+        ('general-renewal', GeneralRenewalEntry, 'retained', {}),
+        ('motor-new', MotorNewEntry, 'converted', {'chassis_no': 'CH1'}),
+        ('motor-renewal', MotorRenewalEntry, 'retained', {'chassis_no': 'CH1'}),
+        ('motor-fleet-new', MotorFleetNewEntry, 'converted', {'chassis_no': 'CH1'}),
+        ('motor-fleet-renewal', MotorFleetRenewalEntry, 'retained', {'chassis_no': 'CH1'}),
+        ('marine-new', MarineNewEntry, 'converted', {}),
+    )
+
+    def test_list_and_detail_expose_stored_values(self):
+        for slug, model, closed, extra in self.CASES:
+            with self.subTest(slug):
+                entry = model.objects.create(
+                    client_name='C', agent=self.user, added_by=self.user,
+                    date=date(2026, 7, 1), status=closed, revisions=1,
+                    status_changed_at=T0 + timedelta(minutes=90), **extra,
+                )
+                detail = self.client.get(f'/api/entries/{slug}/{entry.id}/')
+                self.assertEqual(detail.status_code, 200, detail.data)
+                self.assertEqual(detail.data['tat_minutes'], '90.00')
+                self.assertEqual(detail.data['accuracy'], '90.00')
+                self.assertEqual(detail.data['tat_display'], '1h 30m')
+                listing = self.client.get(f'/api/entries/{slug}/')
+                rows = listing.data.get('results', listing.data)
+                row = next(r for r in rows if r['id'] == entry.id)
+                self.assertEqual((row['tat_minutes'], row['accuracy']), ('90.00', '90.00'))
+
+    def test_open_rows_return_null_and_fields_are_read_only(self):
+        for slug, model, _closed, extra in self.CASES:
+            with self.subTest(slug):
+                entry = model.objects.create(
+                    client_name='C', agent=self.user, added_by=self.user,
+                    date=date(2026, 7, 1), **extra,
+                )
+                self.client.patch(
+                    f'/api/entries/{slug}/{entry.id}/',
+                    {'tat_minutes': '5.00', 'accuracy': '50.00'}, format='json',
+                )
+                resp = self.client.get(f'/api/entries/{slug}/{entry.id}/')
+                self.assertIsNone(resp.data['tat_minutes'])
+                self.assertIsNone(resp.data['accuracy'])

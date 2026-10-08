@@ -84,6 +84,7 @@ from .serializers import (
     MedicalClaimEntrySerializer,
     MedicalClaimStatusUpdateSerializer,
     ConvertedPremiumUpdateSerializer,
+    MarineNewConvertedPremiumUpdateSerializer,
 )
 from .filters import (
     EntryFilter, ClaimEntryFilter, MotorEnquiryFilter, MotorClaimEntryFilter,
@@ -243,12 +244,15 @@ def _seed_initial_remark(text, instance, user):
     EntryRemark.objects.filter(pk=remark.pk).update(created_at=instance.added_at)
 
 
-def _update_converted_premium(viewset, request):
+def _update_converted_premium(
+    viewset, request, serializer_class=ConvertedPremiumUpdateSerializer,
+):
     """Post-close converted-premium edit for the per-enquiry 'new' modules
-    (General New, Motor New, Motor Fleet New). Converted enquiries are
-    otherwise locked (update / destroy / update-status all reject terminal
+    (General New, Motor New, Motor Fleet New, Marine New). Converted enquiries
+    are otherwise locked (update / destroy / update-status all reject terminal
     rows), but the converted premium often needs correcting post-close.
-    Creator-only, mirroring the frontend canModifyEntry gate.
+    Creator-only, mirroring the frontend canModifyEntry gate. Marine New passes
+    its own serializer_class so a 0 premium is accepted there.
     """
     entry = viewset.get_object()
     if entry.added_by_id != request.user.id:
@@ -258,7 +262,7 @@ def _update_converted_premium(viewset, request):
             {'error': 'Converted premium can only be updated on a converted enquiry.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    serializer = ConvertedPremiumUpdateSerializer(data=request.data)
+    serializer = serializer_class(data=request.data)
     serializer.is_valid(raise_exception=True)
     entry.converted_premium = serializer.validated_data['converted_premium']
     entry.save(update_fields=['converted_premium', 'updated_at'])
@@ -785,27 +789,29 @@ def _build_enquiry_stats(queryset, success_status='converted'):
     avg_tat_seconds = None
     avg_accuracy = None
 
-    rows = list(terminal.values_list('added_at', 'status_changed_at', 'revisions'))
-    if rows:
+    # TAT population comes from the model's tat_spans(), which mirrors its
+    # per-row get_tat(): closed rows with a close stamp (rows closed through a
+    # path that never stamped it, e.g. django-admin, are skipped). Marine New
+    # instead ends TAT at the first Shared With Client, so its population also
+    # includes open-but-shared rows.
+    deltas = [
+        (end - start).total_seconds()
+        for start, end in queryset.model.tat_spans(queryset)
+    ]
+    if deltas:
+        avg_tat_seconds = sum(deltas) / len(deltas)
+
+    # Accuracy is 100 * decay**revisions over every closed row and needs no
+    # timestamp, so it must NOT inherit the TAT population's exclusions.
+    revisions_list = list(terminal.values_list('revisions', flat=True))
+    if revisions_list:
         # Mirror the per-row property rather than hardcoding 0.9, so the card can
         # never silently drift from the Accuracy column if a module retunes decay.
         decay = queryset.model.ACCURACY_DECAY
-        # TAT needs the closing timestamp, so rows missing it (closed through a path
-        # that never stamped it, e.g. django-admin) are skipped for TAT only.
-        # Accuracy is 100 * decay**revisions and needs no timestamp, so it must NOT
-        # inherit that exclusion — gating it on status_changed_at silently shrank the
-        # accuracy population to the TAT population.
-        deltas = [
-            (status_changed_at - added_at).total_seconds()
-            for added_at, status_changed_at, _ in rows
-            if status_changed_at is not None
-        ]
         accuracies = [
             float(Decimal('100') * (decay ** revisions))
-            for _, _, revisions in rows
+            for revisions in revisions_list
         ]
-        if deltas:
-            avg_tat_seconds = sum(deltas) / len(deltas)
         avg_accuracy = sum(accuracies) / len(accuracies)
 
     # Premium aggregates (added 2026-05-24). potential_premium is nullable;
@@ -1858,6 +1864,15 @@ class MarineNewEntryViewSet(BaseEntryViewSet):
             entry.status_changed_at = timezone.now()
             update_fields.append('status_changed_at')
 
+        # Marine TAT ends at the FIRST share; a re-share after going back to
+        # New keeps the original stamp.
+        if (
+            new_status == MarineNewEntry.STATUS_SHARED_WITH_CLIENT
+            and entry.shared_with_client_at is None
+        ):
+            entry.shared_with_client_at = timezone.now()
+            update_fields.append('shared_with_client_at')
+
         entry.save(update_fields=update_fields)
 
         MarineNewStatusTransition.objects.create(
@@ -1873,7 +1888,11 @@ class MarineNewEntryViewSet(BaseEntryViewSet):
 
     @action(detail=True, methods=['patch'], url_path='update-converted-premium')
     def update_converted_premium(self, request, pk=None):
-        return _update_converted_premium(self, request)
+        # Marine New allows 0 (premium may already be paid as a minimum deposit).
+        return _update_converted_premium(
+            self, request,
+            serializer_class=MarineNewConvertedPremiumUpdateSerializer,
+        )
 
     @action(detail=True, methods=['patch'], url_path='update-revisions')
     def update_revisions(self, request, pk=None):

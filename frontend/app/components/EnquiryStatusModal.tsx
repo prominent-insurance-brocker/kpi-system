@@ -24,6 +24,7 @@
  *   - `entry` (revisions, quotes_compared, converted_premium are read)
  *   - `needsConvertedPremium`: true for the success transition — gates the
  *     Confirm button on a positive premium; false (Lost) leaves it optional
+ *   - `allowZeroPremium`: accept 0 as a valid premium (Marine New only)
  *   - `coverage`: how to render + seed the module-specific coverage dropdown
  *   - `onConfirm({ revisions, quotes_compared, coverage, converted_premium })`
  */
@@ -64,6 +65,9 @@ export interface EnquiryStatusModalProps {
   entry: EnquiryStatusModalEntry;
   /** True on the success transition (Converted / Retained); false on Lost. */
   needsConvertedPremium: boolean;
+  /** Accept 0 as a valid converted premium (Marine New: the premium may
+   *  already have been paid as a minimum deposit). Default: must be > 0. */
+  allowZeroPremium?: boolean;
   /** Module-specific coverage dropdown. Omitted by modules that have none
    *  (e.g. Motor Fleet, where Class of Enquiry was removed — TED-568). */
   coverage?: EnquiryStatusModalCoverage;
@@ -137,6 +141,7 @@ function EditableCountRow({
 export function EnquiryStatusModal({
   entry,
   needsConvertedPremium,
+  allowZeroPremium = false,
   coverage,
   insurer,
   insurerRequired,
@@ -157,7 +162,11 @@ export function EnquiryStatusModal({
     entry.converted_premium != null ? String(entry.converted_premium) : '',
   );
 
-  const premiumValid = premium.trim() !== '' && Number(premium) > 0;
+  const premiumNum = Number(premium);
+  const premiumValid =
+    premium.trim() !== '' &&
+    Number.isFinite(premiumNum) &&
+    (allowZeroPremium ? premiumNum >= 0 : premiumNum > 0);
   // TED-592: on a Won the purchased insurer is required (frontend-enforced).
   const insurerOk = !insurer || !insurerRequired || insurerValue.trim() !== '';
   const canSave = (!needsConvertedPremium || premiumValid) && insurerOk;

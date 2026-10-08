@@ -238,6 +238,12 @@ class Command(BaseCommand):
     @staticmethod
     def _backdate(model, pk, dt):
         model.objects.filter(pk=pk).update(added_at=dt, updated_at=dt)
+        # Stored TAT / Accuracy depend on added_at; re-derive them after the
+        # backdate (the queryset update above bypasses save()).
+        obj = model.objects.get(pk=pk)
+        if hasattr(obj, 'compute_stored_quality'):
+            tat, acc = obj.compute_stored_quality()
+            model.objects.filter(pk=pk).update(tat_minutes=tat, accuracy=acc)
 
     @staticmethod
     def _backdate_transition(model, pk, dt):

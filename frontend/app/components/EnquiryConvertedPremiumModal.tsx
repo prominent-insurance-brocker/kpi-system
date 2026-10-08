@@ -36,6 +36,8 @@ export interface EnquiryConvertedPremiumModalProps {
   module: MotorEnquiryModule;
   entry: MotorEnquiryEntry | null;
   onSaved: () => void;
+  /** Accept 0 as a valid premium (Marine New only). Default: must be > 0. */
+  allowZeroPremium?: boolean;
 }
 
 export function EnquiryConvertedPremiumModal({
@@ -44,6 +46,7 @@ export function EnquiryConvertedPremiumModal({
   module,
   entry,
   onSaved,
+  allowZeroPremium = false,
 }: EnquiryConvertedPremiumModalProps) {
   const [value, setValue] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,7 +63,7 @@ export function EnquiryConvertedPremiumModal({
   if (!entry) return null;
 
   const num = Number(value);
-  const valid = value.trim() !== '' && Number.isFinite(num) && num > 0;
+  const valid = value.trim() !== '' && Number.isFinite(num) && (allowZeroPremium ? num >= 0 : num > 0);
 
   const handleSave = async () => {
     setError('');

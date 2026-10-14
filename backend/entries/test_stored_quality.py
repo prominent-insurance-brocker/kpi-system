@@ -96,7 +96,8 @@ class MarineTatTests(_Base):
         self.clock.advance(minutes=30)
         self._status(entry, 'shared_with_client')
         self.clock.advance(days=2)
-        self._status(entry, 'converted', converted_premium='4000.00')
+        self._status(entry, 'converted', converted_premium='4000.00',
+                     policy_number='POL-1')
         self.assertEqual(entry.tat_minutes, Decimal('30.00'))
         self.assertEqual(entry.get_tat_display(), '30m 0s')
         self.assertEqual(entry.accuracy, Decimal('100.00'))
@@ -142,7 +143,7 @@ class MarineTatTests(_Base):
         self._status(a, 'shared_with_client')
         self._status(b, 'shared_with_client')
         self.clock.advance(minutes=30)
-        self._status(b, 'converted', converted_premium='0')
+        self._status(b, 'converted', converted_premium='0', policy_number='POL-1')
         self._status(c, 'lost')
         stats = _build_enquiry_stats(MarineNewEntry.objects.all())
         # (10 + 10 + 40) / 3

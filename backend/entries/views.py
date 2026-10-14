@@ -246,13 +246,16 @@ def _seed_initial_remark(text, instance, user):
 
 def _update_converted_premium(
     viewset, request, serializer_class=ConvertedPremiumUpdateSerializer,
+    extra_fields=(),
 ):
     """Post-close converted-premium edit for the per-enquiry 'new' modules
     (General New, Motor New, Motor Fleet New, Marine New). Converted enquiries
     are otherwise locked (update / destroy / update-status all reject terminal
     rows), but the converted premium often needs correcting post-close.
     Creator-only, mirroring the frontend canModifyEntry gate. Marine New passes
-    its own serializer_class so a 0 premium is accepted there.
+    its own serializer_class so a 0 premium is accepted there, plus
+    extra_fields=('policy_number',) so the Policy/Certificate Number can be
+    corrected in the same edit (each is saved only when sent).
     """
     entry = viewset.get_object()
     if entry.added_by_id != request.user.id:
@@ -265,7 +268,12 @@ def _update_converted_premium(
     serializer = serializer_class(data=request.data)
     serializer.is_valid(raise_exception=True)
     entry.converted_premium = serializer.validated_data['converted_premium']
-    entry.save(update_fields=['converted_premium', 'updated_at'])
+    update_fields = ['converted_premium', 'updated_at']
+    for field in extra_fields:
+        if field in serializer.validated_data:
+            setattr(entry, field, serializer.validated_data[field])
+            update_fields.append(field)
+    entry.save(update_fields=update_fields)
     return Response(viewset.get_serializer(entry).data)
 
 
@@ -1785,7 +1793,11 @@ class MarineNewEntryViewSet(BaseEntryViewSet):
     filterset_class = GeneralEnquiryFilter
 
     def get_queryset(self):
-        return super().get_queryset().select_related('agent').prefetch_related('status_transitions')
+        # compared_insurance_companies is prefetched so the ids / names /
+        # insurer_references_display fields share one query per page.
+        return super().get_queryset().select_related('agent').prefetch_related(
+            'status_transitions', 'compared_insurance_companies',
+        )
 
     def perform_create(self, serializer):
         initial_remark = serializer.validated_data.pop('initial_remark', '').strip()
@@ -1853,6 +1865,18 @@ class MarineNewEntryViewSet(BaseEntryViewSet):
             entry.converted_premium = new_converted_premium
             update_fields.append('converted_premium')
 
+        # Policy/Certificate Number: the serializer requires it on a Won and
+        # drops it for every other target status.
+        if 'policy_number' in serializer.validated_data:
+            entry.policy_number = serializer.validated_data['policy_number']
+            update_fields.append('policy_number')
+
+        # Insurer reference IDs: only kept on a Shared With Client move, where
+        # the cleaned dict replaces the stored one (absent key = unchanged).
+        if 'insurer_references' in serializer.validated_data:
+            entry.insurer_references = serializer.validated_data['insurer_references']
+            update_fields.append('insurer_references')
+
         # A Rejected or Lost enquiry has no converted premium — record 0 so the
         # column reads 0 instead of blank (neither close asks for it).
         if new_status in (MarineNewEntry.STATUS_LOST, MarineNewEntry.STATUS_REJECTED):
@@ -1888,10 +1912,12 @@ class MarineNewEntryViewSet(BaseEntryViewSet):
 
     @action(detail=True, methods=['patch'], url_path='update-converted-premium')
     def update_converted_premium(self, request, pk=None):
-        # Marine New allows 0 (premium may already be paid as a minimum deposit).
+        # Marine New allows 0 (premium may already be paid as a minimum deposit)
+        # and lets the Policy/Certificate Number be corrected alongside it.
         return _update_converted_premium(
             self, request,
             serializer_class=MarineNewConvertedPremiumUpdateSerializer,
+            extra_fields=('policy_number',),
         )
 
     @action(detail=True, methods=['patch'], url_path='update-revisions')

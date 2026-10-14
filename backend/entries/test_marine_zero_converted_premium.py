@@ -45,7 +45,7 @@ class MarineZeroConvertedPremiumTests(TestCase):
         resp = self.client.patch(
             f'/api/entries/marine-new/{entry.id}/update-status/',
             {'status': 'converted', 'converted_insurer': self.acme.id,
-             'converted_premium': '0'},
+             'converted_premium': '0', 'policy_number': 'POL-1'},
             format='json',
         )
         self.assertEqual(resp.status_code, 200, resp.data)

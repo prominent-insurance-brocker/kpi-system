@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import {
@@ -25,6 +26,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  firstFieldError,
   updateEnquiryConvertedPremium,
   type MotorEnquiryEntry,
   type MotorEnquiryModule,
@@ -38,6 +40,10 @@ export interface EnquiryConvertedPremiumModalProps {
   onSaved: () => void;
   /** Accept 0 as a valid premium (Marine New only). Default: must be > 0. */
   allowZeroPremium?: boolean;
+  /** Marine New only: also edit the Policy/Certificate Number (pre-filled).
+   *  An existing non-empty value cannot be cleared; a legacy empty one may stay
+   *  empty. Sent only when non-empty. Default: field not rendered. */
+  editPolicyNumber?: boolean;
 }
 
 export function EnquiryConvertedPremiumModal({
@@ -47,8 +53,10 @@ export function EnquiryConvertedPremiumModal({
   entry,
   onSaved,
   allowZeroPremium = false,
+  editPolicyNumber = false,
 }: EnquiryConvertedPremiumModalProps) {
   const [value, setValue] = useState('');
+  const [policyNumber, setPolicyNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -56,27 +64,44 @@ export function EnquiryConvertedPremiumModal({
     if (!isOpen) return;
     // Pre-fill with the enquiry's current converted premium.
     setValue(entry?.converted_premium != null ? String(entry.converted_premium) : '');
+    setPolicyNumber(entry?.policy_number ?? '');
     setError('');
     setIsSubmitting(false);
-  }, [isOpen, entry?.id, entry?.converted_premium]);
+  }, [isOpen, entry?.id, entry?.converted_premium, entry?.policy_number]);
 
   if (!entry) return null;
 
   const num = Number(value);
-  const valid = value.trim() !== '' && Number.isFinite(num) && (allowZeroPremium ? num >= 0 : num > 0);
+  const premiumValid =
+    value.trim() !== '' && Number.isFinite(num) && (allowZeroPremium ? num >= 0 : num > 0);
+  // A previously captured Policy/Certificate Number cannot be cleared.
+  const hadPolicyNumber = (entry.policy_number ?? '').trim() !== '';
+  const policyNumberValid =
+    !editPolicyNumber || !hadPolicyNumber || policyNumber.trim() !== '';
+  const valid = premiumValid && policyNumberValid;
 
   const handleSave = async () => {
     setError('');
     if (!valid) return;
     setIsSubmitting(true);
-    const result = await updateEnquiryConvertedPremium(module, entry.id, value.trim());
+    const trimmedPolicyNumber = policyNumber.trim();
+    const result = await updateEnquiryConvertedPremium(
+      module,
+      entry.id,
+      value.trim(),
+      editPolicyNumber && trimmedPolicyNumber ? trimmedPolicyNumber : undefined,
+    );
     setIsSubmitting(false);
     if (result.data) {
-      toast.success('Converted premium updated');
+      toast.success(editPolicyNumber ? 'Enquiry updated' : 'Converted premium updated');
       onSaved();
       onClose();
     } else {
-      setError(result.error || 'Failed to update converted premium');
+      setError(
+        (editPolicyNumber ? firstFieldError(result, ['policy_number']) : undefined) ||
+          result.error ||
+          'Failed to update converted premium',
+      );
     }
   };
 
@@ -106,6 +131,27 @@ export function EnquiryConvertedPremiumModal({
               {entry.client_name} · {entry.pib_id}
             </p>
           </div>
+
+          {/* Marine New only: Policy/Certificate Number edit. */}
+          {editPolicyNumber && (
+            <div className="space-y-2">
+              <Label htmlFor="converted-policy-number">
+                Policy/Certificate Number{hadPolicyNumber ? ' *' : ''}
+              </Label>
+              <Input
+                id="converted-policy-number"
+                placeholder="Enter policy or certificate number"
+                value={policyNumber}
+                onChange={(e) => setPolicyNumber(e.target.value)}
+                maxLength={100}
+              />
+              <p className="text-xs text-muted-foreground">
+                {hadPolicyNumber
+                  ? 'Required for future reference; cannot be cleared.'
+                  : 'Recommended for future reference.'}
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="border-t border-[#E4E4E4] p-4">

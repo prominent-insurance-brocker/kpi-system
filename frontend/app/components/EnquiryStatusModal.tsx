@@ -26,6 +26,7 @@
  *     Confirm button on a positive premium; false (Lost) leaves it optional
  *   - `allowZeroPremium`: accept 0 as a valid premium (Marine New only)
  *   - `coverage`: how to render + seed the module-specific coverage dropdown
+ *   - `policyNumber`: Marine New only — adds a Policy/Certificate Number input
  *   - `onConfirm({ revisions, quotes_compared, coverage, converted_premium })`
  */
 
@@ -77,6 +78,14 @@ export interface EnquiryStatusModalProps {
   insurer?: EnquiryStatusModalCoverage;
   /** TED-592: when true, the Confirm button is gated on an insurer selection. */
   insurerRequired?: boolean;
+  /** Marine New only: render a "Policy/Certificate Number" text input (seeded
+   *  from `initialValue`). When `required`, Confirm is gated on a non-blank
+   *  value. Omitted by every other module (no field rendered or sent). */
+  policyNumber?: { required: boolean; initialValue?: string };
+  /** Marine New only: await the promise returned by `onConfirm` and disable
+   *  Cancel/Confirm while it is pending (prevents a double submit). Omitted by
+   *  every other module (Confirm behaves as before). */
+  guardSubmit?: boolean;
   /** TED-595: dialog title (default "Confirm enquiry details"). */
   title?: string;
   /** TED-595: warning banner text (default "This action cannot be reversed."). */
@@ -92,7 +101,9 @@ export interface EnquiryStatusModalProps {
     coverage: string;
     insurance_company: string;
     converted_premium?: string;
-  }) => void;
+    /** Trimmed; present only when the `policyNumber` prop is supplied. */
+    policy_number?: string;
+  }) => void | Promise<void>;
 }
 
 /** A bordered "value + Edit" row that toggles to an inline number input. */
@@ -145,6 +156,8 @@ export function EnquiryStatusModal({
   coverage,
   insurer,
   insurerRequired,
+  policyNumber,
+  guardSubmit = false,
   title = 'Confirm enquiry details',
   warning = 'This action cannot be reversed.',
   confirmLabel = 'Confirm & Save',
@@ -169,17 +182,30 @@ export function EnquiryStatusModal({
     (allowZeroPremium ? premiumNum >= 0 : premiumNum > 0);
   // TED-592: on a Won the purchased insurer is required (frontend-enforced).
   const insurerOk = !insurer || !insurerRequired || insurerValue.trim() !== '';
-  const canSave = (!needsConvertedPremium || premiumValid) && insurerOk;
+  const [policyNumberValue, setPolicyNumberValue] = useState(policyNumber?.initialValue ?? '');
+  // Marine New: the Policy/Certificate Number is required on a Won.
+  const policyNumberOk =
+    !policyNumber || !policyNumber.required || policyNumberValue.trim() !== '';
+  const canSave = (!needsConvertedPremium || premiumValid) && insurerOk && policyNumberOk;
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSave = () => {
-    if (!canSave) return;
-    onConfirm({
+  const handleSave = async () => {
+    if (!canSave || isSubmitting) return;
+    const result = onConfirm({
       revisions: Math.max(0, editedRevisions),
       quotes_compared: Math.max(0, editedQuotes),
       coverage: coverageValue,
       insurance_company: insurerValue,
       converted_premium: premium.trim() || undefined,
+      ...(policyNumber ? { policy_number: policyNumberValue.trim() } : {}),
     });
+    if (!guardSubmit) return;
+    setIsSubmitting(true);
+    try {
+      await result;
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -244,6 +270,28 @@ export function EnquiryStatusModal({
             </div>
           )}
 
+          {/* Marine New: Policy/Certificate Number — supplied only on the Won
+              transition via the optional `policyNumber` prop. */}
+          {policyNumber && (
+            <div className="space-y-2">
+              <Label
+                htmlFor="enquiry-policy-number"
+                className="text-sm font-semibold text-[#09090B]"
+              >
+                Policy/Certificate Number
+                {policyNumber.required && <span className="text-red-500"> *</span>}
+              </Label>
+              <Input
+                id="enquiry-policy-number"
+                placeholder="Enter policy or certificate number"
+                value={policyNumberValue}
+                onChange={(e) => setPolicyNumberValue(e.target.value)}
+                maxLength={100}
+              />
+              <p className="text-xs text-muted-foreground">Required for future reference.</p>
+            </div>
+          )}
+
           {/* 3. Coverage (Class of Enquiry / Class of Insurance) — omitted by
               modules without a coverage field (e.g. Motor Fleet, TED-568). */}
           {coverage && (
@@ -282,16 +330,16 @@ export function EnquiryStatusModal({
         </div>
 
         <DialogFooter className="p-4 border-t border-[#E4E4E4]">
-          <Button type="button" variant="outline" onClick={onCancel}>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
             Cancel
           </Button>
           <Button
             type="button"
             variant={danger ? 'destructive' : 'default'}
             onClick={handleSave}
-            disabled={!canSave}
+            disabled={!canSave || isSubmitting}
           >
-            {confirmLabel}
+            {isSubmitting ? 'Saving…' : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

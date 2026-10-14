@@ -1612,6 +1612,12 @@ class MarineNewEntry(StoredQualityMixin, BaseEntry):
         related_name='marine_new_converted',
         null=True, blank=True,
     )
+    # Policy / Certificate Number, required (server-side) when the enquiry is
+    # marked Won. Rows Won before this field existed keep ''.
+    policy_number = models.CharField(max_length=100, blank=True, default='')
+    # Optional insurer reference IDs captured on Shared With Client, keyed by
+    # str(InsuranceCompany id) of a compared insurer -> reference string.
+    insurer_references = models.JSONField(default=dict, blank=True)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Marine New Entry'

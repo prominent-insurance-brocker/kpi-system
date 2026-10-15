@@ -59,6 +59,7 @@ import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
 import { EnquiryConvertedPremiumModal } from '@/app/components/EnquiryConvertedPremiumModal';
+import { MarineSharedWithClientModal } from '@/app/components/MarineSharedWithClientModal';
 import { canModifyEntry, canVoidEntry } from '@/app/lib/permissions';
 import { VoidEntryDialog } from '@/app/components/VoidEntryDialog';
 import { VoidStatusBadge } from '@/app/components/VoidStatusBadge';
@@ -98,6 +99,7 @@ import {
   getRemarksContentTypes,
   REMARKS_MODEL_NAME_BY_API_SLUG,
   voidEntry,
+  firstFieldError,
   type MotorRenewalMonthlyTarget,
   type MotorEnquiryEntry,
   type InsuranceCompany,
@@ -329,6 +331,8 @@ export function MarineNewEnquiryPage() {
     entry: MotorEnquiryEntry;
     newStatus: SuccessStatus | 'lost';
   } | null>(null);
+  // Shared With Client modal target (captures optional insurer reference IDs).
+  const [sharedTarget, setSharedTarget] = useState<MotorEnquiryEntry | null>(null);
 
   // Remarks side panel
   const [panelEntry, setPanelEntry] = useState<MotorEnquiryEntry | null>(null);
@@ -671,8 +675,11 @@ export function MarineNewEnquiryPage() {
     coverage?: string,
     convertedPremium?: string,
     wonInsurer?: string,
+    // Policy/Certificate Number (Won) / insurer reference IDs (Shared With Client).
+    extra: { policy_number?: string; insurer_references?: Record<string, string> } = {},
   ) => {
     const result = await updateMotorEnquiryStatus(apiSlug, entry.id, {
+      ...extra,
       status: newStatus,
       ...(revisions != null ? { revisions } : {}),
       ...(quotesCompared != null ? { quotes_compared: quotesCompared } : {}),
@@ -686,9 +693,16 @@ export function MarineNewEnquiryPage() {
     if (result.data) {
       toast.success(`Marked as ${statusLabelFor(newStatus)}`);
       setPendingStatus(null);
+      setSharedTarget(null);
       refreshAfterMutation();
     } else {
-      toast.error(result.error || 'Failed to update status');
+      // Surface the policy_number / insurer_references field message (e.g. a
+      // compared insurer removed since the page loaded) over the generic 400.
+      toast.error(
+        firstFieldError(result, ['policy_number', 'insurer_references']) ||
+          result.error ||
+          'Failed to update status',
+      );
     }
   };
 
@@ -735,9 +749,13 @@ export function MarineNewEnquiryPage() {
               } else if (v === 'rejected') {
                 // TED-595: irreversible decline — simple warning confirm.
                 handleReject(item);
-              } else if (v === 'new' || v === 'shared_with_client') {
-                // TED-596 / TED-656: New / Shared With Client are open
-                // stages — free, no-confirmation transitions.
+              } else if (v === 'shared_with_client') {
+                // Shared With Client opens a modal to capture optional
+                // insurer reference IDs before applying the transition.
+                setSharedTarget(item);
+              } else if (v === 'new') {
+                // TED-596 / TED-656: New is an open stage — free,
+                // no-confirmation transition.
                 applyStatusChange(item, v);
               }
             }}
@@ -874,6 +892,29 @@ export function MarineNewEnquiryPage() {
       header: 'Converted Insurer',
       // TED-592 (corrected): the single insurer the client purchased from (Won).
       render: (item: MotorEnquiryEntry) => item.converted_insurer_name || '—',
+    },
+    {
+      key: 'policy_number',
+      header: 'Policy/Certificate No.',
+      // Captured on Won; '' for legacy Won rows.
+      render: (item: MotorEnquiryEntry) => item.policy_number || '—',
+    },
+    {
+      key: 'insurer_references',
+      header: 'Insurer Ref.',
+      // Optional insurer reference IDs captured on Shared With Client.
+      render: (item: MotorEnquiryEntry) =>
+        item.insurer_references_display?.length ? (
+          <div className="flex flex-col gap-0.5">
+            {item.insurer_references_display.map((r) => (
+              <span key={r.insurer_id} className="whitespace-nowrap">
+                {r.insurer_name} · {r.reference}
+              </span>
+            ))}
+          </div>
+        ) : (
+          '—'
+        ),
     },
     {
       key: 'added_at',
@@ -1301,7 +1342,12 @@ export function MarineNewEnquiryPage() {
           }
         }}
       >
-        <DialogContent className="p-0">
+        {/* Clicking outside must not close the form and lose entered data;
+            close only via Cancel / X / Esc. */}
+        <DialogContent
+          className="p-0"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader className="border-b border-[#E4E4E4] p-4">
             <DialogTitle>{editingEntry ? 'Edit Enquiry' : 'New Enquiry'}</DialogTitle>
           </DialogHeader>
@@ -1326,6 +1372,10 @@ export function MarineNewEnquiryPage() {
         <EnquiryStatusModal
           entry={pendingStatus.entry}
           needsConvertedPremium={pendingStatus.newStatus === config.successValue}
+          // Marine New: 0 is a valid Won premium (already paid as a minimum deposit).
+          allowZeroPremium
+          // Disable Confirm while the update-status request is in flight.
+          guardSubmit
           insurer={
             pendingStatus.newStatus === config.successValue
               ? {
@@ -1353,8 +1403,14 @@ export function MarineNewEnquiryPage() {
               : undefined
           }
           insurerRequired={pendingStatus.newStatus === config.successValue}
+          // Won requires the Policy/Certificate Number; Lost omits the field.
+          policyNumber={
+            pendingStatus.newStatus === config.successValue
+              ? { required: true, initialValue: pendingStatus.entry.policy_number ?? '' }
+              : undefined
+          }
           onCancel={() => setPendingStatus(null)}
-          onConfirm={({ revisions, quotes_compared, insurance_company, converted_premium }) =>
+          onConfirm={({ revisions, quotes_compared, insurance_company, converted_premium, policy_number }) =>
             applyStatusChange(
               pendingStatus.entry,
               pendingStatus.newStatus,
@@ -1365,6 +1421,27 @@ export function MarineNewEnquiryPage() {
               undefined,
               converted_premium,
               insurance_company,
+              policy_number ? { policy_number } : {},
+            )
+          }
+        />
+      )}
+
+      {/* ── Shared With Client modal — optional insurer reference IDs ────── */}
+      {sharedTarget && (
+        <MarineSharedWithClientModal
+          entry={sharedTarget}
+          onCancel={() => setSharedTarget(null)}
+          onConfirm={(insurerReferences) =>
+            applyStatusChange(
+              sharedTarget,
+              'shared_with_client',
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              { insurer_references: insurerReferences },
             )
           }
         />
@@ -1377,6 +1454,8 @@ export function MarineNewEnquiryPage() {
         module={apiSlug}
         entry={convertedPremiumEntry}
         onSaved={() => refreshAfterMutation()}
+        allowZeroPremium
+        editPolicyNumber
       />
 
       {/* ── Void (write-off) confirmation (TED-594) ──────────────────────── */}

@@ -150,6 +150,7 @@ class GeneralNewEntrySerializer(BaseEntrySerializer):
             'id', 'pib_id', 'date',
             'client_name', 'agent', 'agent_name', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
+            'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'potential_premium', 'converted_premium',
@@ -164,6 +165,7 @@ class GeneralNewEntrySerializer(BaseEntrySerializer):
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
             'status', 'status_changed_at',
+            'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'class_of_insurance_display', 'insurance_company_name',
@@ -274,6 +276,7 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
             'id', 'pib_id', 'date',
             'client_name', 'agent', 'agent_name', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
+            'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'potential_premium', 'converted_premium',
@@ -288,6 +291,7 @@ class GeneralRenewalEntrySerializer(BaseEntrySerializer):
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
             'status', 'status_changed_at',
+            'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'class_of_insurance_display', 'insurance_company_name',
@@ -412,6 +416,7 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
             'id', 'pib_id', 'date',
             'client_name', 'agent', 'agent_name', 'chassis_no', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
+            'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'potential_premium', 'converted_premium',
@@ -426,6 +431,7 @@ class MotorNewEntrySerializer(BaseEntrySerializer):
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
             'status', 'status_changed_at',
+            'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'class_of_enquiry_display', 'insurance_company_name',
@@ -534,6 +540,7 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
             'id', 'pib_id', 'date',
             'client_name', 'agent', 'agent_name', 'chassis_no', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
+            'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'potential_premium', 'converted_premium',
@@ -548,6 +555,7 @@ class MotorRenewalEntrySerializer(BaseEntrySerializer):
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
             'status', 'status_changed_at',
+            'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'class_of_enquiry_display', 'insurance_company_name',
@@ -827,6 +835,26 @@ class ConvertedPremiumUpdateSerializer(serializers.Serializer):
         return value
 
 
+class MarineNewConvertedPremiumUpdateSerializer(serializers.Serializer):
+    """Marine New variant of ConvertedPremiumUpdateSerializer: 0 is allowed,
+    since the premium may already have been paid as a minimum deposit.
+    Also accepts an optional Policy/Certificate Number correction: when the
+    key is sent it must be non-blank (omit it to leave the stored value)."""
+    converted_premium = serializers.DecimalField(
+        max_digits=15, decimal_places=2, min_value=0,
+    )
+    policy_number = serializers.CharField(
+        max_length=100, required=False, allow_blank=True,
+    )
+
+    def validate_policy_number(self, value):
+        if not value:
+            raise serializers.ValidationError(
+                'Policy/Certificate Number cannot be blank.'
+            )
+        return value
+
+
 class SalesKPIStatusUpdateSerializer(serializers.Serializer):
     """Validates the TED-533 workflow on a Sales KPI status change.
 
@@ -953,6 +981,7 @@ class MotorFleetNewEntrySerializer(BaseEntrySerializer):
             'id', 'pib_id', 'date',
             'client_name', 'agent', 'agent_name', 'chassis_no', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
+            'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'potential_premium', 'converted_premium',
@@ -967,6 +996,7 @@ class MotorFleetNewEntrySerializer(BaseEntrySerializer):
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
             'status', 'status_changed_at',
+            'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'converted_premium',
@@ -1078,6 +1108,7 @@ class MotorFleetRenewalEntrySerializer(BaseEntrySerializer):
             'id', 'pib_id', 'date',
             'client_name', 'agent', 'agent_name', 'chassis_no', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
+            'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'converted_premium',
@@ -1092,6 +1123,7 @@ class MotorFleetRenewalEntrySerializer(BaseEntrySerializer):
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
             'status', 'status_changed_at',
+            'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'converted_premium',
@@ -1213,6 +1245,8 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
         source='compared_insurance_companies', slug_field='name',
         many=True, read_only=True,
     )
+    # Insurer reference IDs resolved to names (see get_insurer_references_display).
+    insurer_references_display = serializers.SerializerMethodField()
     # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new entry.
     initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
@@ -1222,6 +1256,7 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
             'id', 'pib_id', 'date',
             'client_name', 'agent', 'agent_name', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
+            'shared_with_client_at', 'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'potential_premium', 'converted_premium',
@@ -1229,6 +1264,7 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
             'insurance_company', 'insurance_company_name',
             'converted_insurer', 'converted_insurer_name',
             'compared_insurance_companies', 'compared_insurance_companies_names',
+            'policy_number', 'insurer_references', 'insurer_references_display',
             'added_by', 'added_by_name',
             'on_behalf_of', 'on_behalf_of_name',
             'added_at', 'updated_at', 'is_editable', 'remark_count',
@@ -1236,17 +1272,38 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
             'status', 'status_changed_at',
+            'shared_with_client_at', 'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
             'allowed_transitions', 'is_terminal',
             'class_of_insurance_display', 'insurance_company_name',
             'converted_insurer', 'converted_insurer_name',
             'compared_insurance_companies_names',
             'converted_premium',
+            # Set only via update-status / update-converted-premium.
+            'policy_number', 'insurer_references',
             'added_at', 'updated_at',
         ]
 
     def get_agent_name(self, obj):
         return obj.agent.get_full_name()
+
+    def get_insurer_references_display(self, obj):
+        """[{insurer_id, insurer_name, reference}] for each stored reference,
+        ordered by insurer name; ids no longer among the compared insurers are
+        skipped."""
+        refs = obj.insurer_references or {}
+        if not refs:
+            return []
+        names = {
+            str(company.id): (company.id, company.name)
+            for company in obj.compared_insurance_companies.all()
+        }
+        rows = [
+            {'insurer_id': names[key][0], 'insurer_name': names[key][1], 'reference': ref}
+            for key, ref in refs.items()
+            if key in names
+        ]
+        return sorted(rows, key=lambda row: row['insurer_name'])
 
     def get_tat_display(self, obj):
         return obj.get_tat_display()
@@ -1280,6 +1337,75 @@ class MarineNewStatusUpdateSerializer(serializers.Serializer):
     converted_premium = serializers.DecimalField(
         max_digits=15, decimal_places=2, required=False, min_value=0,
     )
+    # Required (non-blank) on a Won; ignored for every other target status.
+    policy_number = serializers.CharField(
+        max_length=100, required=False, allow_blank=True,
+    )
+    # Optional insurer reference IDs, only used on a Shared With Client move:
+    # {str(compared insurer id): reference}. Blank values are dropped and the
+    # cleaned dict replaces the stored one; omit the key to keep it as-is.
+    insurer_references = serializers.DictField(
+        child=serializers.CharField(max_length=100, allow_blank=True),
+        required=False,
+    )
+
+    def to_internal_value(self, data):
+        # policy_number / insurer_references are ignored for non-matching target
+        # statuses: drop them before field validation so a malformed value on
+        # e.g. a Lost move cannot 400 the request.
+        if hasattr(data, 'keys'):
+            new_status = data.get('status')
+            ignored = []
+            if new_status != MarineNewEntry.STATUS_CONVERTED:
+                ignored.append('policy_number')
+            if new_status != MarineNewEntry.STATUS_SHARED_WITH_CLIENT:
+                ignored.append('insurer_references')
+            if any(key in data for key in ignored):
+                data = {k: v for k, v in data.items() if k not in ignored}
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        new_status = attrs.get('status')
+
+        if new_status == MarineNewEntry.STATUS_CONVERTED:
+            if not attrs.get('policy_number'):
+                raise serializers.ValidationError({
+                    'policy_number': [
+                        'Policy/Certificate Number is required when marking '
+                        'the enquiry as Won.'
+                    ],
+                })
+        else:
+            attrs.pop('policy_number', None)
+
+        if new_status == MarineNewEntry.STATUS_SHARED_WITH_CLIENT:
+            if 'insurer_references' in attrs:
+                entry = self.context['entry']
+                compared_ids = {
+                    str(pk) for pk in
+                    entry.compared_insurance_companies.values_list('id', flat=True)
+                }
+                unknown = sorted(
+                    key for key in attrs['insurer_references']
+                    if key not in compared_ids
+                )
+                if unknown:
+                    # Echo at most 5 offending keys back to the client.
+                    shown = ', '.join(unknown[:5]) + (', ...' if len(unknown) > 5 else '')
+                    raise serializers.ValidationError({
+                        'insurer_references': [
+                            f'Not a compared insurer of this enquiry: {shown}.'
+                        ],
+                    })
+                attrs['insurer_references'] = {
+                    key: value.strip()
+                    for key, value in attrs['insurer_references'].items()
+                    if value.strip()
+                }
+        else:
+            attrs.pop('insurer_references', None)
+
+        return attrs
 
     def validate_status(self, value):
         entry = self.context['entry']

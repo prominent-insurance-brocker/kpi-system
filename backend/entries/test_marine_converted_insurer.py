@@ -60,6 +60,7 @@ class MarineConvertedInsurerTests(TestCase):
                 'status': 'converted',
                 'converted_insurer': self.acme.id,
                 'converted_premium': '4000.00',
+                'policy_number': 'POL-1',
             },
             format='json',
         )
@@ -76,7 +77,7 @@ class MarineConvertedInsurerTests(TestCase):
         self.client.patch(
             f'/api/entries/marine-new/{entry.id}/update-status/',
             {'status': 'converted', 'converted_insurer': self.blue.id,
-             'converted_premium': '4000.00'},
+             'converted_premium': '4000.00', 'policy_number': 'POL-1'},
             format='json',
         )
         entry.refresh_from_db()
@@ -104,7 +105,7 @@ class MarineConvertedInsurerTests(TestCase):
         self.client.patch(
             f'/api/entries/marine-new/{entry.id}/update-status/',
             {'status': 'converted', 'converted_insurer': self.acme.id,
-             'converted_premium': '4000.00'},
+             'converted_premium': '4000.00', 'policy_number': 'POL-1'},
             format='json',
         )
         resp = self.client.get(f'/api/entries/marine-new/{entry.id}/')

@@ -84,4 +84,14 @@ CATEGORY_LABELS[CATEGORY_SECURITY] = 'Users & Roles'
 # ``audit.signals`` (auth bookkeeping / unused credential fields).
 PER_MODEL_IGNORED_FIELDS = {
     CustomUser: {'last_login', 'password'},
+    # Stored TAT / Accuracy are derived from status / timestamps / revisions
+    # (already audited) and written after post_save, so diffs would be stale.
+    **{
+        model: {'tat_minutes', 'accuracy'}
+        for model in (
+            GeneralNewEntry, GeneralRenewalEntry, MotorNewEntry,
+            MotorRenewalEntry, MotorFleetNewEntry, MotorFleetRenewalEntry,
+            MarineNewEntry,
+        )
+    },
 }

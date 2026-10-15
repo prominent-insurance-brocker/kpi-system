@@ -1400,7 +1400,12 @@ export function MotorEnquiryPage({
           }
         }}
       >
-        <DialogContent className="p-0">
+        {/* Clicking outside must not close the form and lose entered data;
+            close only via Cancel / X / Esc. */}
+        <DialogContent
+          className="p-0"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader className="border-b border-[#E4E4E4] p-4">
             <DialogTitle>{editingEntry ? 'Edit Enquiry' : 'New Enquiry'}</DialogTitle>
           </DialogHeader>

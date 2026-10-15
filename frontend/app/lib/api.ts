@@ -5,6 +5,24 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 export interface ApiResponse<T> {
   data?: T;
   error?: string;
+  /** Raw error body of a non-OK response (e.g. DRF field errors such as
+   *  `{"policy_number": ["..."]}`); `error` is unchanged. */
+  errorBody?: unknown;
+}
+
+/** First message of the given DRF field errors on a failed response, if any. */
+export function firstFieldError(
+  res: ApiResponse<unknown>,
+  fields: string[],
+): string | undefined {
+  const body = res.errorBody;
+  if (!body || typeof body !== 'object') return undefined;
+  for (const field of fields) {
+    const value = (body as Record<string, unknown>)[field];
+    const message = Array.isArray(value) ? value[0] : value;
+    if (typeof message === 'string' && message) return message;
+  }
+  return undefined;
 }
 
 async function fetchApi<T>(
@@ -40,7 +58,10 @@ async function fetchApi<T>(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      return { error: errorData.error || `Request failed with status ${response.status}` };
+      return {
+        error: errorData.error || `Request failed with status ${response.status}`,
+        errorBody: errorData,
+      };
     }
 
     if (response.status === 204) {
@@ -439,6 +460,12 @@ export interface MotorEnquiryEntry {
   // TED-592: insurers compared while the enquiry was open (create multi-select).
   compared_insurance_companies?: number[];
   compared_insurance_companies_names?: string[];
+  // Marine New only: Policy/Certificate Number captured on Won ('' for legacy rows).
+  policy_number?: string;
+  // Marine New only: insurer reference IDs captured on Shared With Client,
+  // keyed by str(insurance_company_id). `_display` resolves names, sorted by name.
+  insurer_references?: Record<string, string>;
+  insurer_references_display?: { insurer_id: number; insurer_name: string; reference: string }[];
   added_by: number;
   added_by_name: string;
   on_behalf_of: number | null;
@@ -556,6 +583,10 @@ export async function updateMotorEnquiryStatus(
     // TED-592 (corrected): the insurer the client purchased from (Won modal).
     converted_insurer?: number | null;
     converted_premium?: string | number;
+    // Marine New only: required on Won (converted).
+    policy_number?: string;
+    // Marine New only: sent with 'shared_with_client'; replaces the stored map.
+    insurer_references?: Record<string, string>;
   }
 ): Promise<ApiResponse<MotorEnquiryEntry>> {
   return fetchApi<MotorEnquiryEntry>(`/api/entries/${module}/${id}/update-status/`, {
@@ -571,10 +602,17 @@ export async function updateEnquiryConvertedPremium(
   module: MotorEnquiryModule,
   id: number,
   converted_premium: string | number,
+  // Marine New only: optional Policy/Certificate Number edit (omitted when undefined).
+  policy_number?: string,
 ): Promise<ApiResponse<MotorEnquiryEntry>> {
   return fetchApi<MotorEnquiryEntry>(
     `/api/entries/${module}/${id}/update-converted-premium/`,
-    { method: 'PATCH', body: JSON.stringify({ converted_premium }) },
+    {
+      method: 'PATCH',
+      body: JSON.stringify(
+        policy_number !== undefined ? { converted_premium, policy_number } : { converted_premium },
+      ),
+    },
   );
 }
 

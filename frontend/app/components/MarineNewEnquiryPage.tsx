@@ -777,6 +777,23 @@ export function MarineNewEnquiryPage() {
         ),
     },
     {
+      key: 'insurer_references',
+      header: 'Insurer Ref.',
+      // Optional insurer reference IDs captured on Shared With Client.
+      render: (item: MotorEnquiryEntry) =>
+        item.insurer_references_display?.length ? (
+          <div className="flex flex-col gap-0.5">
+            {item.insurer_references_display.map((r) => (
+              <span key={r.insurer_id} className="whitespace-nowrap">
+                {r.insurer_name} · {r.reference}
+              </span>
+            ))}
+          </div>
+        ) : (
+          '—'
+        ),
+    },
+    {
       key: 'notes',
       header: 'Notes',
       render: (item: MotorEnquiryEntry) => (
@@ -898,23 +915,6 @@ export function MarineNewEnquiryPage() {
       header: 'Policy/Certificate No.',
       // Captured on Won; '' for legacy Won rows.
       render: (item: MotorEnquiryEntry) => item.policy_number || '—',
-    },
-    {
-      key: 'insurer_references',
-      header: 'Insurer Ref.',
-      // Optional insurer reference IDs captured on Shared With Client.
-      render: (item: MotorEnquiryEntry) =>
-        item.insurer_references_display?.length ? (
-          <div className="flex flex-col gap-0.5">
-            {item.insurer_references_display.map((r) => (
-              <span key={r.insurer_id} className="whitespace-nowrap">
-                {r.insurer_name} · {r.reference}
-              </span>
-            ))}
-          </div>
-        ) : (
-          '—'
-        ),
     },
     {
       key: 'added_at',

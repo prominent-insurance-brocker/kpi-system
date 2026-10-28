@@ -76,7 +76,7 @@ import {
 import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
-import { formatDate, businessToday } from '@/app/lib/date';
+import { formatDate, businessToday, businessDateString } from '@/app/lib/date';
 import { useTrackerCounts } from '@/app/lib/useTrackerCounts';
 import { formatPremium, formatNumber } from '@/app/lib/number';
 import { formatTatFromMinutes } from '@/app/lib/tat';
@@ -100,6 +100,9 @@ import {
   REMARKS_MODEL_NAME_BY_API_SLUG,
   voidEntry,
   firstFieldError,
+  exportEnquiries,
+  downloadBlob,
+  type EnquiryExportFormat,
   type MotorRenewalMonthlyTarget,
   type MotorEnquiryEntry,
   type InsuranceCompany,
@@ -371,20 +374,27 @@ export function MarineNewEnquiryPage() {
   const [sheetInlineValues, setSheetInlineValues] = useState<Record<number, string>>({});
 
   // ── Fetchers ────────────────────────────────────────────────────────────────
+  // Enquiries-tab filters as list-endpoint query params (shared by the table
+  // fetch and the enquiries export, so the export matches what's on screen).
+  const buildFilterParams = useCallback(() => {
+    const qs = new URLSearchParams();
+    if (dateFrom) qs.set('date_from', dateFrom);
+    if (dateTo) qs.set('date_to', dateTo);
+    if (userId) qs.set('user_id', userId);
+    if (agentId) qs.set('agent_id', agentId);
+    applyStatusFilter(qs, statusFilter);
+    if (clientName) qs.set('client_name', clientName);
+    if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
+    if (classOfInsuranceFilter) qs.set('class_of_insurance', classOfInsuranceFilter);
+    return qs;
+  }, [dateFrom, dateTo, userId, agentId, statusFilter, clientName, insuranceCompanyFilter, classOfInsuranceFilter]);
+
   const fetchEntries = useCallback(async () => {
     setIsLoading(true);
     try {
-      const qs = new URLSearchParams();
+      const qs = buildFilterParams();
       qs.set('page', String(page));
       qs.set('page_size', String(pageSize));
-      if (dateFrom) qs.set('date_from', dateFrom);
-      if (dateTo) qs.set('date_to', dateTo);
-      if (userId) qs.set('user_id', userId);
-      if (agentId) qs.set('agent_id', agentId);
-      applyStatusFilter(qs, statusFilter);
-      if (clientName) qs.set('client_name', clientName);
-      if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
-      if (classOfInsuranceFilter) qs.set('class_of_insurance', classOfInsuranceFilter);
 
       const result = await fetchApi<{ results: MotorEnquiryEntry[]; count: number }>(
         `/api/entries/${apiSlug}/?${qs}`
@@ -394,7 +404,24 @@ export function MarineNewEnquiryPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [apiSlug, page, pageSize, dateFrom, dateTo, userId, agentId, statusFilter, clientName, insuranceCompanyFilter, classOfInsuranceFilter]);
+  }, [apiSlug, page, pageSize, buildFilterParams]);
+
+  // Server-built CSV / .xlsx of every enquiry matching the current filters.
+  const [isExportingEnquiries, setIsExportingEnquiries] = useState(false);
+  const handleExportEnquiries = useCallback(async (fileFormat: EnquiryExportFormat) => {
+    setIsExportingEnquiries(true);
+    try {
+      const result = await exportEnquiries(apiSlug, buildFilterParams(), fileFormat);
+      if (result.error || !result.data) {
+        toast.error(result.error || 'Export failed');
+        return;
+      }
+      downloadBlob(result.data, `${moduleKey}_enquiries_${businessDateString(new Date())}.${fileFormat}`);
+      toast.success(`Enquiries exported (${fileFormat === 'csv' ? 'CSV' : 'Excel'})`);
+    } finally {
+      setIsExportingEnquiries(false);
+    }
+  }, [apiSlug, moduleKey, buildFilterParams]);
 
   const fetchStats = useCallback(async () => {
     const result = await getMotorEnquiryStats(apiSlug, {
@@ -936,7 +963,12 @@ export function MarineNewEnquiryPage() {
         <h1 className="text-2xl font-bold">{title}</h1>
         <div className="flex items-center gap-2">
           {(isAdmin || isHodUser) && (
-            <ExportTrackerButton moduleKey={moduleKey} moduleUsers={moduleUsers} />
+            <ExportTrackerButton
+              moduleKey={moduleKey}
+              moduleUsers={moduleUsers}
+              onExportEnquiries={handleExportEnquiries}
+              exportingEnquiries={isExportingEnquiries}
+            />
           )}
           {isRenewal && (
             <Button variant="outline" onClick={() => setIsPanelOpen((o) => !o)}>

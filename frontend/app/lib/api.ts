@@ -1401,7 +1401,15 @@ export async function exportTrackerXlsx(
   // regardless of the browser's timezone.
   qs.set('tz', BUSINESS_TZ);
 
-  const url = `${API_BASE_URL}/api/entries/tracker-export/?${qs.toString()}`;
+  return fetchBlob(`/api/entries/tracker-export/?${qs.toString()}`);
+}
+
+/**
+ * GET a file endpoint as a Blob. Mirrors `fetchApi`'s cookie credentials +
+ * 401 refresh-and-retry, but returns the binary body instead of JSON.
+ */
+async function fetchBlob(endpoint: string): Promise<ApiResponse<Blob>> {
+  const url = `${API_BASE_URL}${endpoint}`;
   const doFetch = () => fetch(url, { method: 'GET', credentials: 'include' });
 
   try {
@@ -1423,6 +1431,22 @@ export async function exportTrackerXlsx(
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Network error' };
   }
+}
+
+export type EnquiryExportFormat = 'csv' | 'xlsx';
+
+/**
+ * Download every enquiry matching `filters` (the list endpoint's query params,
+ * without pagination) as CSV or .xlsx. The file is built server-side.
+ */
+export function exportEnquiries(
+  apiSlug: string,
+  filters: URLSearchParams,
+  fileFormat: EnquiryExportFormat,
+): Promise<ApiResponse<Blob>> {
+  const qs = new URLSearchParams(filters);
+  qs.set('file_format', fileFormat);
+  return fetchBlob(`/api/entries/${apiSlug}/export/?${qs.toString()}`);
 }
 
 /** Trigger a browser download for a Blob. */

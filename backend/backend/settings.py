@@ -302,6 +302,16 @@ else:
 # Frontend URL for magic link generation
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
+# Metabase static embedding. Tokens are signed here, behind login + module
+# permissions, so the embedding secret never leaves the backend.
+METABASE_SITE_URL = os.environ.get('METABASE_SITE_URL', 'http://localhost:3001').rstrip('/')
+METABASE_SECRET_KEY = os.environ.get('METABASE_SECRET_KEY', '')
+# name -> (dashboard id, modules that grant access; empty = admins only)
+METABASE_DASHBOARDS = {
+    'overview': (os.environ.get('METABASE_DASHBOARD_ID', ''), ()),
+    'marine': (os.environ.get('METABASE_MARINE_DASHBOARD_ID', ''), ('marine_new', 'marine_renewal')),
+}
+
 
 # Logging configuration - output everything to console
 LOGGING = {

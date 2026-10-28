@@ -126,6 +126,8 @@ Concrete models:
 /api/roles/modules/                GET    - List available modules
 
 /api/ai-chat/ask/                  POST   - Natural language query
+
+/api/reports/metabase-embed/{name}/ GET  - Signed Metabase embed URL (overview: admin; marine: marine_new/marine_renewal)
 ```
 
 ## Common Commands

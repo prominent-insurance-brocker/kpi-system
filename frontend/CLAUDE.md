@@ -20,6 +20,7 @@ frontend/
         premium-data/page.tsx # Sales Premium Data entries
         kpi/page.tsx          # Sales KPI entries
       marine/
+        dashboard/page.tsx    # Marine Metabase dashboard (marine_new or marine_renewal)
         new/page.tsx          # Marine New entries
         renewal/page.tsx      # Marine Renewal entries
       medical/
@@ -45,15 +46,13 @@ frontend/
       date.ts                 # Date formatting utilities
     login/page.tsx            # Magic link request form
     auth/verify/page.tsx      # Magic link token verification
-    api/metabase/token/route.ts  # Server-side Metabase JWT signing
     layout.tsx                # Root layout (AuthProvider wrapper)
     page.tsx                  # Redirect to first accessible module
   components/
     ui/                       # Shadcn/ui primitives (button, input, dialog, table, etc.)
-    metabase-frame.tsx        # Metabase iframe embed component
+    metabase-frame.tsx        # Metabase iframe; gets a signed URL from the backend
   lib/
     utils.ts                  # cn() utility for class merging
-    metabase.ts               # Metabase token generation
 ```
 
 ## Auth Pattern
@@ -106,9 +105,9 @@ npm run lint    # ESLint
 | Variable | Description |
 |----------|-----------|
 | `NEXT_PUBLIC_API_URL` | Backend URL (default: `http://localhost:8000`) |
-| `NEXT_PUBLIC_METABASE_DASHBOARD_ID` | Metabase dashboard ID for embedded dashboard |
-| `METABASE_SECRET_KEY` | Server-side Metabase JWT signing key |
-| `METABASE_SITE_URL` | Metabase instance URL |
+
+Metabase embedding is configured on the **backend** (`METABASE_SITE_URL`, `METABASE_SECRET_KEY`,
+`METABASE_DASHBOARD_ID`, `METABASE_MARINE_DASHBOARD_ID`). The frontend never sees the secret.
 
 ## Adding a New Module Page
 

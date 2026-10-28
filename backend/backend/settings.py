@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 import os
+import re
 from datetime import timedelta
 from pathlib import Path
 
@@ -306,10 +307,19 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 # permissions, so the embedding secret never leaves the backend.
 METABASE_SITE_URL = os.environ.get('METABASE_SITE_URL', 'http://localhost:3001').rstrip('/')
 METABASE_SECRET_KEY = os.environ.get('METABASE_SECRET_KEY', '')
+
+
+def _dashboard_id(var):
+    # Accept Metabase URL slugs like "2-sales-overview" (leading id), as the
+    # old frontend did with parseInt.
+    match = re.match(r'\s*(\d+)', os.environ.get(var, ''))
+    return match.group(1) if match else ''
+
+
 # name -> (dashboard id, modules that grant access; empty = admins only)
 METABASE_DASHBOARDS = {
-    'overview': (os.environ.get('METABASE_DASHBOARD_ID', ''), ()),
-    'marine': (os.environ.get('METABASE_MARINE_DASHBOARD_ID', ''), ('marine_new', 'marine_renewal')),
+    'overview': (_dashboard_id('METABASE_DASHBOARD_ID'), ()),
+    'marine': (_dashboard_id('METABASE_MARINE_DASHBOARD_ID'), ('marine_new', 'marine_renewal')),
 }
 
 

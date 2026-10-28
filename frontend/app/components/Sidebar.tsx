@@ -8,6 +8,7 @@ import { ChevronDown, LayoutDashboard, FileText, Car, Users, TrendingUp, Anchor,
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/app/context/AuthContext';
 import { AUDIT_CATEGORIES } from '@/app/lib/audit';
+import { MARINE_DASHBOARD_MODULES } from '@/app/lib/navigation';
 
 interface NavItem {
   name: string;
@@ -16,6 +17,8 @@ interface NavItem {
   children?: NavItem[];
   adminOnly?: boolean;
   moduleKey?: string;
+  // Visible when the user has any of these modules (e.g. a category dashboard).
+  anyModuleKeys?: string[];
 }
 
 const navigation: NavItem[] = [
@@ -51,6 +54,7 @@ const navigation: NavItem[] = [
     name: 'Marine',
     icon: Anchor,
     children: [
+      { name: 'Marine Dashboard', href: '/marine/dashboard', anyModuleKeys: MARINE_DASHBOARD_MODULES },
       { name: 'Marine New', href: '/marine/new', moduleKey: 'marine_new' },
       { name: 'Marine Renewal', href: '/marine/renewal', moduleKey: 'marine_renewal' },
     ],
@@ -113,6 +117,9 @@ export function Sidebar() {
     if (item.adminOnly) return false;
     if (item.moduleKey) {
       return hasModulePermission(item.moduleKey);
+    }
+    if (item.anyModuleKeys) {
+      return item.anyModuleKeys.some((key) => hasModulePermission(key));
     }
     return true;
   };

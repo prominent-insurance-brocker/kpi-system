@@ -1,37 +1,33 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getMetabaseEmbedUrl, MetabaseDashboardName } from '@/app/lib/api';
 
 interface MetabaseFrameProps {
-  dashboardId: number;
+  dashboard: MetabaseDashboardName;
   className?: string;
 }
 
-export function MetabaseFrame({ dashboardId, className = "w-full h-[600px]" }: MetabaseFrameProps) {
+export function MetabaseFrame({ dashboard, className = "w-full h-[600px]" }: MetabaseFrameProps) {
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchUrl() {
-      try {
-        const response = await fetch(`/api/metabase/token?dashboardId=${dashboardId}`);
-        if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || 'Failed to fetch token');
-        }
-        const data = await response.json();
+    let cancelled = false;
+    // The backend signs the embed token after checking login + module access,
+    // so the Metabase secret never reaches the browser or the Next server.
+    getMetabaseEmbedUrl(dashboard).then(({ data, error: apiError }) => {
+      if (cancelled) return;
+      if (data?.url) {
         setIframeUrl(data.url);
-      } catch (err: unknown) {
-        console.error('Error fetching Metabase URL:', err);
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        setError(message);
+      } else {
+        setError(apiError || 'Failed to load dashboard');
       }
-    }
-
-    if (dashboardId) {
-      fetchUrl();
-    }
-  }, [dashboardId]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboard]);
 
   if (error) {
     return (

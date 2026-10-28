@@ -15,6 +15,9 @@ const MODULE_ROUTES: Array<[string, string]> = [
   ['medical_claim', '/medical/claim'],
 ];
 
+// Any of these grants the Marine dashboard (mirrors METABASE_DASHBOARDS on the backend).
+export const MARINE_DASHBOARD_MODULES = ['marine_new', 'marine_renewal'];
+
 export function firstAccessibleRoute(user: User | null): string | null {
   if (!user) return null;
   if (user.is_staff) return '/dashboard';

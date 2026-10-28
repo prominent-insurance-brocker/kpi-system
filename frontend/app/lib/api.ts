@@ -1602,6 +1602,15 @@ export async function getAllReportHistory(
   return fetchApi<PaginatedResponse<ReportSendEvent>>(`/api/reports/history/${query}`);
 }
 
+// Named dashboards configured on the backend (METABASE_DASHBOARDS).
+export type MetabaseDashboardName = 'overview' | 'marine';
+
+export async function getMetabaseEmbedUrl(
+  name: MetabaseDashboardName,
+): Promise<ApiResponse<{ url: string }>> {
+  return fetchApi<{ url: string }>(`/api/reports/metabase-embed/${name}/`);
+}
+
 export async function getReportSettings(): Promise<ApiResponse<ReportSetting>> {
   return fetchApi<ReportSetting>('/api/reports/settings/');
 }

@@ -28,7 +28,9 @@ services:
       - kpi-network
 
   metabase:
-    image: metabase/metabase:latest
+    # Pinned LTS. ":latest" is never re-pulled by Dokploy, so prod silently
+    # stayed on an unpatched release. Bump this deliberately.
+    image: metabase/metabase:v0.64.3.6
     container_name: kpi-metabase
     hostname: metabase
     restart: unless-stopped

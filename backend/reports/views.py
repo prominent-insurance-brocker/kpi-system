@@ -1,8 +1,13 @@
 import logging
+import time
 
+import jwt
+from django.conf import settings
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from roles.permissions import IsAdminUser
 
@@ -18,6 +23,45 @@ from .serializers import (
 from .services.sales_weekly_digest import SalesWeeklyDigestService
 
 logger = logging.getLogger(__name__)
+
+
+class MetabaseEmbedView(APIView):
+    """Signed Metabase embed URL for a named dashboard (settings.METABASE_DASHBOARDS).
+
+    Admins can open every dashboard; other users need one of the dashboard's
+    module permissions. Unknown or unconfigured names return 404 so dashboard
+    ids can't be probed.
+    """
+    permission_classes = [IsAuthenticated]
+    TOKEN_TTL_SECONDS = 10 * 60
+
+    def get(self, request, name):
+        dashboard_id, modules = settings.METABASE_DASHBOARDS.get(name, ('', ()))
+        if not dashboard_id:
+            return Response({'error': 'Dashboard not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        user = request.user
+        if not user.is_staff:
+            role = getattr(user, 'role', None)
+            allowed = bool(modules) and role is not None and role.permissions.filter(module__in=modules).exists()
+            if not allowed:
+                return Response({'error': 'You do not have access to this dashboard.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if not settings.METABASE_SECRET_KEY:
+            logger.error("METABASE_SECRET_KEY is not configured")
+            return Response({'error': 'Dashboard embedding is not configured.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        token = jwt.encode(
+            {
+                'resource': {'dashboard': int(dashboard_id)},
+                'params': {},
+                'exp': round(time.time()) + self.TOKEN_TTL_SECONDS,
+            },
+            settings.METABASE_SECRET_KEY,
+            algorithm='HS256',
+        )
+        url = f"{settings.METABASE_SITE_URL}/embed/dashboard/{token}#bordered=true&titled=true"
+        return Response({'url': url})
 
 
 class ReportSettingView(generics.RetrieveUpdateAPIView):

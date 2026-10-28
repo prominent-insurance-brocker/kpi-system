@@ -6,13 +6,15 @@ Reference date is a fixed Sunday (2026-06-28), so:
   * Mon-Fri inactivity window = 2026-06-15 .. 2026-06-19
 All metrics bucket deals by ``added_at`` local day (Asia/Dubai).
 """
+import time as time_module
 from datetime import date, datetime, time
 from unittest import mock
 from zoneinfo import ZoneInfo
 
+import jwt
 from django.core import mail
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from auth_app.models import CustomUser
@@ -501,3 +503,65 @@ class ReportSettingAPITests(TestCase):
         self.assertIn(self.client.get('/api/reports/settings/').status_code, (401, 403))
         self.client.force_authenticate(self.regular)
         self.assertEqual(self.client.get('/api/reports/settings/').status_code, 403)
+
+
+@override_settings(
+    METABASE_SITE_URL='https://mb.example.com',
+    METABASE_SECRET_KEY='test-embedding-secret',
+    METABASE_DASHBOARDS={
+        'overview': ('1', ()),
+        'marine': ('2', ('marine_new', 'marine_renewal')),
+        'unset': ('', ()),
+    },
+)
+class MetabaseEmbedTests(TestCase):
+    """Embed tokens are signed server-side and gated by login + module permission."""
+
+    def setUp(self):
+        self.admin = CustomUser.objects.create(email='admin@x.com', full_name='A', is_staff=True)
+        marine_role = Role.objects.create(name='Marine', data_visibility='own')
+        RoleModulePermission.objects.create(role=marine_role, module='marine_renewal')
+        self.marine_user = CustomUser.objects.create(email='m@x.com', full_name='M', role=marine_role)
+        motor_role = Role.objects.create(name='Motor', data_visibility='own')
+        RoleModulePermission.objects.create(role=motor_role, module='motor_new')
+        self.motor_user = CustomUser.objects.create(email='mo@x.com', full_name='Mo', role=motor_role)
+        self.client = APIClient()
+
+    def _token(self, response):
+        prefix = 'https://mb.example.com/embed/dashboard/'
+        self.assertTrue(response.data['url'].startswith(prefix), response.data['url'])
+        token = response.data['url'][len(prefix):].split('#')[0]
+        return jwt.decode(token, 'test-embedding-secret', algorithms=['HS256'])
+
+    def test_anonymous_rejected(self):
+        r = self.client.get('/api/reports/metabase-embed/marine/')
+        self.assertIn(r.status_code, (401, 403))
+
+    def test_marine_user_gets_marine_dashboard_only(self):
+        self.client.force_authenticate(self.marine_user)
+        r = self.client.get('/api/reports/metabase-embed/marine/')
+        self.assertEqual(r.status_code, 200, r.content)
+        payload = self._token(r)
+        self.assertEqual(payload['resource'], {'dashboard': 2})
+        self.assertGreater(payload['exp'], time_module.time())
+        self.assertEqual(self.client.get('/api/reports/metabase-embed/overview/').status_code, 403)
+
+    def test_user_without_marine_module_forbidden(self):
+        self.client.force_authenticate(self.motor_user)
+        self.assertEqual(self.client.get('/api/reports/metabase-embed/marine/').status_code, 403)
+
+    def test_admin_gets_any_configured_dashboard(self):
+        self.client.force_authenticate(self.admin)
+        r = self.client.get('/api/reports/metabase-embed/overview/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self._token(r)['resource'], {'dashboard': 1})
+
+    def test_unknown_or_unconfigured_dashboard_404(self):
+        self.client.force_authenticate(self.admin)
+        self.assertEqual(self.client.get('/api/reports/metabase-embed/nope/').status_code, 404)
+        self.assertEqual(self.client.get('/api/reports/metabase-embed/unset/').status_code, 404)
+
+    @override_settings(METABASE_SECRET_KEY='')
+    def test_missing_secret_returns_503(self):
+        self.client.force_authenticate(self.admin)
+        self.assertEqual(self.client.get('/api/reports/metabase-embed/overview/').status_code, 503)

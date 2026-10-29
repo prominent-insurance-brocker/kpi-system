@@ -91,6 +91,7 @@ import {
   getInsuranceCompaniesPage,
   getInsuranceCompanies,
   getMarineClassOfInsurancePage,
+  listClients,
   getMotorEnquiryStats,
   updateMotorEnquiryStatus,
   updateMotorEnquiryRevisions,
@@ -281,7 +282,10 @@ export function MarineNewEnquiryPage() {
   const [userId, setUserId] = useState('');     // who added the row
   const [agentId, setAgentId] = useState('');   // FK Source/Agent
   const [statusFilter, setStatusFilter] = useState('');
-  const [clientName, setClientName] = useState('');
+  // Search box (`q`): ID (exact, e.g. PIB-12), client name/@username,
+  // insurer ref or policy no. Client filter: a saved client's id.
+  const [searchQuery, setSearchQuery] = useState('');
+  const [clientFilter, setClientFilter] = useState('');
   const [insuranceCompanyFilter, setInsuranceCompanyFilter] = useState('');
   const [classOfInsuranceFilter, setClassOfInsuranceFilter] = useState('');
 
@@ -387,11 +391,12 @@ export function MarineNewEnquiryPage() {
     if (userId) qs.set('user_id', userId);
     if (agentId) qs.set('agent_id', agentId);
     applyStatusFilter(qs, statusFilter);
-    if (clientName) qs.set('client_name', clientName);
+    if (searchQuery) qs.set('q', searchQuery);
+    if (clientFilter) qs.set('client', clientFilter);
     if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
     if (classOfInsuranceFilter) qs.set('class_of_insurance', classOfInsuranceFilter);
     return qs;
-  }, [dateFrom, dateTo, userId, agentId, statusFilter, clientName, insuranceCompanyFilter, classOfInsuranceFilter]);
+  }, [dateFrom, dateTo, userId, agentId, statusFilter, searchQuery, clientFilter, insuranceCompanyFilter, classOfInsuranceFilter]);
 
   const fetchEntries = useCallback(async () => {
     setIsLoading(true);
@@ -974,7 +979,7 @@ export function MarineNewEnquiryPage() {
   ];
 
   const hasActiveFilters =
-    !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName ||
+    !!(dateFrom || dateTo || userId || agentId || statusFilter || searchQuery || clientFilter ||
       insuranceCompanyFilter || classOfInsuranceFilter);
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -1203,13 +1208,15 @@ export function MarineNewEnquiryPage() {
           <div className="flex items-end justify-between gap-4 flex-wrap">
             <FilterBar
               search={{
-                value: clientName,
+                value: searchQuery,
                 onChange: (v) => {
-                  setClientName(v);
+                  setSearchQuery(v);
                   setPage(1);
                 },
-                placeholder: 'Search by client name…',
-                label: 'Client',
+                placeholder: 'ID, client, insurer ref, policy no…',
+                label: 'Search',
+                debounceMs: 300,
+                width: 'w-[280px]',
               }}
               dateRange={{
                 from: dateFrom,
@@ -1258,6 +1265,30 @@ export function MarineNewEnquiryPage() {
               }}
               extraSearchableFilters={[
                 {
+                  // Saved clients only (filter, never create). Legacy rows not
+                  // yet linked to a client won't match until they're linked.
+                  label: 'Client',
+                  value: clientFilter,
+                  onChange: (v) => {
+                    setClientFilter(v);
+                    setPage(1);
+                  },
+                  placeholder: 'All Clients',
+                  clearLabel: 'All Clients',
+                  showSubtitle: true,
+                  fetchPage: async ({ search, page }) => {
+                    const res = await listClients({ category: 'marine', search, page });
+                    return {
+                      results: (res.data?.results ?? []).map((c) => ({
+                        id: c.id,
+                        name: c.name,
+                        subtitle: c.username,
+                      })),
+                      hasMore: !!res.data?.next,
+                    };
+                  },
+                },
+                {
                   label: 'Insurance Company',
                   value: insuranceCompanyFilter,
                   onChange: (v) => {
@@ -1299,7 +1330,8 @@ export function MarineNewEnquiryPage() {
                 setUserId('');
                 setAgentId('');
                 setStatusFilter('');
-                setClientName('');
+                setSearchQuery('');
+                setClientFilter('');
                 setInsuranceCompanyFilter('');
                 setClassOfInsuranceFilter('');
                 setPage(1);

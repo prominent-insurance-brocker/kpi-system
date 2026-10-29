@@ -86,6 +86,7 @@ frontend/
 - API client (`app/lib/api.ts`) wraps fetch with cookie credentials and automatic 401 token refresh
 - All entry viewsets require `IsAuthenticated` + `HasModulePermission`
 - No WebSocket/Redis/Django Channels (despite what SPEC.md said) - notifications not implemented
+- List search box sends `?q=` (`EntrySearchMixin` in `entries/filters.py`): exact `pib_id` match ('12' / 'PIB-12' -> only PIB-12) OR icontains on the filterset's `search_text_fields`; `?search=` stays DRF's added_by search
 
 ## Marine New clients: `client_name` vs `client` (mid-migration)
 

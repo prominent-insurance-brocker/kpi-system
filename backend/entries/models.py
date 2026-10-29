@@ -1854,6 +1854,10 @@ class MarineNewEntry(StoredQualityMixin, BaseEntry):
     # Optional insurer reference IDs captured on Shared With Client, keyed by
     # str(InsuranceCompany id) of a compared insurer -> reference string.
     insurer_references = models.JSONField(default=dict, blank=True)
+    # Derived, search-only copy of the insurer reference *values* (space
+    # joined), kept in sync by save(). Searching the JSON directly would also
+    # match the insurer-id keys, and SQLite / Postgres store JSON differently.
+    insurer_references_text = models.TextField(blank=True, default='', editable=False)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Marine New Entry'
@@ -1861,6 +1865,27 @@ class MarineNewEntry(StoredQualityMixin, BaseEntry):
 
     def __str__(self):
         return f"Marine New Enquiry - {self.client_display} ({self.status})"
+
+    @staticmethod
+    def build_insurer_references_text(refs):
+        """The searchable text for an `insurer_references` dict: its values."""
+        if not isinstance(refs, dict):
+            return ''
+        values = (str(v).strip() for v in refs.values() if v is not None)
+        return ' '.join(v for v in values if v)
+
+    def save(self, *args, **kwargs):
+        self.insurer_references_text = self.build_insurer_references_text(
+            self.insurer_references
+        )
+        # A partial save of the refs (update-status) must write the copy too.
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None and 'insurer_references' in update_fields:
+            update_fields = list(update_fields)
+            if 'insurer_references_text' not in update_fields:
+                update_fields.append('insurer_references_text')
+            kwargs['update_fields'] = update_fields
+        super().save(*args, **kwargs)
 
     @property
     def client_display(self):

@@ -166,7 +166,8 @@ export default function MedicalClaimPage() {
       if (dateTo) params.set('date_to', dateTo);
       if (userId) params.set('user_id', userId);
       if (statusFilter) params.set('status', statusFilter);
-      if (customerName) params.set('customer_name', customerName);
+      // Search box: ID (exact, e.g. PIB-12) or customer name.
+      if (customerName) params.set('q', customerName);
       const result = await fetchApi<{ results: MedicalClaimEntry[]; count: number }>(`/api/entries/medical-claim/?${params}`);
       setEntries(result.data?.results || []);
       setTotalCount(result.data?.count || 0);
@@ -288,8 +289,9 @@ export default function MedicalClaimPage() {
         search={{
           value: customerName,
           onChange: (v) => updateFilters({ customerName: v, page: 1 }),
-          placeholder: 'Search customer name…',
-          label: 'Customer',
+          placeholder: 'ID or client name…',
+          label: 'Search',
+          debounceMs: 300,
         }}
         dateRange={{
           from: dateFrom,

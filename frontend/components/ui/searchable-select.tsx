@@ -36,6 +36,14 @@ export interface SearchableSelectProps<T> {
   // Text compared (case/space-insensitive) against the search to decide if an
   // item is an exact match that hides the create row. Defaults to the label.
   getCreateMatchText?: (item: T) => string;
+  // Keep the create row even when an item matches the search exactly (e.g. a
+  // second client may share a name). Defaults to hiding it on an exact match.
+  alwaysShowCreate?: boolean;
+  // Opt-in second line under each option's label (small, light gray), e.g. a
+  // client's @username. Not shown in the trigger.
+  getOptionSubtitle?: (item: T) => string | null | undefined;
+  // Opt-in label for the closed trigger; defaults to getOptionLabel.
+  getTriggerLabel?: (item: T) => string;
 }
 
 const DEBOUNCE_MS = 250;
@@ -56,6 +64,9 @@ export function SearchableSelect<T>({
   onCreate,
   createLabel,
   getCreateMatchText,
+  alwaysShowCreate,
+  getOptionSubtitle,
+  getTriggerLabel,
 }: SearchableSelectProps<T>) {
   const [open, setOpen] = useState(false);
   const [searchInput, setSearchInput] = useState('');
@@ -90,9 +101,10 @@ export function SearchableSelect<T>({
     createText !== '' &&
     createText === searchInput.trim().replace(/\s+/g, ' ') &&
     !loading &&
-    !items.some(
-      (it) => normalise((getCreateMatchText ?? getOptionLabel)(it)) === normalise(createText)
-    );
+    (alwaysShowCreate ||
+      !items.some(
+        (it) => normalise((getCreateMatchText ?? getOptionLabel)(it)) === normalise(createText)
+      ));
   const createIndex = items.length + clearOffset;
   const navLength = items.length + clearOffset + (showCreate ? 1 : 0);
 
@@ -207,9 +219,10 @@ export function SearchableSelect<T>({
   // What to render inside the trigger button.
   const triggerLabel = (() => {
     if (!value) return placeholder;
-    if (pickedItem && getOptionValue(pickedItem) === value) return getOptionLabel(pickedItem);
+    const label = getTriggerLabel ?? getOptionLabel;
+    if (pickedItem && getOptionValue(pickedItem) === value) return label(pickedItem);
     const found = items.find((i) => getOptionValue(i) === value);
-    if (found) return getOptionLabel(found);
+    if (found) return label(found);
     return selectedLabel ?? placeholder;
   })();
 
@@ -380,7 +393,18 @@ export function SearchableSelect<T>({
                         selected ? 'opacity-100' : 'opacity-0'
                       )}
                     />
-                    <span className="truncate">{getOptionLabel(item)}</span>
+                    {getOptionSubtitle ? (
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate">{getOptionLabel(item)}</span>
+                        {getOptionSubtitle(item) && (
+                          <span className="truncate text-xs text-[#A1A1AA]">
+                            {getOptionSubtitle(item)}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="truncate">{getOptionLabel(item)}</span>
+                    )}
                   </button>
                 );
               })}

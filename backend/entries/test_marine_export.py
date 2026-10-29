@@ -21,12 +21,12 @@ from auth_app.models import CustomUser
 from roles.models import Role, RoleModulePermission
 
 from .enquiry_export import MARINE_NEW_COLUMNS
-from .models import InsuranceCompany, MarineClassOfInsurance, MarineNewEntry
+from .models import Client, InsuranceCompany, MarineClassOfInsurance, MarineNewEntry
 
 URL = '/api/entries/marine-new/export/'
 
 EXPECTED_HEADERS = [
-    'ID', 'Client Name', 'Status', 'Insurer Ref.', 'Potential Premium',
+    'ID', 'Client Name', 'Client Username', 'Status', 'Insurer Ref.', 'Potential Premium',
     'Converted Premium', 'Revisions', 'No. of Quotes Compared', 'TAT (minutes)',
     'Accuracy (%)', 'Added by', 'Agent Name', 'Class of Insurance',
     'Compared Insurers', 'Converted Insurer', 'Policy/Certificate No.',
@@ -252,6 +252,7 @@ class GoldenRowTests(_Base):
         self.assertEqual(by['Won Co'], {
             'ID': self.won.pib_id,
             'Client Name': 'Won Co',
+            'Client Username': '',
             'Status': 'Won',
             'Insurer Ref.': 'Acme Marine: A-1; BlueShield Marine: B-2',
             'Potential Premium': '5000.00',
@@ -313,6 +314,22 @@ class GoldenRowTests(_Base):
         self.assertEqual(void['Void Reason'], 'Duplicate enquiry')
         self.assertEqual(void['Status'], 'New Enquiry')
 
+    def test_linked_row_exports_client_name_and_username(self):
+        client = Client.objects.create(name='Linked Shipping', is_marine=True)
+        MarineNewEntry.objects.filter(pk=self.won.pk).update(client=client, client_name='')
+        rows = parse_csv(self.client.get(URL))
+        linked = next(r for r in rows if r['ID'] == self.won.pib_id)
+        self.assertEqual(linked['Client Name'], 'Linked Shipping')
+        # CSV escapes the leading '@' (Excel would read it as a formula).
+        self.assertEqual(linked['Client Username'], "'" + client.username)
+        self.assertTrue(client.username.startswith('@linked_shipping_'))
+        # Unlinked legacy rows keep their typed name and no username.
+        self.assertEqual(self._by_client(rows)['Shared Co']['Client Username'], '')
+        # XLSX keeps the exact @username as a text cell.
+        _, xrows, _ = parse_xlsx(self.client.get(URL, {'file_format': 'xlsx'}))
+        xl = next(r for r in xrows if r['ID'] == self.won.pib_id)
+        self.assertEqual(xl['Client Username'], client.username)
+
     def test_xlsx_every_column_typed(self):
         headers, rows, ws = parse_xlsx(self.client.get(URL, {'file_format': 'xlsx'}))
         self.assertEqual(len(rows), 7)
@@ -321,6 +338,7 @@ class GoldenRowTests(_Base):
         self.assertEqual(by['Won Co'], {
             'ID': self.won.pib_id,
             'Client Name': 'Won Co',
+            'Client Username': None,
             'Status': 'Won',
             'Insurer Ref.': 'Acme Marine: A-1; BlueShield Marine: B-2',
             'Potential Premium': 5000,
@@ -353,7 +371,7 @@ class GoldenRowTests(_Base):
         self.assertEqual(ws.cell(2, col['Revisions']).data_type, 'n')
         self.assertEqual(ws.cell(2, col['Added on']).number_format, 'yyyy-mm-dd hh:mm')
         self.assertEqual(ws.cell(2, col['Date']).number_format, 'yyyy-mm-dd')
-        self.assertEqual(ws.auto_filter.ref, f'A1:Y{len(rows) + 1}')
+        self.assertEqual(ws.auto_filter.ref, f'A1:Z{len(rows) + 1}')
 
         self.assertEqual(by['Shared Co']['Converted Premium'], None)
         self.assertEqual(by['Shared Co']['Accuracy (%)'], None)

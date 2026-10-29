@@ -38,9 +38,13 @@ export interface LinkClientDialogProps {
   onClose: () => void;
   // Called after a successful link with the updated row.
   onLinked: (entry: MotorEnquiryEntry) => void;
+  // Called when the server refuses the link for a reason other than the
+  // picked client (already linked elsewhere, voided, past cutoff, not the
+  // creator): the row is stale, so the parent should close and refresh it.
+  onStale?: (message: string) => void;
 }
 
-export function LinkClientDialog({ entry, onClose, onLinked }: LinkClientDialogProps) {
+export function LinkClientDialog({ entry, onClose, onLinked, onStale }: LinkClientDialogProps) {
   const [client, setClient] = useState<ClientRef | null>(null);
   const [step, setStep] = useState<'pick' | 'confirm'>('pick');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,13 +81,25 @@ export function LinkClientDialog({ entry, onClose, onLinked }: LinkClientDialogP
       onLinked(res.data);
       return;
     }
-    setError(
+    const message =
       firstFieldError(res, ['client', 'non_field_errors', 'detail']) ||
-        res.error ||
-        'Failed to link client'
-    );
+      res.error ||
+      'Failed to link client';
     // A picked-client problem is fixable on the first step; go back to it.
-    if (firstFieldError(res, ['client'])) setStep('pick');
+    if (firstFieldError(res, ['client'])) {
+      setError(message);
+      setStep('pick');
+      return;
+    }
+    // Any other server refusal means the row itself changed (linked from
+    // another tab, voided, ...): retrying cannot succeed, so hand back to the
+    // parent to close and refresh. Network/5xx errors (no `detail`) stay
+    // retryable.
+    if (firstFieldError(res, ['detail']) && onStale) {
+      onStale(message);
+      return;
+    }
+    setError(message);
   };
 
   return (

@@ -176,6 +176,8 @@ MARINE_NEW_COLUMNS = [
     ('ID', lambda e: e.pib_id, 'text'),
     # Linked client's name, else the legacy typed name.
     ('Client Name', lambda e: e.client_display, 'text'),
+    # The saved client's unique @username; empty for unlinked legacy rows.
+    ('Client Username', lambda e: e.client.username if e.client_id else None, 'text'),
     ('Status', _marine_status, 'text'),
     ('Insurer Ref.', _insurer_refs, 'text'),
     ('Potential Premium', lambda e: e.potential_premium, 'number'),

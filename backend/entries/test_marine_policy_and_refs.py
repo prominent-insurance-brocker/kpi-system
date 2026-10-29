@@ -21,7 +21,7 @@ from rest_framework.test import APIClient
 from auth_app.models import CustomUser
 from roles.models import Role, RoleModulePermission
 
-from .models import Client, ClientCategory, InsuranceCompany, MarineNewEntry, MotorNewEntry
+from .models import Client, InsuranceCompany, MarineNewEntry, MotorNewEntry
 
 
 class _Base(TestCase):
@@ -307,8 +307,7 @@ class SerializerTests(_Base):
         return len(ctx.captured_queries)
 
     def test_fields_read_only_on_plain_patch(self):
-        linked = Client.objects.create(name='C')
-        ClientCategory.objects.create(client=linked, category='marine')
+        linked = Client.objects.create(name='C', is_marine=True)
         entry = self._marine(
             policy_number='POL-1', insurer_references={str(self.acme.id): 'A1'},
             client=linked,
@@ -324,8 +323,9 @@ class SerializerTests(_Base):
         )
         self.assertEqual(resp.status_code, 200, resp.data)
         entry.refresh_from_db()
-        self.assertEqual(entry.client_name, 'Renamed')
-        # A plain client_name edit (no `client`) keeps the current link.
+        # client_name is read-only too (the name comes from `client`), and the
+        # current link is kept.
+        self.assertEqual(entry.client_name, 'C')
         self.assertEqual(entry.client_id, linked.id)
         self.assertEqual(entry.policy_number, 'POL-1')
         self.assertEqual(entry.insurer_references, {str(self.acme.id): 'A1'})

@@ -597,7 +597,7 @@ export function MarineNewEnquiryPage() {
   };
 
   const handleSaveNew = async (payload: {
-    client: number;
+    client?: number;
     agent: number;
     remarks: string;
     quotes_compared: number;
@@ -761,9 +761,23 @@ export function MarineNewEnquiryPage() {
     {
       key: 'client_name',
       header: 'Client Name',
-      // Linked client's name, else the legacy typed text (client_name is ''
-      // on new and linked rows).
-      render: (item: MotorEnquiryEntry) => item.client_display || item.client_name,
+      // Linked client's name with its @username underneath; legacy rows show
+      // the old typed text tagged "Not linked" (client_name is '' on new and
+      // linked rows).
+      render: (item: MotorEnquiryEntry) =>
+        item.client_detail ? (
+          <div className="flex flex-col">
+            <span>{item.client_detail.name}</span>
+            <span className="text-xs text-[#71717A]">{item.client_detail.username}</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span>{item.client_display || item.client_name}</span>
+            <span className="shrink-0 rounded border border-[#E4E4E7] bg-[#F4F4F5] px-1.5 py-0.5 text-[10px] font-medium text-[#71717A]">
+              Not linked
+            </span>
+          </div>
+        ),
     },
     {
       key: 'status',
@@ -1528,6 +1542,11 @@ export function MarineNewEnquiryPage() {
           setLinkTarget(null);
           refreshAfterMutation();
         }}
+        onStale={(message) => {
+          toast.error(message);
+          setLinkTarget(null);
+          refreshAfterMutation();
+        }}
       />
 
       {/* ── Void (write-off) confirmation (TED-594) ──────────────────────── */}
@@ -1804,7 +1823,7 @@ function EnquiryForm({
 }: {
   entry: MotorEnquiryEntry | null;
   onSave: (payload: {
-    client: number;
+    client?: number;
     agent: number;
     remarks: string;
     quotes_compared: number;
@@ -1818,6 +1837,11 @@ function EnquiryForm({
   // Client comes from the saved Client list only (client_name is read-only in
   // the API). Legacy unlinked rows start with no client and must pick one.
   const [clientId, setClientId] = useState<number | null>(entry?.client ?? null);
+  // Editing a legacy row (no saved client yet): the client is not required or
+  // sent here; linking is a separate, permanent step via the row's
+  // "Link client" action (which warns first).
+  const isLegacyEdit = !!entry && !entry.client;
+  const clientMissing = !isLegacyEdit && !clientId;
   const [agentId, setAgentId] = useState<number | null>(entry?.agent ?? null);
   const [remarks, setRemarks] = useState('');
   const [quotesCompared, setQuotesCompared] = useState<string>(
@@ -1885,10 +1909,10 @@ function EnquiryForm({
     e.preventDefault();
     // Client Name, Source / Agent, Potential Premium, Class of Insurance and
     // at least one Compared Insurer are all required for Marine New.
-    if (!clientId || !agentId || !(Number(potentialPremium) > 0) || !classOfInsuranceId || insurerIds.length === 0) return;
+    if (clientMissing || !agentId || !(Number(potentialPremium) > 0) || !classOfInsuranceId || insurerIds.length === 0) return;
     setIsSubmitting(true);
     onSave({
-      client: clientId,
+      ...(isLegacyEdit ? {} : { client: clientId! }),
       agent: agentId,
       remarks,
       quotes_compared: Math.max(0, Number(quotesCompared || 0)),
@@ -1909,20 +1933,22 @@ function EnquiryForm({
 
       <div className="space-y-2">
         <Label>Client Name *</Label>
-        <ClientSelect
-          category="marine"
-          value={clientId}
-          onChange={(c) => setClientId(c?.id ?? null)}
-          selectedLabel={
-            entry?.client_detail ? clientLabel(entry.client_detail) : entry?.client_name ?? null
-          }
-          /* A legacy row with no saved client: show its old text as a prompt. */
-          placeholder={
-            entry && !entry.client && entry.client_name
-              ? `${entry.client_name} (pick a saved client)`
-              : undefined
-          }
-        />
+        {isLegacyEdit ? (
+          <>
+            <Input value={entry?.client_display || entry?.client_name || ''} disabled readOnly />
+            <p className="text-xs text-muted-foreground">
+              Typed name from before the client list. Use the row&apos;s &quot;Link client&quot;
+              action to link it to a saved client.
+            </p>
+          </>
+        ) : (
+          <ClientSelect
+            category="marine"
+            value={clientId}
+            onChange={(c) => setClientId(c?.id ?? null)}
+            selectedLabel={entry?.client_detail ? clientLabel(entry.client_detail) : null}
+          />
+        )}
       </div>
 
       <div className="space-y-2">
@@ -2014,7 +2040,7 @@ function EnquiryForm({
           type="submit"
           disabled={
             isSubmitting ||
-            !clientId ||
+            clientMissing ||
             !agentId ||
             !(Number(potentialPremium) > 0) ||
             !classOfInsuranceId ||

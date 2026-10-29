@@ -2,8 +2,8 @@ from decimal import Decimal
 
 from rest_framework import viewsets, status, filters, serializers as drf_serializers
 from django.contrib.contenttypes.models import ContentType
-from django.db import transaction
-from django.db.models import Avg, Count, Exists, OuterRef, ProtectedError, Q, Sum
+from django.db import IntegrityError, transaction
+from django.db.models import Avg, Count, ProtectedError, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.decorators import action, api_view, permission_classes
@@ -14,10 +14,10 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from roles.permissions import HasModulePermission
 from .models import (
+    CATEGORY_FIELDS,
     CATEGORY_MODULES,
     CLIENT_CATEGORIES,
     Client,
-    ClientCategory,
     EntryRemark,
     GeneralNewEntry,
     GeneralNewStatusTransition,
@@ -48,7 +48,11 @@ from .models import (
     MarineRenewalEntry,
     MedicalClaimEntry,
     MedicalClaimStatusTransition,
+    client_category_q,
+    client_username_matches_name,
     clients_matching_name,
+    generate_client_username,
+    is_valid_client_username,
 )
 from .serializers import (
     ClientSerializer,
@@ -2183,8 +2187,11 @@ class ClientViewSet(viewsets.ModelViewSet):
         the chosen categories (HOD users are refused). A same-name active
         client in a chosen category returns 409 with the matches unless the
         body has `force: true`.
-    Update / delete: staff or Settings users only; delete is refused (409)
-        while enquiries are linked.
+    Update (rename, categories, notes, is_active): staff, Settings users, or
+        the client's creator (HOD users are refused). A non-admin creator
+        must keep at least one category they can access.
+    Delete: staff or Settings users only; refused (409) while enquiries are
+        linked.
     """
     serializer_class = ClientSerializer
     permission_classes = [IsAuthenticated]
@@ -2212,8 +2219,19 @@ class ClientViewSet(viewsets.ModelViewSet):
         super().check_permissions(request)
         if self.action == 'create' and user_is_hod(request.user):
             raise PermissionDenied('HOD users cannot add clients.')
-        if self.action in ('update', 'partial_update', 'destroy') and not self._is_client_admin():
-            raise PermissionDenied('Only admins can edit or delete clients.')
+        if self.action in ('update', 'partial_update') and user_is_hod(request.user):
+            raise PermissionDenied('HOD users cannot edit clients.')
+        if self.action == 'destroy' and not self._is_client_admin():
+            raise PermissionDenied('Only admins can delete clients.')
+
+    def check_object_permissions(self, request, obj):
+        super().check_object_permissions(request, obj)
+        if (
+            self.action in ('update', 'partial_update')
+            and not self._is_client_admin()
+            and (obj.created_by_id is None or obj.created_by_id != request.user.pk)
+        ):
+            raise PermissionDenied("Only admins or the client's creator can edit this client.")
 
     def get_queryset(self):
         params = self.request.query_params
@@ -2227,7 +2245,7 @@ class ClientViewSet(viewsets.ModelViewSet):
                     )
                 if category not in self._accessible_categories():
                     raise PermissionDenied('You do not have access to this category.')
-                qs = qs.filter(categories__category=category)
+                qs = qs.filter(**{CATEGORY_FIELDS[category]: True})
             elif not self._is_client_admin():
                 raise drf_serializers.ValidationError(
                     {'category': 'This query parameter is required.'}
@@ -2249,12 +2267,9 @@ class ClientViewSet(viewsets.ModelViewSet):
                     linked_entries_count=Count('marine_new_entries', distinct=True),
                 )
         elif not self._is_client_admin():
-            qs = qs.filter(Exists(ClientCategory.objects.filter(
-                client=OuterRef('pk'),
-                category__in=self._accessible_categories(),
-            )))
+            qs = qs.filter(client_category_q(self._accessible_categories()))
         # Stable order (name, then id) so paging never repeats or skips a row.
-        return qs.prefetch_related('categories').order_by('name', 'id')
+        return qs.select_related('created_by').order_by('name', 'id')
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -2279,9 +2294,72 @@ class ClientViewSet(viewsets.ModelViewSet):
                     },
                     status=status.HTTP_409_CONFLICT,
                 )
-        client = serializer.save(created_by=request.user, source=Client.SOURCE_USER)
-        client = Client.objects.prefetch_related('categories').get(pk=client.pk)
-        return Response(self.get_serializer(client).data, status=status.HTTP_201_CREATED)
+        # The form sends the live-preview username; keep it when it still has
+        # the generated shape for this name and is free, else draw a new one.
+        name = serializer.validated_data['name']
+        requested = request.data.get('username')
+        username = (
+            requested
+            if is_valid_client_username(name, requested)
+            and not Client.objects.filter(username=requested).exists()
+            else None
+        )
+        try:
+            with transaction.atomic():
+                client = serializer.save(created_by=request.user, username=username)
+        except IntegrityError:
+            # Taken by a concurrent create between the check and the insert.
+            username = None
+            client = serializer.save(created_by=request.user, username=None)
+        data = dict(self.get_serializer(client).data)
+        data['username_changed'] = bool(requested) and client.username != requested
+        return Response(data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'], url_path='suggest-username')
+    def suggest_username(self, request):
+        """A currently-free username for `?name=`, shown read-only while the
+        user types the full name. Create keeps it if it is still free."""
+        name = (request.query_params.get('name') or '').strip()
+        if not name:
+            return Response({'username': ''})
+        # Renaming an existing client (?client=<id>): keep its username while
+        # the name still slugs the same.
+        client_id = request.query_params.get('client')
+        if client_id and str(client_id).isdigit():
+            current = Client.objects.filter(pk=client_id).values_list('username', flat=True).first()
+            if current and client_username_matches_name(name, current):
+                return Response({'username': current})
+        return Response({'username': generate_client_username(name)})
+
+    def perform_update(self, serializer):
+        categories = serializer.validated_data.get('categories')
+        if categories is not None and not self._is_client_admin():
+            # A creator may not drop every category they can see, which would
+            # hide the client from themselves.
+            if not set(self._accessible_categories()).intersection(categories):
+                raise PermissionDenied(
+                    'Keep at least one category you have access to.'
+                )
+        instance = serializer.instance
+        name = serializer.validated_data.get('name')
+        if name is None or client_username_matches_name(name, instance.username):
+            serializer.save()
+            return
+        # A rename that changes the name part regenerates the username: keep
+        # the live-preview one the dialog sends if it fits and is free.
+        requested = self.request.data.get('username')
+        username = (
+            requested
+            if is_valid_client_username(name, requested)
+            and not Client.objects.filter(username=requested).exclude(pk=instance.pk).exists()
+            else generate_client_username(name)
+        )
+        try:
+            with transaction.atomic():
+                serializer.save(username=username)
+        except IntegrityError:
+            # Taken by a concurrent create between the check and the save.
+            serializer.save(username=generate_client_username(name))
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()

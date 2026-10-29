@@ -1127,7 +1127,9 @@ export interface ClientRef {
 export interface Client extends ClientRef {
   categories: string[];          // category keys, e.g. ['marine', 'motor']
   is_active: boolean;
-  source: 'user' | 'backfill';
+  notes: string;                 // optional free text ('' when empty)
+  created_by: number | null;     // user id of the creator (null if unknown/deleted)
+  created_by_name: string | null;
   created_at: string;
   updated_at: string;
   // Only present when listed with include_counts=1 (Settings tab).
@@ -1172,12 +1174,34 @@ export async function getClientCategories(): Promise<ApiResponse<ClientCategoryO
   return fetchApi<ClientCategoryOption[]>('/api/entries/clients/categories/');
 }
 
+export const CLIENT_NOTES_MAX_LENGTH = 1000;
+
+export async function getClient(id: number): Promise<ApiResponse<Client>> {
+  return fetchApi<Client>(`/api/entries/clients/${id}/`);
+}
+
+/** A currently-free username for `name`, shown read-only while typing. */
+export async function suggestClientUsername(
+  name: string,
+  // When renaming an existing client: its username is kept while the new
+  // name still slugs the same.
+  clientId?: number
+): Promise<ApiResponse<{ username: string }>> {
+  const client = clientId ? `&client=${clientId}` : '';
+  return fetchApi<{ username: string }>(
+    `/api/entries/clients/suggest-username/?name=${encodeURIComponent(name)}${client}`
+  );
+}
+
 export async function createClient(data: {
   name: string;
   categories?: string[];
+  notes?: string;
+  // The previewed username; the server keeps it if still free.
+  username?: string;
   force?: boolean;
-}): Promise<ApiResponse<Client>> {
-  return fetchApi<Client>('/api/entries/clients/', {
+}): Promise<ApiResponse<Client & { username_changed?: boolean }>> {
+  return fetchApi<Client & { username_changed?: boolean }>('/api/entries/clients/', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -1193,7 +1217,14 @@ export function clientDuplicateMatches(
 
 export async function updateClient(
   id: number,
-  data: { name?: string; categories?: string[]; is_active?: boolean }
+  data: {
+    name?: string;
+    categories?: string[];
+    notes?: string;
+    is_active?: boolean;
+    // The previewed username for a rename; the server keeps it if still free.
+    username?: string;
+  }
 ): Promise<ApiResponse<Client>> {
   return fetchApi<Client>(`/api/entries/clients/${id}/`, {
     method: 'PATCH',

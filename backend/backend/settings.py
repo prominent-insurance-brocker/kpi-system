@@ -307,7 +307,21 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 # in TIME_ZONE, i.e. Asia/Dubai) were saved with a typed client name and can
 # be linked to a saved client by their creator. Rows added on or after it
 # already pick a client in the form. See entries.models.marine_client_link_cutoff.
-MARINE_CLIENT_LINK_CUTOFF = os.environ.get('MARINE_CLIENT_LINK_CUTOFF', '2026-11-01').strip() or '2026-11-01'
+# A malformed value falls back to the default (with a warning) instead of
+# breaking every Marine New response.
+_MARINE_CLIENT_LINK_CUTOFF_DEFAULT = '2026-11-01'
+MARINE_CLIENT_LINK_CUTOFF = (
+    os.environ.get('MARINE_CLIENT_LINK_CUTOFF', '').strip() or _MARINE_CLIENT_LINK_CUTOFF_DEFAULT
+)
+try:
+    import datetime as _cutoff_dt
+    _cutoff_dt.date.fromisoformat(MARINE_CLIENT_LINK_CUTOFF)
+except ValueError:
+    print(
+        f"WARNING: MARINE_CLIENT_LINK_CUTOFF={MARINE_CLIENT_LINK_CUTOFF!r} is not YYYY-MM-DD; "
+        f"using {_MARINE_CLIENT_LINK_CUTOFF_DEFAULT}"
+    )
+    MARINE_CLIENT_LINK_CUTOFF = _MARINE_CLIENT_LINK_CUTOFF_DEFAULT
 
 # Metabase static embedding. Tokens are signed here, behind login + module
 # permissions, so the embedding secret never leaves the backend.

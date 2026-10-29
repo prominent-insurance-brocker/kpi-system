@@ -1,12 +1,11 @@
 from decimal import Decimal
 
 from django.contrib.contenttypes.models import ContentType
-from django.db import transaction
 from rest_framework import serializers
 from .models import (
+    CATEGORY_FIELDS,
     CLIENT_CATEGORIES,
     Client,
-    ClientCategory,
     EntryRemark,
     GeneralNewEntry,
     GeneralNewStatusTransition,
@@ -682,27 +681,44 @@ class MotorClaimEntrySerializer(BaseEntrySerializer):
 
 class ClientSerializer(serializers.ModelSerializer):
     """Saved client (Marine New client list). `categories` is the list of tag
-    keys; `linked_entries_count` is included only when the viewset annotates
-    it (Settings list, ?include_counts=1). A rename does not touch linked
-    Marine New enquiries: they read the name from the client."""
+    keys (stored as the is_<category> columns); `linked_entries_count` is
+    included only when the viewset annotates it (Settings list,
+    ?include_counts=1). A rename does not touch linked Marine New enquiries:
+    they read the name from the client."""
+    NOTES_MAX_LENGTH = 1000
+
     categories = serializers.ListField(
         child=serializers.ChoiceField(choices=CLIENT_CATEGORIES),
         allow_empty=False, required=False, write_only=True,
     )
+    notes = serializers.CharField(
+        required=False, allow_blank=True, trim_whitespace=True,
+        max_length=NOTES_MAX_LENGTH,
+    )
+    created_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Client
         fields = [
-            'id', 'name', 'username', 'categories', 'is_active', 'source',
-            'created_at', 'updated_at',
+            'id', 'name', 'username', 'categories', 'notes', 'is_active',
+            'created_by', 'created_by_name', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'username', 'source', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'username', 'created_by', 'created_at', 'updated_at',
+        ]
+
+    def get_created_by_name(self, obj):
+        user = obj.created_by if obj.created_by_id else None
+        return user.full_name if user is not None else None
 
     def validate_name(self, value):
         cleaned = (value or '').strip()
         if not cleaned:
             raise serializers.ValidationError("Name cannot be blank.")
         return cleaned
+
+    def validate_notes(self, value):
+        return (value or '').strip()
 
     def validate_categories(self, value):
         # De-duplicate, keeping the canonical category order.
@@ -718,28 +734,16 @@ class ClientSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         categories = validated_data.pop('categories', None) or ['marine']
-        with transaction.atomic():
-            client = Client.objects.create(**validated_data)
-            ClientCategory.objects.bulk_create(
-                ClientCategory(client=client, category=key) for key in categories
-            )
+        client = Client(**validated_data)
+        client.set_categories(categories)
+        client.save()
         return client
 
     def update(self, instance, validated_data):
         categories = validated_data.pop('categories', None)
-        with transaction.atomic():
-            instance = super().update(instance, validated_data)
-            if categories is not None:
-                current = set(instance.categories.values_list('category', flat=True))
-                instance.categories.exclude(category__in=categories).delete()
-                ClientCategory.objects.bulk_create(
-                    ClientCategory(client=instance, category=key)
-                    for key in categories if key not in current
-                )
-        # Drop the prefetch cache so the response shows the new tags.
-        if hasattr(instance, '_prefetched_objects_cache'):
-            instance._prefetched_objects_cache.pop('categories', None)
-        return instance
+        if categories is not None:
+            instance.set_categories(categories)
+        return super().update(instance, validated_data)
 
 
 class TypeOfAccidentSerializer(serializers.ModelSerializer):
@@ -1400,7 +1404,7 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
         # loses its Marine tag, so the enquiry's other fields stay editable.
         if (
             not already_linked
-            and not client.categories.filter(category=self.CLIENT_CATEGORY).exists()
+            and not getattr(client, CATEGORY_FIELDS[self.CLIENT_CATEGORY])
         ):
             raise serializers.ValidationError(
                 {'client': 'This client is not available in Marine.'}
@@ -1565,9 +1569,7 @@ class MarineClientLinkSerializer(serializers.Serializer):
     def validate_client(self, client):
         if not client.is_active:
             raise serializers.ValidationError('This client is inactive.')
-        if not client.categories.filter(
-            category=MarineNewEntrySerializer.CLIENT_CATEGORY,
-        ).exists():
+        if not getattr(client, CATEGORY_FIELDS[MarineNewEntrySerializer.CLIENT_CATEGORY]):
             raise serializers.ValidationError('This client is not available in Marine.')
         return client
 

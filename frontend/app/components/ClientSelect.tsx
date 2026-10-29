@@ -5,26 +5,46 @@
  * 'marine'). Wraps SearchableSelect: server-side search + infinite scroll over
  * GET /api/entries/clients/?category=…&is_active=true.
  *
- * Typing a name with no exact match offers "+ Add", which opens a small inline
- * panel: the name (pre-filled) and a category multi-select with the module's
- * own category ticked. A same-name 409 lists the existing matches to pick from,
- * plus "Create new anyway" (resends with force=true).
+ * Typing a name always offers a 'Create "<name>"' row (names may repeat). It
+ * opens the "New client" dialog (ClientCreateDialog) pre-filled with the
+ * typed name; the + button next to the picker opens it empty. The dialog has
+ * the name, a live @username, categories (the module's own one ticked and
+ * locked; others can be added), and optional notes. A same-name 409 lists the existing
+ * matches to pick from, plus "Create new anyway" (resends with force=true).
+ *
+ * With a client selected, staff, Settings users and the client's creator
+ * (non-HOD) get an "Edit client" button that opens ClientEditDialog (name,
+ * categories, notes, active).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { Pencil, Plus } from 'lucide-react';
 
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { useAuth } from '@/app/context/AuthContext';
+import { ClientCreateDialog } from '@/app/components/ClientCreateDialog';
 import {
   listClients,
-  createClient,
+  getClient,
+  suggestClientUsername,
+  updateClient,
   getClientCategories,
-  clientDuplicateMatches,
   firstFieldError,
+  CLIENT_NOTES_MAX_LENGTH,
+  type Client,
   type ClientRef,
   type ClientCategoryOption,
   type ClientDuplicateError,
@@ -40,7 +60,14 @@ export function clientLabel(client: Pick<ClientRef, 'name' | 'username'>): strin
 /** Best human message from a failed client API call. */
 export function clientErrorMessage(res: ApiResponse<unknown>, fallback: string): string {
   return (
-    firstFieldError(res, ['name', 'categories', 'is_active', 'non_field_errors', 'detail']) ||
+    firstFieldError(res, [
+      'name',
+      'categories',
+      'notes',
+      'is_active',
+      'non_field_errors',
+      'detail',
+    ]) ||
     res.error ||
     fallback
   );
@@ -96,12 +123,18 @@ export function ClientSelect({
   const categoryLabel = categories.find((c) => c.value === category)?.label ?? category;
 
   // Every client seen in a loaded page, so onValueChange (which only gets the
-  // id) can hand the full client (name included) back to the form.
-  const seenRef = useRef(new Map<string, ClientRef>());
+  // id) can hand the full client (name included) back to the form. List rows
+  // and created clients are full Client objects; duplicate matches are not.
+  const seenRef = useRef(new Map<string, ClientRef | Client>());
 
   const fetchPage = useCallback(
     async ({ search, page }: { search: string; page: number }) => {
-      const res = await listClients({ category, search, page, is_active: true });
+      const res = await listClients({
+        category,
+        search,
+        page,
+        is_active: true,
+      });
       const rows = res.data?.results ?? [];
       for (const c of rows) seenRef.current.set(String(c.id), c);
       return { results: rows as ClientRef[], hasMore: !!res.data?.next };
@@ -109,87 +142,124 @@ export function ClientSelect({
     [category]
   );
 
-  // ── Inline create panel ────────────────────────────────────────────────
-  // onCreate returns a promise that settles when the panel finishes: with the
-  // client to select, or undefined on cancel.
-  const resolveRef = useRef<((client: ClientRef | undefined) => void) | null>(null);
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newCategories, setNewCategories] = useState<string[]>([category]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  // Sync guard: a fast double click lands before isSubmitting re-renders.
-  const submittingRef = useRef(false);
-  const [panelError, setPanelError] = useState('');
-  const [matches, setMatches] = useState<ClientDuplicateError['matches'] | null>(null);
+  // ── Selected client details (for the "Edit client" button) ──────────────
+  const { user, hasModulePermission, isHOD } = useAuth();
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  // Bumped after an edit: remounts SearchableSelect so it drops its cached
+  // picked label and shows the edited name (passed as selectedLabel).
+  const [labelVersion, setLabelVersion] = useState(0);
+  const [isEditOpen, setIsEditOpen] = useState(false);
 
-  // Settle a pending create if the form unmounts with the panel open.
+  useEffect(() => {
+    if (!value) return;
+    const seen = seenRef.current.get(String(value));
+    if (seen && 'created_by' in seen) {
+      setSelectedClient(seen);
+      return;
+    }
+    // Not loaded yet (Edit form, or a duplicate-match pick): fetch it.
+    let cancelled = false;
+    getClient(value).then((res) => {
+      if (cancelled) return;
+      if (res.data) seenRef.current.set(String(res.data.id), res.data);
+      setSelectedClient(res.data ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [value]);
+
+  // Only trust selectedClient while it matches the current value.
+  const currentClient = selectedClient && selectedClient.id === value ? selectedClient : null;
+  const isClientAdmin = !!user && (user.is_staff || hasModulePermission('settings'));
+  const canEditSelected =
+    !!user &&
+    !!currentClient &&
+    // The backend refuses every client create/edit from HOD users, even with
+    // the Settings module, so HOD never gets the edit or create controls.
+    !isHOD() &&
+    (isClientAdmin || currentClient.created_by === user.id);
+
+  const handleEdited = (updated: Client) => {
+    seenRef.current.set(String(updated.id), updated);
+    setLabelVersion((v) => v + 1);
+    if (!updated.is_active || !updated.categories.includes(category)) {
+      // No longer pickable here: clear the selection.
+      setSelectedClient(null);
+      onChange(null);
+      toast.success(
+        !updated.is_active
+          ? 'Client updated and deactivated. Pick another client.'
+          : `Client updated (no longer in the ${categoryLabel} list). Pick another client.`
+      );
+      return;
+    }
+    setSelectedClient(updated);
+    onChange(updated);
+    toast.success('Client updated');
+  };
+
+  // ── New client dialog (ClientCreateDialog) ─────────────────────────────
+  // openCreateDialog returns a promise that settles when the dialog finishes:
+  // with the client to select, or undefined on cancel / not usable here.
+  const resolveRef = useRef<((client: ClientRef | undefined) => void) | null>(null);
+  const [createDialog, setCreateDialog] = useState<{
+    open: boolean;
+    name: string;
+    matches: ClientDuplicateError['matches'] | null;
+    error: string;
+  }>({ open: false, name: '', matches: null, error: '' });
+  const isPanelOpen = createDialog.open;
+
+  // Settle a pending create if the form unmounts with the dialog open.
   useEffect(() => () => resolveRef.current?.(undefined), []);
 
   const finishPanel = (client: ClientRef | undefined) => {
-    setIsPanelOpen(false);
-    setMatches(null);
-    setPanelError('');
+    setCreateDialog((d) => ({ ...d, open: false }));
     const resolve = resolveRef.current;
     resolveRef.current = null;
     resolve?.(client);
   };
 
-  const handleCreateRequest = (search: string) => {
+  const openCreateDialog = (
+    name: string,
+    initial?: { matches?: ClientDuplicateError['matches'] | null; error?: string }
+  ) => {
     resolveRef.current?.(undefined);
-    setNewName(search);
-    setNewCategories([category]);
-    setPanelError('');
-    setMatches(null);
-    setIsPanelOpen(true);
+    setCreateDialog({
+      open: true,
+      name,
+      matches: initial?.matches ?? null,
+      error: initial?.error ?? '',
+    });
     return new Promise<ClientRef | undefined>((resolve) => {
       resolveRef.current = resolve;
     });
   };
 
-  const toggleCategory = (key: string, checked: boolean) => {
-    setNewCategories((prev) =>
-      checked ? (prev.includes(key) ? prev : [...prev, key]) : prev.filter((k) => k !== key)
-    );
-    setMatches(null);
+  // 'Create "<name>"' row in the dropdown: open the dialog pre-filled.
+  const createFromSearch = (search: string) => openCreateDialog(search);
+
+  // + button: explicit create in the dialog; select the result if it fits.
+  const createFromButton = async () => {
+    const created = await openCreateDialog('');
+    if (!created) return;
+    seenRef.current.set(String(created.id), created);
+    setSelectedClient('created_by' in created ? (created as Client) : null);
+    setLabelVersion((v) => v + 1);
+    onChange(created);
   };
 
-  const cleanedName = newName.trim().replace(/\s+/g, ' ');
-  const nameTooLong = cleanedName.length > MAX_NAME_LENGTH;
-  const canSubmit =
-    !isSubmitting && cleanedName !== '' && !nameTooLong && newCategories.length > 0;
-
-  const submitCreate = async (force: boolean) => {
-    if (!canSubmit || submittingRef.current) return;
-    submittingRef.current = true;
-    setIsSubmitting(true);
-    setPanelError('');
-    const res = await createClient({
-      name: cleanedName,
-      categories: newCategories,
-      ...(force ? { force: true } : {}),
-    });
-    submittingRef.current = false;
-    setIsSubmitting(false);
-    if (res.data) {
-      const created = res.data;
-      seenRef.current.set(String(created.id), created);
-      if (created.categories.includes(category)) {
-        toast.success('Client added');
-        finishPanel(created);
-      } else {
-        // Not tagged with this module's category, so it can't be used here.
-        toast.success(`Client added (not in the ${categoryLabel} list)`);
-        finishPanel(undefined);
-      }
-      return;
+  const handleDialogCreated = (created: Client) => {
+    seenRef.current.set(String(created.id), created);
+    if (created.categories.includes(category)) {
+      toast.success(`Client created: ${clientLabel(created)}`);
+      finishPanel(created);
+    } else {
+      // Not tagged with this module's category, so it can't be used here.
+      toast.success(`Client created (not in the ${categoryLabel} list)`);
+      finishPanel(undefined);
     }
-    const dupes = clientDuplicateMatches(res);
-    if (dupes) {
-      setMatches(dupes);
-      return;
-    }
-    // Validation or network error: keep the panel and typed text as they are.
-    setPanelError(clientErrorMessage(res, 'Failed to add client'));
   };
 
   const pickMatch = (match: ClientRef) => {
@@ -197,45 +267,213 @@ export function ClientSelect({
     finishPanel(match);
   };
 
+  const canCreate = !isHOD();
+
   return (
     <div className="space-y-2">
-      <SearchableSelect<ClientRef>
-        value={value ? String(value) : null}
-        onValueChange={(v) => {
-          onChange(v ? seenRef.current.get(v) ?? null : null);
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <SearchableSelect<ClientRef>
+            key={labelVersion}
+            value={value ? String(value) : null}
+            onValueChange={(v) => {
+              onChange(v ? (seenRef.current.get(v) ?? null) : null);
+            }}
+            fetchPage={fetchPage}
+            getOptionValue={(c) => String(c.id)}
+            getOptionLabel={(c) => c.name}
+            getOptionSubtitle={(c) => c.username}
+            getTriggerLabel={clientLabel}
+            getCreateMatchText={(c) => c.name}
+            placeholder={placeholder}
+            emptyLabel="No clients found"
+            selectedLabel={
+              labelVersion > 0 && currentClient ? clientLabel(currentClient) : selectedLabel
+            }
+            disabled={disabled || isPanelOpen}
+            onCreate={canCreate ? createFromSearch : undefined}
+            createLabel={(search) => `Create "${search}"`}
+            // Names may repeat: offer Create even when the name already exists
+            // (the server then warns with the matches before creating).
+            alwaysShowCreate
+          />
+        </div>
+        {canCreate && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            title="New client"
+            aria-label="New client"
+            disabled={disabled}
+            onClick={createFromButton}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+
+      {canEditSelected && !isPanelOpen && (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            disabled={disabled}
+            onClick={() => setIsEditOpen(true)}
+          >
+            <Pencil className="h-3 w-3 mr-1" /> Edit client
+          </Button>
+        </div>
+      )}
+
+      <ClientEditDialog
+        client={isEditOpen ? currentClient : null}
+        onClose={() => setIsEditOpen(false)}
+        onSaved={(updated) => {
+          setIsEditOpen(false);
+          handleEdited(updated);
         }}
-        fetchPage={fetchPage}
-        getOptionValue={(c) => String(c.id)}
-        getOptionLabel={clientLabel}
-        getCreateMatchText={(c) => c.name}
-        placeholder={placeholder}
-        emptyLabel="No clients found"
-        selectedLabel={selectedLabel}
-        disabled={disabled || isPanelOpen}
-        onCreate={handleCreateRequest}
-        createLabel={(search) => `Add "${search}" as a new client`}
       />
 
-      {isPanelOpen && (
-        <div className="rounded-md border border-[#E4E4E4] bg-[#FAFAFA] p-3 space-y-3">
+      <ClientCreateDialog
+        open={createDialog.open}
+        initialName={createDialog.name}
+        initialMatches={createDialog.matches}
+        initialError={createDialog.error}
+        defaultCategory={category}
+        contextCategory={category}
+        lockCategory
+        onPickMatch={pickMatch}
+        onCreated={handleDialogCreated}
+        onCancel={() => finishPanel(undefined)}
+      />
+    </div>
+  );
+}
+
+// ─── Edit dialog (creator / admin) ─────────────────────────────────────────
+// Rendered through a portal but still inside the React tree of the enquiry
+// form, so it deliberately has no <form>: a submit would bubble up to it.
+
+interface ClientEditDialogProps {
+  // The client being edited; null keeps the dialog closed.
+  client: Client | null;
+  onClose: () => void;
+  onSaved: (client: Client) => void;
+}
+
+/**
+ * Live, read-only username for a client being renamed. Returns the current
+ * username while the name is unchanged, the server's suggestion for the new
+ * name once it arrives (the same username when the name slugs the same), and
+ * '' while a suggestion is pending.
+ */
+export function useClientUsernamePreview(name: string, client: Client | null): string {
+  const [preview, setPreview] = useState({ name: '', username: '' });
+  const changed = !!client && !!name && name !== client.name;
+  useEffect(() => {
+    if (!changed || !client) return;
+    let stale = false;
+    const timer = setTimeout(async () => {
+      const res = await suggestClientUsername(name, client.id);
+      if (!stale) setPreview({ name, username: res.data?.username ?? '' });
+    }, 300);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+  }, [changed, name, client]);
+  if (!client) return '';
+  if (!changed) return client.username;
+  return preview.name === name ? preview.username : '';
+}
+
+export function ClientEditDialog({ client, onClose, onSaved }: ClientEditDialogProps) {
+  const categories = useClientCategories();
+  const [name, setName] = useState('');
+  const [editCategories, setEditCategories] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  // Reset the fields whenever the dialog opens on a client.
+  const [openedFor, setOpenedFor] = useState<Client | null>(null);
+  if (client !== openedFor) {
+    setOpenedFor(client);
+    if (client) {
+      setName(client.name);
+      setEditCategories(client.categories);
+      setNotes(client.notes ?? '');
+      setIsActive(client.is_active);
+      setError('');
+    }
+  }
+
+  const cleanedName = name.trim().replace(/\s+/g, ' ');
+  const cleanedNotes = notes.trim();
+  const previewUsername = useClientUsernamePreview(cleanedName, client);
+  const nameTooLong = cleanedName.length > MAX_NAME_LENGTH;
+  const notesTooLong = cleanedNotes.length > CLIENT_NOTES_MAX_LENGTH;
+  const canSave =
+    !isSaving && cleanedName !== '' && !nameTooLong && !notesTooLong && editCategories.length > 0;
+
+  const save = async () => {
+    if (!client || !canSave) return;
+    const data: Parameters<typeof updateClient>[1] = {};
+    if (cleanedName !== client.name) {
+      data.name = cleanedName;
+      if (previewUsername) data.username = previewUsername;
+    }
+    const sameCategories =
+      editCategories.length === client.categories.length &&
+      editCategories.every((c) => client.categories.includes(c));
+    if (!sameCategories) data.categories = editCategories;
+    if (cleanedNotes !== (client.notes ?? '')) data.notes = cleanedNotes;
+    if (isActive !== client.is_active) data.is_active = isActive;
+    if (Object.keys(data).length === 0) {
+      onClose();
+      return;
+    }
+    setIsSaving(true);
+    setError('');
+    const res = await updateClient(client.id, data);
+    setIsSaving(false);
+    if (res.data) {
+      onSaved(res.data);
+    } else {
+      setError(clientErrorMessage(res, 'Failed to update client'));
+    }
+  };
+
+  return (
+    <Dialog
+      open={!!client}
+      onOpenChange={(open) => {
+        if (!open && !isSaving) onClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit client</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="client-select-new-name">New client name *</Label>
+            <Label htmlFor="client-edit-name">Name *</Label>
             <Input
-              id="client-select-new-name"
+              id="client-edit-name"
               autoFocus
-              value={newName}
+              value={name}
               maxLength={MAX_NAME_LENGTH + 50}
-              onChange={(e) => {
-                setNewName(e.target.value);
-                setMatches(null);
-              }}
+              onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                // This panel lives inside the enquiry <form>; Enter must
-                // create the client, not submit the enquiry.
                 if (e.key === 'Enter') {
                   e.preventDefault();
                   e.stopPropagation();
-                  submitCreate(matches !== null);
+                  save();
                 }
               }}
             />
@@ -246,95 +484,89 @@ export function ClientSelect({
             )}
           </div>
 
+          {client && (
+            <div className="space-y-1.5">
+              <Label htmlFor="client-edit-username">Username</Label>
+              <Input
+                id="client-edit-username"
+                readOnly
+                tabIndex={-1}
+                value={previewUsername}
+                placeholder="Generating…"
+                className="bg-[#F4F4F5] text-[#52525B] font-mono"
+              />
+              {previewUsername !== client.username && (
+                <p className="text-xs text-[#A1A1AA]">was {client.username}</p>
+              )}
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label>Categories *</Label>
             <div className="flex flex-wrap gap-x-4 gap-y-2">
               {categories.map((c) => (
                 <label key={c.value} className="inline-flex items-center gap-2 text-sm">
                   <Checkbox
-                    checked={newCategories.includes(c.value)}
-                    onCheckedChange={(checked) => toggleCategory(c.value, checked === true)}
+                    checked={editCategories.includes(c.value)}
+                    onCheckedChange={(checked) =>
+                      setEditCategories((prev) =>
+                        checked === true
+                          ? prev.includes(c.value)
+                            ? prev
+                            : [...prev, c.value]
+                          : prev.filter((k) => k !== c.value)
+                      )
+                    }
                   />
                   {c.label}
                 </label>
               ))}
             </div>
-            {newCategories.length === 0 ? (
+            {editCategories.length === 0 && (
               <p className="text-xs text-red-600">Pick at least one category.</p>
-            ) : (
-              !newCategories.includes(category) && (
-                <p className="text-xs text-amber-700">
-                  Without {categoryLabel} ticked, this client won&apos;t appear in the{' '}
-                  {categoryLabel} list.
-                </p>
-              )
             )}
           </div>
 
-          {matches && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-2 space-y-2">
-              <p className="text-sm font-medium text-amber-900">Client already exists</p>
-              <ul className="space-y-1">
-                {matches.map((m) => {
-                  const usable = m.categories.includes(category);
-                  return (
-                    <li key={m.id} className="flex items-center justify-between gap-2 text-sm">
-                      <span className="truncate">{clientLabel(m)}</span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={!usable}
-                        title={usable ? undefined : `Not in the ${categoryLabel} list`}
-                        onClick={() => pickMatch(m)}
-                      >
-                        Use this
-                      </Button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="client-edit-notes">Notes</Label>
+            <Textarea
+              id="client-edit-notes"
+              value={notes}
+              maxLength={CLIENT_NOTES_MAX_LENGTH}
+              rows={3}
+              placeholder="Optional"
+              onChange={(e) => setNotes(e.target.value)}
+            />
+            {notesTooLong && (
+              <p className="text-xs text-red-600">
+                Notes must be {CLIENT_NOTES_MAX_LENGTH} characters or fewer.
+              </p>
+            )}
+          </div>
 
-          {panelError && (
+          <label className="inline-flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={isActive}
+              onCheckedChange={(checked) => setIsActive(checked === true)}
+            />
+            Active
+          </label>
+
+          {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
-              {panelError}
+              {error}
             </div>
           )}
-
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={isSubmitting}
-              onClick={() => finishPanel(undefined)}
-            >
-              Cancel
-            </Button>
-            {matches ? (
-              <Button
-                type="button"
-                size="sm"
-                disabled={!canSubmit}
-                onClick={() => submitCreate(true)}
-              >
-                {isSubmitting ? 'Adding…' : 'Create new anyway'}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                disabled={!canSubmit}
-                onClick={() => submitCreate(false)}
-              >
-                {isSubmitting ? 'Adding…' : 'Add client'}
-              </Button>
-            )}
-          </div>
         </div>
-      )}
-    </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={isSaving} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="button" disabled={!canSave} onClick={save}>
+            {isSaving ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

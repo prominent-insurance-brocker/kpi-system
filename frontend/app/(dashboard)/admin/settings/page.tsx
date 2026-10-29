@@ -3,7 +3,7 @@
 /**
  * Settings — admin-only page for managing lookup tables used elsewhere in
  * the app (Type of Accident + Insurance Company for Motor Claim), plus the
- * saved Client list (rename / category tags / active / delete).
+ * saved Client list (rename / category tags / notes / active / delete).
  *
  * The active tab and the Clients tab's search, category and page live in the
  * URL so a refresh or shared link lands on the same view.
@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -52,7 +53,12 @@ import { toast } from 'sonner';
 import { useAuth } from '@/app/context/AuthContext';
 import { firstAccessibleRoute } from '@/app/lib/navigation';
 import { useConfirm } from '@/app/components/ConfirmDialog';
-import { clientErrorMessage, useClientCategories } from '@/app/components/ClientSelect';
+import {
+  clientErrorMessage,
+  useClientCategories,
+  useClientUsernamePreview,
+} from '@/app/components/ClientSelect';
+import { ClientCreateDialog } from '@/app/components/ClientCreateDialog';
 import {
   getAccidentTypes,
   getInsuranceCompanies,
@@ -69,6 +75,7 @@ import {
   listClients,
   updateClient,
   deleteClient,
+  CLIENT_NOTES_MAX_LENGTH,
   type Client,
   type SettingsLookup,
   type ApiResponse,
@@ -451,6 +458,10 @@ function LookupTab({ resource }: { resource: LookupResource }) {
 
 function ClientsTab() {
   const router = useRouter();
+  // HOD users (even with the Settings module) cannot edit clients; the backend
+  // returns 403, so hide Edit and Deactivate/Reactivate. Delete stays.
+  const { isHOD } = useAuth();
+  const canEditClients = !isHOD();
   const searchParams = useSearchParams();
   const confirm = useConfirm();
   const categories = useClientCategories();
@@ -531,27 +542,37 @@ function ClientsTab() {
 
   // ── Edit dialog (rename + category tags) ──
   const [editing, setEditing] = useState<Client | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editName, setEditName] = useState('');
   const [editCategories, setEditCategories] = useState<string[]>([]);
+  const [editNotes, setEditNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   const openEdit = (row: Client) => {
     setEditing(row);
     setEditName(row.name);
     setEditCategories(row.categories);
+    setEditNotes(row.notes ?? '');
   };
 
   const cleanedEditName = editName.trim().replace(/\s+/g, ' ');
+  const cleanedEditNotes = editNotes.trim();
+  const editUsername = useClientUsernamePreview(cleanedEditName, editing);
+  const editNotesTooLong = cleanedEditNotes.length > CLIENT_NOTES_MAX_LENGTH;
 
   const saveEdit = async () => {
-    if (!editing || !cleanedEditName || editCategories.length === 0) return;
-    const data: { name?: string; categories?: string[] } = {};
-    if (cleanedEditName !== editing.name) data.name = cleanedEditName;
+    if (!editing || !cleanedEditName || editCategories.length === 0 || editNotesTooLong) return;
+    const data: { name?: string; categories?: string[]; notes?: string; username?: string } = {};
+    if (cleanedEditName !== editing.name) {
+      data.name = cleanedEditName;
+      if (editUsername) data.username = editUsername;
+    }
     const sameCategories =
       editCategories.length === editing.categories.length &&
       editCategories.every((c) => editing.categories.includes(c));
     if (!sameCategories) data.categories = editCategories;
-    if (!data.name && !data.categories) {
+    if (cleanedEditNotes !== (editing.notes ?? '')) data.notes = cleanedEditNotes;
+    if (data.name === undefined && !data.categories && data.notes === undefined) {
       setEditing(null);
       return;
     }
@@ -559,7 +580,9 @@ function ClientsTab() {
     if (data.name && linked > 0) {
       const ok = await confirm({
         title: 'Rename client?',
-        description: `This will update ${linked} ${linked === 1 ? 'enquiry' : 'enquiries'}: "${editing.name}" becomes "${data.name}".`,
+        description: `"${editing.name}" becomes "${data.name}"${
+          editUsername && editUsername !== editing.username ? ` (${editUsername})` : ''
+        }. ${linked} linked ${linked === 1 ? 'enquiry shows' : 'enquiries show'} the new name.`,
         confirmLabel: 'Rename',
       });
       if (!ok) return;
@@ -635,8 +658,24 @@ function ClientsTab() {
               ))}
             </SelectContent>
           </Select>
+          {canEditClients && (
+            <Button className="h-9" onClick={() => setIsCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" /> New client
+            </Button>
+          )}
         </div>
       </div>
+
+      <ClientCreateDialog
+        open={isCreateOpen}
+        defaultCategory="marine"
+        onCreated={(created) => {
+          setIsCreateOpen(false);
+          toast.success(`Client created: ${created.name} · ${created.username}`);
+          reload();
+        }}
+        onCancel={() => setIsCreateOpen(false)}
+      />
 
       <div className="bg-white border border-[#E4E4E4] rounded-2xl overflow-auto max-h-[calc(100vh-320px)]">
         <table className="w-full min-w-max border-collapse">
@@ -645,6 +684,8 @@ function ClientsTab() {
               <th className="px-5 text-left text-sm font-medium text-[#71717A]">Name</th>
               <th className="px-5 text-left text-sm font-medium text-[#71717A]">Username</th>
               <th className="px-5 text-left text-sm font-medium text-[#71717A]">Categories</th>
+              <th className="px-5 text-left text-sm font-medium text-[#71717A]">Notes</th>
+              <th className="px-5 text-left text-sm font-medium text-[#71717A]">Created By</th>
               <th className="px-5 text-left text-sm font-medium text-[#71717A] w-32">Status</th>
               <th className="px-5 text-right text-sm font-medium text-[#71717A] w-40">
                 Linked Enquiries
@@ -655,13 +696,13 @@ function ClientsTab() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={6} className="h-16 text-center text-[#71717A]">
+                <td colSpan={8} className="h-16 text-center text-[#71717A]">
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="h-16 text-center text-[#71717A]">
+                <td colSpan={8} className="h-16 text-center text-[#71717A]">
                   {loadError || (search || category ? 'No clients match.' : 'No clients yet.')}
                 </td>
               </tr>
@@ -688,6 +729,18 @@ function ClientsTab() {
                         ))}
                       </div>
                     </td>
+                    <td className="px-5 text-sm text-[#71717A]">
+                      {row.notes ? (
+                        <span className="block max-w-[240px] truncate" title={row.notes}>
+                          {row.notes}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-5 text-sm text-[#71717A]">
+                      {row.created_by_name || '—'}
+                    </td>
                     <td className="px-5">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -702,22 +755,26 @@ function ClientsTab() {
                     <td className="px-5 text-right tabular-nums">{linked}</td>
                     <td className="px-5 text-right">
                       <div className="inline-flex items-center gap-1">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openEdit(row)}
-                        >
-                          <Pencil className="h-3 w-3 mr-1" /> Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => toggleActive(row)}
-                        >
-                          {row.is_active ? 'Deactivate' : 'Reactivate'}
-                        </Button>
+                        {canEditClients && (
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEdit(row)}
+                            >
+                              <Pencil className="h-3 w-3 mr-1" /> Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => toggleActive(row)}
+                            >
+                              {row.is_active ? 'Deactivate' : 'Reactivate'}
+                            </Button>
+                          </>
+                        )}
                         {/* Delete is only offered for clients no enquiry uses. */}
                         {linked === 0 && (
                           <Button
@@ -791,11 +848,27 @@ function ClientsTab() {
               />
               {editing && (editing.linked_entries_count ?? 0) > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Renaming also updates the client name on {editing.linked_entries_count} linked{' '}
-                  {editing.linked_entries_count === 1 ? 'enquiry' : 'enquiries'}.
+                  {editing.linked_entries_count} linked{' '}
+                  {editing.linked_entries_count === 1 ? 'enquiry shows' : 'enquiries show'} the
+                  new name after a rename.
                 </p>
               )}
             </div>
+            {editing && (
+              <div className="space-y-2">
+                <Label>Username</Label>
+                <Input
+                  readOnly
+                  tabIndex={-1}
+                  value={editUsername}
+                  placeholder="Generating…"
+                  className="bg-[#F4F4F5] text-[#52525B] font-mono"
+                />
+                {editUsername !== editing.username && (
+                  <p className="text-xs text-[#A1A1AA]">was {editing.username}</p>
+                )}
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Categories *</Label>
               <div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -821,13 +894,36 @@ function ClientsTab() {
                 <p className="text-xs text-red-600">Pick at least one category.</p>
               )}
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="settings-client-notes">Notes</Label>
+              <Textarea
+                id="settings-client-notes"
+                value={editNotes}
+                maxLength={CLIENT_NOTES_MAX_LENGTH}
+                rows={3}
+                placeholder="Optional"
+                onChange={(e) => setEditNotes(e.target.value)}
+              />
+              {editNotesTooLong && (
+                <p className="text-xs text-red-600">
+                  Notes must be {CLIENT_NOTES_MAX_LENGTH} characters or fewer.
+                </p>
+              )}
+              {editing?.created_by_name && (
+                <p className="text-xs text-muted-foreground">
+                  Created by {editing.created_by_name}
+                </p>
+              )}
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditing(null)}>
                 Cancel
               </Button>
               <Button
                 type="submit"
-                disabled={isSaving || !cleanedEditName || editCategories.length === 0}
+                disabled={
+                  isSaving || !cleanedEditName || editCategories.length === 0 || editNotesTooLong
+                }
               >
                 {isSaving ? 'Saving…' : 'Save'}
               </Button>

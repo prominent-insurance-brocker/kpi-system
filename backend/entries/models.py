@@ -1278,10 +1278,17 @@ MODULE_CATEGORY = {
     for module in modules
 }
 
+# Category key -> its boolean column on Client (e.g. 'marine' -> 'is_marine').
+CATEGORY_FIELDS = {key: f'is_{key}' for key, _ in CLIENT_CATEGORIES}
+
 CLIENT_USERNAME_MAX_LENGTH = 200
-# `slug_` + a 5-char code of exactly 2 digits and 3 lowercase letters.
+# Usernames are stored as handles: '@' + slug + '_' + code.
+CLIENT_USERNAME_PREFIX = '@'
+# `slug_` + a 4-char code of exactly 2 digits and 2 lowercase letters in a
+# random order, e.g. 'k47q'.
 _CLIENT_CODE_DIGITS = 2
-_CLIENT_CODE_LETTERS = 3
+_CLIENT_CODE_LETTERS = 2
+_CLIENT_CODE_LENGTH = _CLIENT_CODE_DIGITS + _CLIENT_CODE_LETTERS
 _client_rng = random.SystemRandom()
 
 
@@ -1297,8 +1304,8 @@ def _client_username_slug(name):
         .encode('ascii', 'ignore').decode('ascii').lower()
     )
     slug = re.sub(r'[^a-z0-9]+', '_', ascii_name).strip('_')
-    # Leave room for '_' + the 5-char code inside the column's 200 chars.
-    slug = slug[:CLIENT_USERNAME_MAX_LENGTH - 6].rstrip('_')
+    # Leave room for '@' + '_' + the 4-char code inside the column's 200 chars.
+    slug = slug[:CLIENT_USERNAME_MAX_LENGTH - (_CLIENT_CODE_LENGTH + 2)].rstrip('_')
     return slug or 'client'
 
 
@@ -1312,33 +1319,68 @@ def _client_username_code():
 
 
 def generate_client_username(name):
-    """A unique username for a client called `name`, e.g. 'abc_ltd_k4q7z'.
+    """A unique username for a client called `name`, e.g. '@abc_ltd_k47q'.
     Draws a new code whenever the candidate is already taken."""
     slug = _client_username_slug(name)
     for _ in range(50):
-        candidate = f'{slug}_{_client_username_code()}'
+        candidate = f'{CLIENT_USERNAME_PREFIX}{slug}_{_client_username_code()}'
         if not Client.objects.filter(username=candidate).exists():
             return candidate
     raise RuntimeError('Could not generate a unique client username.')
 
 
+def client_username_matches_name(name, username):
+    """True when `username`'s name part is already the slug of `name`, so a
+    rename that keeps the same slug (e.g. 'ABC Ltd' -> 'ABC Ltd.') can keep
+    the existing username."""
+    prefix = f'{CLIENT_USERNAME_PREFIX}{_client_username_slug(name)}_'
+    return (
+        isinstance(username, str) and username.startswith(prefix)
+        and len(username) == len(prefix) + _CLIENT_CODE_LENGTH
+    )
+
+
+def is_valid_client_username(name, username):
+    """True when `username` has the generated shape for `name`: '@' + the
+    name's slug + '_' + exactly 2 digits and 2 lowercase letters. Used to
+    accept the live-preview username the form sends on create."""
+    prefix = f'{CLIENT_USERNAME_PREFIX}{_client_username_slug(name)}_'
+    if not isinstance(username, str) or not username.startswith(prefix):
+        return False
+    code = username[len(prefix):]
+    return (
+        len(code) == _CLIENT_CODE_LENGTH
+        and code.isascii() and code.isalnum() and code == code.lower()
+        and sum(ch.isdigit() for ch in code) == _CLIENT_CODE_DIGITS
+    )
+
+
+def client_category_q(categories):
+    """Q matching clients tagged with any of `categories` (category keys).
+    Unknown keys are ignored; no valid key matches nothing."""
+    q = models.Q(pk__in=[])
+    for key in categories:
+        field = CATEGORY_FIELDS.get(key)
+        if field:
+            q |= models.Q(**{field: True})
+    return q
+
+
 class Client(models.Model):
     """A saved client, shared across modules and tagged with one or more
-    parent categories (ClientCategory). Names may repeat; `username` is the
-    unique, human-readable handle shown next to the name in pickers."""
-    SOURCE_USER = 'user'
-    SOURCE_BACKFILL = 'backfill'
-    SOURCE_CHOICES = [
-        (SOURCE_USER, 'User'),
-        (SOURCE_BACKFILL, 'Backfill'),
-    ]
-
+    parent categories (the is_<category> boolean columns). Names may repeat;
+    `username` is the unique, human-readable handle shown next to the name
+    in pickers."""
     name = models.CharField(max_length=200, db_index=True)
     username = models.CharField(max_length=CLIENT_USERNAME_MAX_LENGTH, unique=True)
     is_active = models.BooleanField(default=True)
-    # Every client is created by a user ('user'). 'backfill' is reserved and
-    # unused: existing Marine New rows are linked by hand, not by a migration.
-    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default=SOURCE_USER)
+    notes = models.TextField(blank=True, default='')
+    # Category tags (see CLIENT_CATEGORIES / CATEGORY_FIELDS).
+    is_general = models.BooleanField(default=False, db_index=True)
+    is_motor = models.BooleanField(default=False, db_index=True)
+    is_sales = models.BooleanField(default=False, db_index=True)
+    is_marine = models.BooleanField(default=False, db_index=True)
+    is_medical = models.BooleanField(default=False, db_index=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -1371,28 +1413,17 @@ class Client(models.Model):
 
     @property
     def category_keys(self):
-        """Tag keys in CLIENT_CATEGORIES order (uses the prefetch cache)."""
-        keys = {c.category for c in self.categories.all()}
-        return [key for key, _ in CLIENT_CATEGORIES if key in keys]
-
-
-class ClientCategory(models.Model):
-    """One category tag on a client (unique per client and category)."""
-    client = models.ForeignKey(
-        Client, on_delete=models.CASCADE, related_name='categories',
-    )
-    category = models.CharField(max_length=20, choices=CLIENT_CATEGORIES)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=['client', 'category'], name='uniq_client_category',
-            ),
+        """Tag keys in CLIENT_CATEGORIES order."""
+        return [
+            key for key, _ in CLIENT_CATEGORIES
+            if getattr(self, CATEGORY_FIELDS[key])
         ]
-        indexes = [models.Index(fields=['category', 'client'])]
 
-    def __str__(self):
-        return f"{self.client_id}: {self.category}"
+    def set_categories(self, categories):
+        """Set the is_<category> columns from a list of keys (does not save)."""
+        wanted = set(categories)
+        for key, field in CATEGORY_FIELDS.items():
+            setattr(self, field, key in wanted)
 
 
 def clients_matching_name(name, categories, active_only=True):
@@ -1403,20 +1434,13 @@ def clients_matching_name(name, categories, active_only=True):
     if not key:
         return []
     pattern = r'^\s*' + r'\s+'.join(re.escape(word) for word in key.split(' ')) + r'\s*$'
-    qs = Client.objects.filter(
-        name__iregex=pattern,
-        categories__category__in=list(categories),
-    )
+    qs = Client.objects.filter(client_category_q(categories), name__iregex=pattern)
     if active_only:
         qs = qs.filter(is_active=True)
-    seen = set()
-    matches = []
-    for client in qs.order_by('id').prefetch_related('categories'):
-        if client.pk in seen or normalise_client_name(client.name) != key:
-            continue
-        seen.add(client.pk)
-        matches.append(client)
-    return matches
+    return [
+        client for client in qs.order_by('id')
+        if normalise_client_name(client.name) == key
+    ]
 
 
 def marine_client_link_cutoff():
@@ -1426,7 +1450,12 @@ def marine_client_link_cutoff():
     from datetime import date as _date, datetime as _datetime
     from zoneinfo import ZoneInfo
 
-    cutoff = _date.fromisoformat(str(settings.MARINE_CLIENT_LINK_CUTOFF).strip())
+    try:
+        cutoff = _date.fromisoformat(str(settings.MARINE_CLIENT_LINK_CUTOFF).strip())
+    except ValueError:
+        # settings.py already validates the env value; this only guards a
+        # runtime override so a typo can never 500 the module.
+        cutoff = _date(2026, 11, 1)
     return timezone.make_aware(
         _datetime.combine(cutoff, _datetime.min.time()), ZoneInfo(settings.TIME_ZONE),
     )

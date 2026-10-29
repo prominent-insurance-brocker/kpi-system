@@ -57,9 +57,11 @@ import { Progress } from '@/components/ui/progress';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
+import { ClientSelect, clientLabel } from '@/app/components/ClientSelect';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
 import { EnquiryConvertedPremiumModal } from '@/app/components/EnquiryConvertedPremiumModal';
 import { MarineSharedWithClientModal } from '@/app/components/MarineSharedWithClientModal';
+import { LinkClientDialog } from '@/app/components/LinkClientDialog';
 import { canModifyEntry, canVoidEntry } from '@/app/lib/permissions';
 import { VoidEntryDialog } from '@/app/components/VoidEntryDialog';
 import { VoidStatusBadge } from '@/app/components/VoidStatusBadge';
@@ -342,6 +344,8 @@ export function MarineNewEnquiryPage() {
   // Post-conversion converted-premium edit (mirrors Sales KPI "Deals").
   const [convertedPremiumEntry, setConvertedPremiumEntry] =
     useState<MotorEnquiryEntry | null>(null);
+  // Legacy row being linked to a saved client (Link client row action).
+  const [linkTarget, setLinkTarget] = useState<MotorEnquiryEntry | null>(null);
   // TED-594: void (write-off) confirmation target + in-flight flag.
   const [voidTarget, setVoidTarget] = useState<MotorEnquiryEntry | null>(null);
   const [isVoiding, setIsVoiding] = useState(false);
@@ -593,7 +597,7 @@ export function MarineNewEnquiryPage() {
   };
 
   const handleSaveNew = async (payload: {
-    client_name: string;
+    client: number;
     agent: number;
     remarks: string;
     quotes_compared: number;
@@ -622,7 +626,11 @@ export function MarineNewEnquiryPage() {
       toast.success(isEdit ? 'Enquiry updated' : 'Enquiry added');
       refreshAfterMutation();
     } else {
-      setModalError(result.error || 'Failed to save enquiry');
+      setModalError(
+        firstFieldError(result, ['client', 'non_field_errors', 'detail']) ||
+          result.error ||
+          'Failed to save enquiry'
+      );
     }
   };
 
@@ -750,7 +758,13 @@ export function MarineNewEnquiryPage() {
       header: 'ID',
       render: (item: MotorEnquiryEntry) => item.pib_id,
     },
-    { key: 'client_name', header: 'Client Name' },
+    {
+      key: 'client_name',
+      header: 'Client Name',
+      // Linked client's name, else the legacy typed text (client_name is ''
+      // on new and linked rows).
+      render: (item: MotorEnquiryEntry) => item.client_display || item.client_name,
+    },
     {
       key: 'status',
       header: 'Status',
@@ -1320,7 +1334,29 @@ export function MarineNewEnquiryPage() {
                   (entry.status === 'new' || entry.status === 'shared_with_client')
                 }
                 rowActions={(entry) => {
-                  const actions: Array<{ label: string; onClick: () => void; danger?: boolean }> = [];
+                  const actions: Array<{
+                    label: string;
+                    onClick: () => void;
+                    danger?: boolean;
+                    disabled?: boolean;
+                    hint?: string;
+                  }> = [];
+                  // Link a legacy (free-text) row to a saved client. Shown on
+                  // every row; enabled only when the backend says this user may.
+                  actions.push({
+                    label: 'Link client',
+                    onClick: () => setLinkTarget(entry),
+                    disabled: !entry.can_link_client,
+                    hint: entry.can_link_client
+                      ? undefined
+                      : entry.client
+                        ? 'Already linked'
+                        : entry.is_voided
+                          ? 'Voided enquiry'
+                          : entry.added_by !== currentUserId
+                            ? 'Only the creator can link'
+                            : 'Not eligible',
+                  });
                   if (
                     !entry.is_voided &&
                     entry.status === config.successValue &&
@@ -1482,6 +1518,16 @@ export function MarineNewEnquiryPage() {
         onSaved={() => refreshAfterMutation()}
         allowZeroPremium
         editPolicyNumber
+      />
+
+      {/* ── Link a legacy enquiry to a saved client ──────────────────────── */}
+      <LinkClientDialog
+        entry={linkTarget}
+        onClose={() => setLinkTarget(null)}
+        onLinked={() => {
+          setLinkTarget(null);
+          refreshAfterMutation();
+        }}
       />
 
       {/* ── Void (write-off) confirmation (TED-594) ──────────────────────── */}
@@ -1758,7 +1804,7 @@ function EnquiryForm({
 }: {
   entry: MotorEnquiryEntry | null;
   onSave: (payload: {
-    client_name: string;
+    client: number;
     agent: number;
     remarks: string;
     quotes_compared: number;
@@ -1769,7 +1815,9 @@ function EnquiryForm({
   onClose: () => void;
   error: string;
 }) {
-  const [clientName, setClientName] = useState(entry?.client_name ?? '');
+  // Client comes from the saved Client list only (client_name is read-only in
+  // the API). Legacy unlinked rows start with no client and must pick one.
+  const [clientId, setClientId] = useState<number | null>(entry?.client ?? null);
   const [agentId, setAgentId] = useState<number | null>(entry?.agent ?? null);
   const [remarks, setRemarks] = useState('');
   const [quotesCompared, setQuotesCompared] = useState<string>(
@@ -1822,7 +1870,7 @@ function EnquiryForm({
   );
 
   useEffect(() => {
-    setClientName(entry?.client_name ?? '');
+    setClientId(entry?.client ?? null);
     setAgentId(entry?.agent ?? null);
     setRemarks('');
     setQuotesCompared(entry?.quotes_compared != null ? String(entry.quotes_compared) : '0');
@@ -1837,10 +1885,10 @@ function EnquiryForm({
     e.preventDefault();
     // Client Name, Source / Agent, Potential Premium, Class of Insurance and
     // at least one Compared Insurer are all required for Marine New.
-    if (!agentId || !(Number(potentialPremium) > 0) || !classOfInsuranceId || insurerIds.length === 0) return;
+    if (!clientId || !agentId || !(Number(potentialPremium) > 0) || !classOfInsuranceId || insurerIds.length === 0) return;
     setIsSubmitting(true);
     onSave({
-      client_name: clientName,
+      client: clientId,
       agent: agentId,
       remarks,
       quotes_compared: Math.max(0, Number(quotesCompared || 0)),
@@ -1861,12 +1909,19 @@ function EnquiryForm({
 
       <div className="space-y-2">
         <Label>Client Name *</Label>
-        <Input
-          type="text"
-          placeholder="Enter client name"
-          value={clientName}
-          onChange={(e) => setClientName(e.target.value)}
-          required
+        <ClientSelect
+          category="marine"
+          value={clientId}
+          onChange={(c) => setClientId(c?.id ?? null)}
+          selectedLabel={
+            entry?.client_detail ? clientLabel(entry.client_detail) : entry?.client_name ?? null
+          }
+          /* A legacy row with no saved client: show its old text as a prompt. */
+          placeholder={
+            entry && !entry.client && entry.client_name
+              ? `${entry.client_name} (pick a saved client)`
+              : undefined
+          }
         />
       </div>
 
@@ -1959,7 +2014,7 @@ function EnquiryForm({
           type="submit"
           disabled={
             isSubmitting ||
-            !clientName ||
+            !clientId ||
             !agentId ||
             !(Number(potentialPremium) > 0) ||
             !classOfInsuranceId ||

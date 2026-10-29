@@ -174,7 +174,8 @@ def _name(user):
 
 MARINE_NEW_COLUMNS = [
     ('ID', lambda e: e.pib_id, 'text'),
-    ('Client Name', lambda e: e.client_name, 'text'),
+    # Linked client's name, else the legacy typed name.
+    ('Client Name', lambda e: e.client_display, 'text'),
     ('Status', _marine_status, 'text'),
     ('Insurer Ref.', _insurer_refs, 'text'),
     ('Potential Premium', lambda e: e.potential_premium, 'number'),

@@ -7,6 +7,7 @@ cover monthly targets, comments, and the RBAC/user models.
 """
 from auth_app.models import CustomUser
 from entries.models import (
+    Client,
     EntryRemark,
     GeneralNewEntry,
     GeneralRenewalEntry,
@@ -29,6 +30,7 @@ from roles.models import Role, RoleModulePermission
 # Grouped (non-module) category keys.
 CATEGORY_MONTHLY_TARGETS = 'monthly_targets'
 CATEGORY_REMARKS = 'remarks'
+CATEGORY_CLIENTS = 'clients'
 CATEGORY_SECURITY = 'security'
 
 # Audited model -> category key. Signals are connected for exactly these models.
@@ -49,6 +51,7 @@ MODEL_TO_CATEGORY = {
     MotorFleetRenewalMonthlyTarget: CATEGORY_MONTHLY_TARGETS,
     SalesMonthlyTarget: CATEGORY_MONTHLY_TARGETS,
     EntryRemark: CATEGORY_REMARKS,
+    Client: CATEGORY_CLIENTS,
     CustomUser: CATEGORY_SECURITY,
     Role: CATEGORY_SECURITY,
     RoleModulePermission: CATEGORY_SECURITY,
@@ -69,6 +72,7 @@ CATEGORY_ORDER = [
     'medical_claim',
     CATEGORY_MONTHLY_TARGETS,
     CATEGORY_REMARKS,
+    CATEGORY_CLIENTS,
     CATEGORY_SECURITY,
 ]
 
@@ -78,6 +82,7 @@ _MODULE_LABELS = dict(RoleModulePermission.MODULE_CHOICES)
 CATEGORY_LABELS = {key: _MODULE_LABELS.get(key, key) for key in CATEGORY_ORDER}
 CATEGORY_LABELS[CATEGORY_MONTHLY_TARGETS] = 'Monthly Targets'
 CATEGORY_LABELS[CATEGORY_REMARKS] = 'Comments'
+CATEGORY_LABELS[CATEGORY_CLIENTS] = 'Clients'
 CATEGORY_LABELS[CATEGORY_SECURITY] = 'Users & Roles'
 
 # Per-model fields to drop from diffs, on top of the global ignore list in

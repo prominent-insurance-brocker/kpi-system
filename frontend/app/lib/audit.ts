@@ -21,6 +21,7 @@ export const AUDIT_CATEGORIES: AuditCategory[] = [
   { key: 'medical_claim', label: 'Medical Claim' },
   { key: 'monthly_targets', label: 'Monthly Targets' },
   { key: 'remarks', label: 'Comments' },
+  { key: 'clients', label: 'Clients' },
   { key: 'security', label: 'Users & Roles' },
 ];
 

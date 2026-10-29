@@ -370,13 +370,43 @@ def sales_kpi_payload(date_iso, added_by_id):
     }
 
 
+# Saved Marine client ids, filled by ensure_marine_clients() before seeding.
+MARINE_CLIENT_IDS = []
+
+
+def ensure_marine_clients(session, base_url, names):
+    """Find (server-side search) or create a saved Marine client for each name
+    and remember their ids. Marine New enquiries must pick a saved `client`;
+    a typed client_name alone is rejected."""
+    url = f'{base_url}/api/entries/clients/'
+    ids = []
+    for name in names:
+        r = session.get(url, params={'category': 'marine', 'search': name, 'page_size': 100})
+        r.raise_for_status()
+        match = next(
+            (c for c in r.json().get('results', []) if c['name'].lower() == name.lower()),
+            None,
+        )
+        if match is None:
+            r = session.post(url, json={'name': name, 'categories': ['marine']})
+            if r.status_code == 409:
+                match = r.json()['matches'][0]
+            else:
+                r.raise_for_status()
+                match = r.json()
+        ids.append(match['id'])
+    MARINE_CLIENT_IDS[:] = ids
+    print(f'  {len(ids)} Marine clients ready')
+
+
 def marine_new_payload(date_iso, added_by_id):
     """TED-596: marine_new is now a per-enquiry module — same shape as
-    general_enquiry_payload (no chassis_no)."""
+    general_enquiry_payload (no chassis_no), but the client is a saved
+    Marine client id (see ensure_marine_clients)."""
     return {
         'date': date_iso,
         'added_by': added_by_id,
-        'client_name': random.choice(_MOTOR_CLIENT_POOL),
+        'client': random.choice(MARINE_CLIENT_IDS),
         'agent': added_by_id,
         'quotes_compared': random.randint(0, 5),
         'initial_remark': random.choice(['', '', 'Follow up tomorrow', 'Pending docs']),
@@ -568,6 +598,8 @@ def main():
             print(f'  ! No active non-staff users have "{module_key}" — '
                   f'attribute via the role permissions, or skip.')
             continue
+        if module_key == 'marine_new':
+            ensure_marine_clients(session, args.base_url, _MOTOR_CLIENT_POOL)
         print(f'Seeding {module_key} ({len(users)} users x {len(weekday_dates)} days = '
               f'{len(users)*len(weekday_dates)} requests)')
         s = seed_per_day(session, args.base_url, module_key, users, weekday_dates,

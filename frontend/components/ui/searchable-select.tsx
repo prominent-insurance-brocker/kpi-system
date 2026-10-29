@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ChevronsUpDown, Search, X } from 'lucide-react';
+import { Check, ChevronsUpDown, Plus, Search, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +26,16 @@ export interface SearchableSelectProps<T> {
   disabled?: boolean;
   className?: string;
   triggerClassName?: string;
+  // Opt-in "+ Add" row. When set, a create row is shown below the list while
+  // the search text has no exact match. The popover closes and `onCreate`
+  // gets the trimmed search text; if it resolves to an item, that item is
+  // selected (as if clicked). Resolve to nothing to leave the value alone.
+  onCreate?: (search: string) => Promise<T | void> | T | void;
+  // Text of the create row; defaults to `Add "<search>"`.
+  createLabel?: (search: string) => string;
+  // Text compared (case/space-insensitive) against the search to decide if an
+  // item is an exact match that hides the create row. Defaults to the label.
+  getCreateMatchText?: (item: T) => string;
 }
 
 const DEBOUNCE_MS = 250;
@@ -43,6 +53,9 @@ export function SearchableSelect<T>({
   disabled,
   className,
   triggerClassName,
+  onCreate,
+  createLabel,
+  getCreateMatchText,
 }: SearchableSelectProps<T>) {
   const [open, setOpen] = useState(false);
   const [searchInput, setSearchInput] = useState('');
@@ -67,7 +80,21 @@ export function SearchableSelect<T>({
   const seededRef = useRef(false);
 
   const clearOffset = clearLabel ? 1 : 0;
-  const navLength = items.length + clearOffset;
+
+  // Create row (opt-in): sits after the items, so it never shifts their indices.
+  const normalise = (text: string) => text.trim().replace(/\s+/g, ' ').toLowerCase();
+  const createText = search.trim().replace(/\s+/g, ' ');
+  // Hidden while the debounce is pending, so Enter never creates a stale name.
+  const showCreate =
+    !!onCreate &&
+    createText !== '' &&
+    createText === searchInput.trim().replace(/\s+/g, ' ') &&
+    !loading &&
+    !items.some(
+      (it) => normalise((getCreateMatchText ?? getOptionLabel)(it)) === normalise(createText)
+    );
+  const createIndex = items.length + clearOffset;
+  const navLength = items.length + clearOffset + (showCreate ? 1 : 0);
 
   // Debounce the search input so we don't flood the backend on every keystroke.
   useEffect(() => {
@@ -192,6 +219,16 @@ export function SearchableSelect<T>({
     setOpen(false);
   };
 
+  const handleCreate = async () => {
+    if (!onCreate || !createText) return;
+    setOpen(false);
+    const created = await onCreate(createText);
+    if (created) {
+      setPickedItem(created);
+      onValueChange(getOptionValue(created));
+    }
+  };
+
   const handleClear = () => {
     setPickedItem(null);
     onValueChange('');
@@ -224,6 +261,8 @@ export function SearchableSelect<T>({
         if (highlightedIndex < 0) return;
         if (clearLabel && highlightedIndex === 0) {
           handleClear();
+        } else if (showCreate && highlightedIndex === createIndex) {
+          handleCreate();
         } else {
           const item = items[highlightedIndex - clearOffset];
           if (item != null) handlePick(item);
@@ -361,6 +400,30 @@ export function SearchableSelect<T>({
             </>
           )}
         </div>
+        {showCreate && (
+          <div className="border-t py-1">
+            <button
+              ref={(el) => {
+                itemRefs.current[createIndex] = el;
+              }}
+              id={`searchable-select-opt-${createIndex}`}
+              role="option"
+              aria-selected={highlightedIndex === createIndex}
+              type="button"
+              onClick={handleCreate}
+              onMouseEnter={() => setHighlightedIndex(createIndex)}
+              className={cn(
+                'flex w-full items-center px-3 py-2 text-left text-sm',
+                highlightedIndex === createIndex ? 'bg-accent' : 'hover:bg-accent'
+              )}
+            >
+              <Plus className="mr-2 h-4 w-4 shrink-0 opacity-70" />
+              <span className="truncate">
+                {createLabel ? createLabel(createText) : `Add "${createText}"`}
+              </span>
+            </button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

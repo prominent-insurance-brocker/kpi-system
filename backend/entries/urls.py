@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
+    ClientViewSet,
     EntryRemarkViewSet,
     GeneralNewEntryViewSet,
     GeneralRenewalEntryViewSet,
@@ -50,6 +51,8 @@ router.register(r'settings/accident-types', TypeOfAccidentViewSet, basename='acc
 router.register(r'settings/insurance-companies', InsuranceCompanyViewSet, basename='insurance-companies')
 router.register(r'settings/class-of-insurance', ClassOfInsuranceViewSet, basename='class-of-insurance')
 router.register(r'settings/marine-class-of-insurance', MarineClassOfInsuranceViewSet, basename='marine-class-of-insurance')
+# Saved client list (category-tagged; Marine New picks from 'marine').
+router.register(r'clients', ClientViewSet, basename='clients')
 # Cross-module per-entry comments. The router-driven /remarks/ resource lives
 # at the entries API root; the helper endpoint exposes the {model: ct_id} map.
 router.register(r'remarks', EntryRemarkViewSet, basename='remarks')

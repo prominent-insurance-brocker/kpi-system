@@ -2,7 +2,8 @@ from decimal import Decimal
 
 from rest_framework import viewsets, status, filters, serializers as drf_serializers
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Avg, Count, Q, Sum
+from django.db import transaction
+from django.db.models import Avg, Count, Exists, OuterRef, ProtectedError, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.decorators import action, api_view, permission_classes
@@ -13,6 +14,10 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from roles.permissions import HasModulePermission
 from .models import (
+    CATEGORY_MODULES,
+    CLIENT_CATEGORIES,
+    Client,
+    ClientCategory,
     EntryRemark,
     GeneralNewEntry,
     GeneralNewStatusTransition,
@@ -43,8 +48,11 @@ from .models import (
     MarineRenewalEntry,
     MedicalClaimEntry,
     MedicalClaimStatusTransition,
+    clients_matching_name,
 )
 from .serializers import (
+    ClientSerializer,
+    MarineClientLinkSerializer,
     EntryRemarkSerializer,
     GeneralNewEntrySerializer,
     GeneralNewStatusUpdateSerializer,
@@ -88,7 +96,7 @@ from .serializers import (
 )
 from .filters import (
     EntryFilter, ClaimEntryFilter, MotorEnquiryFilter, MotorClaimEntryFilter,
-    SalesKPIEntryFilter, GeneralEnquiryFilter,
+    SalesKPIEntryFilter, GeneralEnquiryFilter, MarineNewEnquiryFilter,
 )
 from .enquiry_export import MARINE_NEW_COLUMNS, export_response
 from .tracker_common import compute_can_see_all
@@ -1787,17 +1795,18 @@ class MotorFleetRenewalMonthlyTargetViewSet(HodAwareMonthlyTargetMixin, viewsets
 
 class MarineNewEntryViewSet(BaseEntryViewSet):
     """Per-enquiry Marine New viewset (TED-596). Mirrors GeneralNewEntryViewSet;
-    reuses GeneralEnquiryFilter (its class_of_insurance filter matches on the FK
-    id regardless of the FK's target table)."""
+    MarineNewEnquiryFilter extends GeneralEnquiryFilter (its class_of_insurance
+    filter matches on the FK id regardless of the FK's target table) with an
+    exact `client` id filter."""
     queryset = MarineNewEntry.objects.all()
     serializer_class = MarineNewEntrySerializer
     module_key = 'marine_new'
-    filterset_class = GeneralEnquiryFilter
+    filterset_class = MarineNewEnquiryFilter
 
     def get_queryset(self):
         # compared_insurance_companies is prefetched so the ids / names /
         # insurer_references_display fields share one query per page.
-        return super().get_queryset().select_related('agent').prefetch_related(
+        return super().get_queryset().select_related('agent', 'client').prefetch_related(
             'status_transitions', 'compared_insurance_companies',
         )
 
@@ -1956,6 +1965,37 @@ class MarineNewEntryViewSet(BaseEntryViewSet):
         queryset = filterset.qs
         return Response(_build_enquiry_stats(queryset, success_status='converted'))
 
+    @action(detail=True, methods=['post'], url_path='link-client')
+    def link_client(self, request, pk=None):
+        """POST /api/entries/marine-new/{id}/link-client/ {client: id}
+
+        Links a legacy enquiry (typed client name, added before
+        MARINE_CLIENT_LINK_CUTOFF) to a saved Marine client and clears the
+        typed name, in one audited save. Creator only, once, not limited by
+        the 30-minute edit window. HODs are refused by check_permissions and
+        voided rows by check_object_permissions (both 403).
+        """
+        entry = self.get_object()
+        with transaction.atomic():
+            # Lock the row so two concurrent links cannot both pass the
+            # "not yet linked" check; the second sees client_id and gets 409.
+            entry = MarineNewEntry.objects.select_for_update().get(pk=entry.pk)
+            blocked = entry.link_client_block_reason(request.user)
+            if blocked is not None:
+                code, message = blocked
+                if code == status.HTTP_403_FORBIDDEN:
+                    raise PermissionDenied(message)
+                return Response({'detail': message}, status=code)
+
+            serializer = MarineClientLinkSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            entry.client = serializer.validated_data['client']
+            entry.client_name = ''
+            entry.save(update_fields=['client', 'client_name', 'updated_at'])
+
+        entry = self.get_queryset().get(pk=entry.pk)
+        return Response(self.get_serializer(entry).data)
+
     @action(detail=False, methods=['get'], url_path='export')
     def export(self, request):
         """GET /api/entries/marine-new/export/?file_format=csv|xlsx&<list filters>
@@ -1967,7 +2007,7 @@ class MarineNewEntryViewSet(BaseEntryViewSet):
         if not compute_can_see_all(request.user):
             raise PermissionDenied('You do not have permission to export enquiries.')
         queryset = self.filter_queryset(self.get_queryset()).select_related(
-            'added_by', 'class_of_insurance', 'converted_insurer', 'voided_by',
+            'added_by', 'class_of_insurance', 'converted_insurer', 'voided_by', 'client',
         )
         return export_response(
             request,
@@ -2115,6 +2155,159 @@ class ClassOfInsuranceViewSet(_LookupViewSet):
 class MarineClassOfInsuranceViewSet(_LookupViewSet):
     queryset = MarineClassOfInsurance.objects.all()
     serializer_class = MarineClassOfInsuranceSerializer
+
+
+# ─── Clients (saved client list, tagged by parent category) ─────────────────
+
+_CLIENT_CATEGORY_KEYS = [key for key, _ in CLIENT_CATEGORIES]
+
+
+def _role_modules(user):
+    role = getattr(user, 'role', None)
+    if role is None:
+        return set()
+    return set(role.permissions.values_list('module', flat=True))
+
+
+def _truthy(value):
+    return value is True or str(value).lower() in ('1', 'true', 'yes')
+
+
+class ClientViewSet(viewsets.ModelViewSet):
+    """/api/entries/clients/ — the saved client list.
+
+    Read: any authenticated user, limited to the categories whose modules
+        their role grants; `?category=` is required unless the user is staff
+        or has Settings access. Dropdown reads default to active clients.
+    Create: staff, Settings users, or anyone who can access at least one of
+        the chosen categories (HOD users are refused). A same-name active
+        client in a chosen category returns 409 with the matches unless the
+        body has `force: true`.
+    Update / delete: staff or Settings users only; delete is refused (409)
+        while enquiries are linked.
+    """
+    serializer_class = ClientSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = []
+
+    # ── permission helpers (cached per request) ──
+    def _modules(self):
+        if not hasattr(self.request, '_client_role_modules'):
+            self.request._client_role_modules = _role_modules(self.request.user)
+        return self.request._client_role_modules
+
+    def _is_client_admin(self):
+        return self.request.user.is_staff or 'settings' in self._modules()
+
+    def _accessible_categories(self):
+        if self._is_client_admin():
+            return list(_CLIENT_CATEGORY_KEYS)
+        modules = self._modules()
+        return [
+            key for key in _CLIENT_CATEGORY_KEYS
+            if modules.intersection(CATEGORY_MODULES[key])
+        ]
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if self.action == 'create' and user_is_hod(request.user):
+            raise PermissionDenied('HOD users cannot add clients.')
+        if self.action in ('update', 'partial_update', 'destroy') and not self._is_client_admin():
+            raise PermissionDenied('Only admins can edit or delete clients.')
+
+    def get_queryset(self):
+        params = self.request.query_params
+        qs = Client.objects.all()
+        if self.action == 'list':
+            category = params.get('category')
+            if category:
+                if category not in _CLIENT_CATEGORY_KEYS:
+                    raise drf_serializers.ValidationError(
+                        {'category': f"Unknown category '{category}'."}
+                    )
+                if category not in self._accessible_categories():
+                    raise PermissionDenied('You do not have access to this category.')
+                qs = qs.filter(categories__category=category)
+            elif not self._is_client_admin():
+                raise drf_serializers.ValidationError(
+                    {'category': 'This query parameter is required.'}
+                )
+
+            search = (params.get('search') or '').strip()
+            if search:
+                qs = qs.filter(Q(name__icontains=search) | Q(username__icontains=search))
+
+            is_active = params.get('is_active')
+            if is_active is not None and is_active != '':
+                qs = qs.filter(is_active=_truthy(is_active))
+            elif not self._is_client_admin():
+                # Dropdown reads only offer clients that can still be picked.
+                qs = qs.filter(is_active=True)
+
+            if _truthy(params.get('include_counts')):
+                qs = qs.annotate(
+                    linked_entries_count=Count('marine_new_entries', distinct=True),
+                )
+        elif not self._is_client_admin():
+            qs = qs.filter(Exists(ClientCategory.objects.filter(
+                client=OuterRef('pk'),
+                category__in=self._accessible_categories(),
+            )))
+        # Stable order (name, then id) so paging never repeats or skips a row.
+        return qs.prefetch_related('categories').order_by('name', 'id')
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        categories = serializer.validated_data.get('categories') or ['marine']
+        allowed = set(self._accessible_categories())
+        if not allowed.intersection(categories):
+            raise PermissionDenied('You do not have access to any of these categories.')
+        if not _truthy(request.data.get('force', False)):
+            matches = clients_matching_name(serializer.validated_data['name'], categories)
+            if matches:
+                return Response(
+                    {
+                        'detail': 'Client already exists',
+                        'matches': [
+                            {
+                                'id': c.id, 'name': c.name, 'username': c.username,
+                                'categories': c.category_keys,
+                            }
+                            for c in matches
+                        ],
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+        client = serializer.save(created_by=request.user, source=Client.SOURCE_USER)
+        client = Client.objects.prefetch_related('categories').get(pk=client.pk)
+        return Response(self.get_serializer(client).data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        linked = instance.marine_new_entries.count()
+        if linked:
+            return Response(
+                {'detail': f'This client is linked to {linked} enquiries and cannot be deleted.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        try:
+            with transaction.atomic():
+                instance.delete()
+        except ProtectedError:
+            # An enquiry linked the client after the count above.
+            return Response(
+                {'detail': 'This client is linked to enquiries and cannot be deleted.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'])
+    def categories(self, request):
+        """Every client category tag, for the create/edit multi-select."""
+        return Response([
+            {'value': key, 'label': label} for key, label in CLIENT_CATEGORIES
+        ])
 
 
 # ─── Cross-module per-entry comments ──────────────────────────────────────────

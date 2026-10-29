@@ -303,6 +303,12 @@ else:
 # Frontend URL for magic link generation
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
+# Marine New: enquiries added before this date (YYYY-MM-DD, read as midnight
+# in TIME_ZONE, i.e. Asia/Dubai) were saved with a typed client name and can
+# be linked to a saved client by their creator. Rows added on or after it
+# already pick a client in the form. See entries.models.marine_client_link_cutoff.
+MARINE_CLIENT_LINK_CUTOFF = os.environ.get('MARINE_CLIENT_LINK_CUTOFF', '2026-11-01').strip() or '2026-11-01'
+
 # Metabase static embedding. Tokens are signed here, behind login + module
 # permissions, so the embedding secret never leaves the backend.
 METABASE_SITE_URL = os.environ.get('METABASE_SITE_URL', 'http://localhost:3001').rstrip('/')

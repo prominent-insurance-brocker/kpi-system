@@ -1,4 +1,5 @@
 import django_filters
+from django.db.models import Q
 
 
 class EntryFilter(django_filters.FilterSet):
@@ -111,6 +112,28 @@ class GeneralEnquiryFilter(BaseEnquiryFilter):
         fields = [
             'date_from', 'date_to', 'user_id', 'status', 'agent_id', 'client_name',
             'insurance_company', 'class_of_insurance',
+        ]
+
+
+class MarineNewEnquiryFilter(GeneralEnquiryFilter):
+    """Marine New enquiry filter: the general filters plus an exact
+    saved-client id. `client_name` matches the linked client's name OR the
+    legacy typed name (new and linked rows store client_name='')."""
+    client_name = django_filters.CharFilter(method='filter_client_name')
+    client = django_filters.NumberFilter(field_name='client_id')
+
+    def filter_client_name(self, queryset, name, value):
+        value = (value or '').strip()
+        if not value:
+            return queryset
+        return queryset.filter(
+            Q(client__name__icontains=value) | Q(client_name__icontains=value)
+        )
+
+    class Meta:
+        fields = [
+            'date_from', 'date_to', 'user_id', 'status', 'agent_id', 'client_name',
+            'insurance_company', 'class_of_insurance', 'client',
         ]
 
 

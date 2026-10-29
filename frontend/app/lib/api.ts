@@ -466,6 +466,16 @@ export interface MotorEnquiryEntry {
   // keyed by str(insurance_company_id). `_display` resolves names, sorted by name.
   insurer_references?: Record<string, string>;
   insurer_references_display?: { insurer_id: number; insurer_name: string; reference: string }[];
+  // Marine New only: link to the saved Client list. Null on legacy rows that
+  // only carry the free-text client_name. New and linked rows store
+  // client_name as '' — read client_display for the name to show.
+  client?: number | null;
+  client_detail?: ClientRef | null;
+  // Marine New only: client.name if linked, else the legacy client_name.
+  client_display?: string;
+  // Marine New only: whether the requesting user may link this legacy row to a
+  // saved client (creator only, pre-cutoff, unlinked, not voided).
+  can_link_client?: boolean;
   added_by: number;
   added_by_name: string;
   on_behalf_of: number | null;
@@ -1102,6 +1112,109 @@ export async function updateInsuranceCompany(
     `/api/entries/settings/insurance-companies/${id}/`,
     { method: 'PATCH', body: JSON.stringify(data) }
   );
+}
+
+// ─── Saved client list (Marine New today; other modules can reuse it) ───────
+// One global Client table; each client carries one or more category tags and
+// every module only lists the clients tagged with its own category.
+
+export interface ClientRef {
+  id: number;
+  name: string;
+  username: string;
+}
+
+export interface Client extends ClientRef {
+  categories: string[];          // category keys, e.g. ['marine', 'motor']
+  is_active: boolean;
+  source: 'user' | 'backfill';
+  created_at: string;
+  updated_at: string;
+  // Only present when listed with include_counts=1 (Settings tab).
+  linked_entries_count?: number;
+}
+
+export interface ClientCategoryOption {
+  value: string;
+  label: string;
+}
+
+// Body of the 409 returned by createClient when an active client with the
+// same name already exists in one of the requested categories.
+export interface ClientDuplicateError {
+  detail: string;
+  matches: (ClientRef & { categories: string[] })[];
+}
+
+export interface ClientListParams {
+  category?: string;
+  search?: string;
+  is_active?: boolean;
+  include_counts?: boolean;
+  page?: number;
+  page_size?: number;
+}
+
+export async function listClients(
+  params: ClientListParams = {}
+): Promise<ApiResponse<PaginatedResponse<Client>>> {
+  const qs = new URLSearchParams();
+  if (params.category) qs.set('category', params.category);
+  if (params.search) qs.set('search', params.search);
+  if (params.is_active != null) qs.set('is_active', String(params.is_active));
+  if (params.include_counts) qs.set('include_counts', '1');
+  qs.set('page', String(params.page ?? 1));
+  if (params.page_size) qs.set('page_size', String(params.page_size));
+  return fetchApi<PaginatedResponse<Client>>(`/api/entries/clients/?${qs}`);
+}
+
+export async function getClientCategories(): Promise<ApiResponse<ClientCategoryOption[]>> {
+  return fetchApi<ClientCategoryOption[]>('/api/entries/clients/categories/');
+}
+
+export async function createClient(data: {
+  name: string;
+  categories?: string[];
+  force?: boolean;
+}): Promise<ApiResponse<Client>> {
+  return fetchApi<Client>('/api/entries/clients/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+/** The duplicate-name matches from a failed createClient call, if it was a 409. */
+export function clientDuplicateMatches(
+  res: ApiResponse<unknown>
+): ClientDuplicateError['matches'] | null {
+  const body = res.errorBody as Partial<ClientDuplicateError> | undefined;
+  return body && Array.isArray(body.matches) ? body.matches : null;
+}
+
+export async function updateClient(
+  id: number,
+  data: { name?: string; categories?: string[]; is_active?: boolean }
+): Promise<ApiResponse<Client>> {
+  return fetchApi<Client>(`/api/entries/clients/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteClient(id: number): Promise<ApiResponse<void>> {
+  return fetchApi<void>(`/api/entries/clients/${id}/`, { method: 'DELETE' });
+}
+
+/** Marine New: permanently link a legacy enquiry to a saved client. Clears
+ *  the old typed client_name; only the row's creator may do this. */
+export async function linkMarineClient(
+  entryId: number,
+  clientId: number
+): Promise<ApiResponse<MotorEnquiryEntry>> {
+  return fetchApi<MotorEnquiryEntry>(`/api/entries/marine-new/${entryId}/link-client/`, {
+    method: 'POST',
+    body: JSON.stringify({ client: clientId }),
+  });
 }
 
 export async function getMotorClaimStats(params: {

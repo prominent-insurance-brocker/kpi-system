@@ -339,7 +339,7 @@ def _dashboard_id(var):
 # name -> (dashboard id, modules that grant access; empty = admins only)
 METABASE_DASHBOARDS = {
     'overview': (_dashboard_id('METABASE_DASHBOARD_ID'), ()),
-    'marine': (_dashboard_id('METABASE_MARINE_DASHBOARD_ID'), ('marine_new', 'marine_renewal')),
+    'marine': (_dashboard_id('METABASE_MARINE_DASHBOARD_ID'), ('marine_dashboard',)),
 }
 
 

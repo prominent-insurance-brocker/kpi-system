@@ -242,7 +242,8 @@ export default function MotorClaimPage() {
       if (statusFilter) qs.set('status', statusFilter);
       if (accidentTypeFilter) qs.set('type_of_accident', accidentTypeFilter);
       if (insurerFilter) qs.set('insurance_company', insurerFilter);
-      if (clientNameFilter) qs.set('client_name', clientNameFilter);
+      // Search box: ID (exact, e.g. PIB-12) or client name.
+      if (clientNameFilter) qs.set('q', clientNameFilter);
       const result = await fetchApi<{ results: MotorClaimEntry[]; count: number }>(
         `/api/entries/motor-claim/?${qs}`
       );
@@ -690,8 +691,9 @@ export default function MotorClaimPage() {
                 setClientNameFilter(v);
                 setPage(1);
               },
-              placeholder: 'Search by client name…',
-              label: 'Client',
+              placeholder: 'ID or client name…',
+              label: 'Search',
+              debounceMs: 300,
             }}
             dateRange={{
               from: dateFrom,

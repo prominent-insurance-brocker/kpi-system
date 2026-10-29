@@ -100,3 +100,7 @@ PER_MODEL_IGNORED_FIELDS = {
         )
     },
 }
+# Search-only copy of `insurer_references` (already audited); diffs on it would be derived noise.
+PER_MODEL_IGNORED_FIELDS[MarineNewEntry] = (
+    PER_MODEL_IGNORED_FIELDS[MarineNewEntry] | {'insurer_references_text'}
+)

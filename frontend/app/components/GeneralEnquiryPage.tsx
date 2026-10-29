@@ -299,7 +299,8 @@ export function GeneralEnquiryPage() {
       if (userId) qs.set('user_id', userId);
       if (agentId) qs.set('agent_id', agentId);
       applyStatusFilter(qs, statusFilter);
-      if (clientName) qs.set('client_name', clientName);
+      // Search box: ID (exact, e.g. PIB-12) or client name.
+      if (clientName) qs.set('q', clientName);
       if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
       if (classOfInsuranceFilter) qs.set('class_of_insurance', classOfInsuranceFilter);
 
@@ -1026,8 +1027,9 @@ export function GeneralEnquiryPage() {
                     setClientName(v);
                     setPage(1);
                   },
-                  placeholder: 'Search by client name…',
-                  label: 'Client',
+                  placeholder: 'ID or client name…',
+                  label: 'Search',
+                  debounceMs: 300,
                 }}
                 dateRange={{
                   from: dateFrom,

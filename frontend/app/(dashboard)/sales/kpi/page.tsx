@@ -268,7 +268,8 @@ export default function SalesKPIPage() {
     if (statusFilter) params.set('status', statusFilter);
     if (classFilter) params.set('class_of_insurance', classFilter);
     if (typeFilter) params.set('entry_type', typeFilter);
-    if (customerName) params.set('customer_name', customerName);
+    // Search box: ID (exact, e.g. PIB-12) or customer name.
+    if (customerName) params.set('q', customerName);
     const result = await fetchApi<{ results: SalesKPIEntry[]; count: number }>(
       `/api/entries/sales-kpi/?${params}`,
     );
@@ -1093,8 +1094,9 @@ export default function SalesKPIPage() {
               search={{
                 value: customerName,
                 onChange: (v) => updateFilters({ customer_name: v, page: 1 }),
-                placeholder: 'Search by customer name…',
-                label: 'Customer',
+                placeholder: 'ID or customer name…',
+                label: 'Search',
+                debounceMs: 300,
               }}
               dateRange={{
                 from: dateFrom,

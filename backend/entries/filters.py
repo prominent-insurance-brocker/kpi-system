@@ -1,5 +1,12 @@
+import re
+
 import django_filters
 from django.db.models import Q
+
+# A search term that names an entry id: '12', 'PIB-12', 'pib12' (case-insensitive).
+_PIB_ID_TERM = re.compile(r'^(?:pib-?)?(\d+)$', re.IGNORECASE)
+# 'PIB 12' is joined into 'PIB-12' before splitting so it stays one id term.
+_PIB_SPACED = re.compile(r'\bpib\s+(\d+)\b', re.IGNORECASE)
 
 
 class EntryFilter(django_filters.FilterSet):
@@ -21,20 +28,52 @@ class EntryFilter(django_filters.FilterSet):
         fields = ['date_from', 'date_to', 'created_from', 'created_to', 'user_id']
 
 
-class ClaimEntryFilter(EntryFilter):
+class EntrySearchMixin(django_filters.FilterSet):
+    """The list-page search box: `?q=`.
+
+    The value is split on whitespace; every term must match (AND) and each term
+    may match any searchable field (OR). A term that looks like an id ('12',
+    'PIB-12', 'pib 12') matches that exact `pib_id` only (never PIB-120), and is
+    also tried as text, so a client called "12 Star" is still found. Subclasses
+    list the text columns to search (icontains) in `search_text_fields`.
+    Separate from DRF's `?search=`, which already looks up added_by.
+    """
+    q = django_filters.CharFilter(method='filter_q')
+
+    search_text_fields = ()
+
+    def filter_q(self, queryset, name, value):
+        value = _PIB_SPACED.sub(r'PIB-\1', (value or '').strip())
+        for term in value.split():
+            match = Q()
+            id_match = _PIB_ID_TERM.match(term)
+            if id_match:
+                match |= Q(pib_id__iexact=f'PIB-{int(id_match.group(1))}')
+            for field in self.search_text_fields:
+                match |= Q(**{f'{field}__icontains': term})
+            # Only local columns / forward FKs are searched, so no distinct().
+            queryset = queryset.filter(match) if match else queryset.none()
+        return queryset
+
+
+class ClaimEntryFilter(EntrySearchMixin, EntryFilter):
     """Filter for medical-claim entries — adds a status filter and customer-name search."""
+    search_text_fields = ('customer_name',)
+
     status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
     customer_name = django_filters.CharFilter(field_name='customer_name', lookup_expr='icontains')
 
     class Meta:
-        fields = ['date_from', 'date_to', 'user_id', 'status', 'customer_name']
+        fields = ['date_from', 'date_to', 'user_id', 'status', 'customer_name', 'q']
 
 
-class MotorClaimEntryFilter(EntryFilter):
+class MotorClaimEntryFilter(EntrySearchMixin, EntryFilter):
     """Filter for motor-claim entries — status, source agent, client-name search,
     plus a secondary date range on next_call_date and lookup-FK filters for
     type_of_accident / insurance_company.
     """
+    search_text_fields = ('client_name',)
+
     status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
     client_name = django_filters.CharFilter(field_name='client_name', lookup_expr='icontains')
     agent_id = django_filters.NumberFilter(field_name='source_id')
@@ -47,11 +86,11 @@ class MotorClaimEntryFilter(EntryFilter):
         fields = [
             'date_from', 'date_to', 'user_id', 'status', 'client_name',
             'agent_id', 'next_call_date_from', 'next_call_date_to',
-            'type_of_accident', 'insurance_company',
+            'type_of_accident', 'insurance_company', 'q',
         ]
 
 
-class BaseEnquiryFilter(EntryFilter):
+class BaseEnquiryFilter(EntrySearchMixin, EntryFilter):
     """Common per-enquiry filters shared by the motor + general modules.
 
     All enquiry modules (motor new/renewal, motor fleet new/renewal, general
@@ -60,6 +99,8 @@ class BaseEnquiryFilter(EntryFilter):
     fields are added by the subclasses below — Motor uses `class_of_enquiry`
     (a char choice), General uses `class_of_insurance` (an FK).
     """
+    search_text_fields = ('client_name',)
+
     status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
     agent_id = django_filters.NumberFilter(field_name='agent_id')
     client_name = django_filters.CharFilter(field_name='client_name', lookup_expr='icontains')
@@ -75,7 +116,7 @@ class BaseEnquiryFilter(EntryFilter):
     class Meta:
         fields = [
             'date_from', 'date_to', 'user_id', 'status', 'agent_id', 'client_name',
-            'insurance_company',
+            'insurance_company', 'q',
         ]
 
 
@@ -91,7 +132,7 @@ class MotorEnquiryFilter(BaseEnquiryFilter):
     class Meta:
         fields = [
             'date_from', 'date_to', 'user_id', 'status', 'agent_id', 'client_name',
-            'insurance_company', 'class_of_enquiry',
+            'insurance_company', 'class_of_enquiry', 'q',
         ]
 
 
@@ -111,14 +152,22 @@ class GeneralEnquiryFilter(BaseEnquiryFilter):
     class Meta:
         fields = [
             'date_from', 'date_to', 'user_id', 'status', 'agent_id', 'client_name',
-            'insurance_company', 'class_of_insurance',
+            'insurance_company', 'class_of_insurance', 'q',
         ]
 
 
 class MarineNewEnquiryFilter(GeneralEnquiryFilter):
     """Marine New enquiry filter: the general filters plus an exact
     saved-client id. `client_name` matches the linked client's name OR the
-    legacy typed name (new and linked rows store client_name='')."""
+    legacy typed name (new and linked rows store client_name='').
+
+    `q` searches the linked client (name / @username), the policy number and
+    the insurer reference values, but not the legacy typed `client_name`: an
+    unlinked legacy row is found by id or policy number until it is linked."""
+    search_text_fields = (
+        'client__name', 'client__username', 'policy_number', 'insurer_references_text',
+    )
+
     client_name = django_filters.CharFilter(method='filter_client_name')
     client = django_filters.NumberFilter(field_name='client_id')
 
@@ -133,16 +182,18 @@ class MarineNewEnquiryFilter(GeneralEnquiryFilter):
     class Meta:
         fields = [
             'date_from', 'date_to', 'user_id', 'status', 'agent_id', 'client_name',
-            'insurance_company', 'class_of_insurance', 'client',
+            'insurance_company', 'class_of_insurance', 'client', 'q',
         ]
 
 
-class SalesKPIEntryFilter(EntryFilter):
+class SalesKPIEntryFilter(EntrySearchMixin, EntryFilter):
     """Per-ticket Sales KPI filter (TED-446).
 
     Supports filtering by status, assignee, entry type, class_of_insurance,
     plus a customer-name icontains search.
     """
+    search_text_fields = ('customer_name',)
+
     status = django_filters.CharFilter(field_name='status', lookup_expr='exact')
     assignee = django_filters.NumberFilter(field_name='assignee_id')
     entry_type = django_filters.CharFilter(field_name='entry_type', lookup_expr='exact')
@@ -152,5 +203,5 @@ class SalesKPIEntryFilter(EntryFilter):
     class Meta:
         fields = [
             'date_from', 'date_to', 'user_id',
-            'status', 'assignee', 'entry_type', 'class_of_insurance', 'customer_name',
+            'status', 'assignee', 'entry_type', 'class_of_insurance', 'customer_name', 'q',
         ]

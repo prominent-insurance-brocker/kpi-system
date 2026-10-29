@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CalendarIcon, Search } from "lucide-react";
 import { type DateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
@@ -200,6 +200,61 @@ function CustomRangePopover({
   );
 }
 
+// Search input with an opt-in debounce. The typed text is kept locally and
+// only handed to onChange once the user pauses for `debounceMs`. When the
+// parent changes `value` itself (e.g. Clear Filters) the input follows it.
+function DebouncedSearchInput({
+  value,
+  onChange,
+  debounceMs,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  debounceMs: number;
+  placeholder: string;
+  className: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  // Last value this input sent (or accepted from the parent). A parent value
+  // that differs from it came from outside, so the draft is reset to it; one
+  // that matches is just our own echo and must not clobber newer typing.
+  const [synced, setSynced] = useState(value);
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    if (value !== synced) {
+      setSynced(value);
+      setDraft(value);
+    }
+  }
+
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    if (draft === value) return;
+    const t = setTimeout(() => {
+      setSynced(draft);
+      onChangeRef.current(draft);
+    }, debounceMs);
+    return () => clearTimeout(t);
+  }, [draft, value, debounceMs]);
+
+  return (
+    <Input
+      type="search"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      placeholder={placeholder}
+      className={className}
+    />
+  );
+}
+
 export type FilterBarOption = { value: string; label: string };
 
 export interface FilterBarProps {
@@ -208,6 +263,11 @@ export interface FilterBarProps {
     onChange: (value: string) => void;
     placeholder?: string;
     label?: string;
+    // Opt-in: wait this many ms after typing stops before calling onChange.
+    // Unset = onChange on every keystroke (original behaviour).
+    debounceMs?: number;
+    // Opt-in width class for the input; defaults to "w-[240px]".
+    width?: string;
   };
   dateRange?: {
     from: string;
@@ -274,8 +334,11 @@ export interface FilterBarProps {
     clearLabel?: string;
     selectedLabel?: string | null;
     width?: string;
+    // Opt-in: show each result's `subtitle` as a muted second line in the
+    // dropdown (e.g. a client's @username). Off = single-line options.
+    showSubtitle?: boolean;
     fetchPage: (params: { search: string; page: number }) => Promise<{
-      results: Array<{ id: number; name: string }>;
+      results: Array<{ id: number; name: string; subtitle?: string }>;
       hasMore: boolean;
     }>;
   }>;
@@ -310,6 +373,10 @@ export function FilterBar({
   // Bumped each time the user picks "Custom" in the preset Select so the
   // sibling CustomRangePopover auto-opens, matching DateRangeFilter's UX.
   const [customAutoOpenToken, setCustomAutoOpenToken] = useState(0);
+  // Bumped on Clear Filters to remount the debounced search box, so a draft
+  // typed just before clearing (and its pending timer) is dropped even when
+  // the page's search value was already "".
+  const [searchResetKey, setSearchResetKey] = useState(0);
   const userModuleKey = user?.moduleKey;
   const userFetchPage = useCallback(
     async ({ search: q, page }: { search: string; page: number }) => {
@@ -345,13 +412,24 @@ export function FilterBar({
           <Label>{search.label ?? "Search"}</Label>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF] pointer-events-none" />
-            <Input
-              type="search"
-              value={search.value}
-              onChange={(e) => search.onChange(e.target.value)}
-              placeholder={search.placeholder ?? "Search…"}
-              className="w-[240px] pl-8 shadow-none"
-            />
+            {search.debounceMs ? (
+              <DebouncedSearchInput
+                key={searchResetKey}
+                value={search.value}
+                onChange={search.onChange}
+                debounceMs={search.debounceMs}
+                placeholder={search.placeholder ?? "Search…"}
+                className={cn(search.width ?? "w-[240px]", "pl-8 shadow-none")}
+              />
+            ) : (
+              <Input
+                type="search"
+                value={search.value}
+                onChange={(e) => search.onChange(e.target.value)}
+                placeholder={search.placeholder ?? "Search…"}
+                className={cn(search.width ?? "w-[240px]", "pl-8 shadow-none")}
+              />
+            )}
           </div>
         </div>
       )}
@@ -508,6 +586,7 @@ export function FilterBar({
               selectedLabel={f.selectedLabel ?? null}
               getOptionValue={(o) => String(o.id)}
               getOptionLabel={(o) => o.name}
+              getOptionSubtitle={f.showSubtitle ? (o) => o.subtitle : undefined}
               fetchPage={f.fetchPage}
               emptyLabel={`No ${f.label.toLowerCase()} found`}
             />
@@ -535,7 +614,13 @@ export function FilterBar({
         </div>
       ))}
       {hasActiveFilters && onClear && (
-        <Button variant="outline" onClick={onClear}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setSearchResetKey((k) => k + 1);
+            onClear();
+          }}
+        >
           Clear Filters
         </Button>
       )}

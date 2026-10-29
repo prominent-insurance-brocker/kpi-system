@@ -83,7 +83,7 @@ Concrete models:
 - **HasModulePermission** (`roles/permissions.py`): Checks `view.module_key` against user's `role.permissions`. Staff bypasses.
 - **IsAdminUser**: Simple `is_staff` check for admin-only endpoints.
 - **Data visibility**: Role has `data_visibility` field (`all` | `own`). Enforced in `BaseEntryViewSet.get_queryset()`.
-- **Module permissions**: `RoleModulePermission` links Role to module keys. 11 possible modules defined in `MODULE_CHOICES`.
+- **Module permissions**: `RoleModulePermission` links Role to module keys. All keys are defined in `MODULE_CHOICES`. Most map to an entries viewset; `settings` and `marine_dashboard` are permission-only keys.
 
 ## AI Chat
 
@@ -127,7 +127,7 @@ Concrete models:
 
 /api/ai-chat/ask/                  POST   - Natural language query
 
-/api/reports/metabase-embed/{name}/ GET  - Signed Metabase embed URL (overview: admin; marine: marine_new/marine_renewal)
+/api/reports/metabase-embed/{name}/ GET  - Signed Metabase embed URL (overview: admin; marine: marine_dashboard)
 ```
 
 ## Common Commands

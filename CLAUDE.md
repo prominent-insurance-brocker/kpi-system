@@ -115,13 +115,13 @@ Module keys are listed in several hand-maintained places. Missing one silently b
 - [ ] `backend/entries/views.py`: add the module to `ALLOWED_REMARK_MODELS` if it shows the comments panel.
 - [ ] `backend/entries/tracker_common.py`: add it to the module → model and module → label maps (Team Daily Tracker).
 - [ ] `backend/audit/registry.py`: add it to `MODEL_TO_CATEGORY` and `CATEGORY_ORDER`.
-- [ ] `backend/backend/settings.py`: add it to `METABASE_DASHBOARDS` if its parent-category dashboard should include it.
+- [ ] Dashboards are gated by their own permission key (e.g. `marine_dashboard`), not by the entry modules. A new module does not grant its category's dashboard; admins tick that separately.
 - [ ] `backend/auth_app/management/commands/seed_historical_data.py`: seed support (optional, keeps dev data realistic).
 - [ ] `backend/ai_chat/training_data.py`: add the table's DDL and docs so AI chat can query it.
 
 **Frontend**
 - [ ] `frontend/app/components/Sidebar.tsx`: add a nav item under the right parent group, with `moduleKey`.
-- [ ] `frontend/app/lib/navigation.ts`: add it to `MODULE_ROUTES` (first-accessible-route redirect), and to `MARINE_DASHBOARD_MODULES` or the equivalent list if relevant.
+- [ ] `frontend/app/lib/navigation.ts`: add it to `MODULE_ROUTES` (first-accessible-route redirect).
 - [ ] `frontend/app/lib/audit.ts`: add it to `AUDIT_CATEGORIES` (must mirror `backend/audit/registry.py`).
 - [ ] `frontend/app/(dashboard)/<group>/<module>/page.tsx`: the page.
 - [ ] If the module picks a saved client: use `ClientSelect` with `category="<parent category>"` (see `MarineNewEnquiryPage.tsx`) and add a link-client flow for legacy rows if needed.

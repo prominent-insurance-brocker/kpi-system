@@ -20,7 +20,7 @@ frontend/
         premium-data/page.tsx # Sales Premium Data entries
         kpi/page.tsx          # Sales KPI entries
       marine/
-        dashboard/page.tsx    # Marine Metabase dashboard (marine_new or marine_renewal)
+        dashboard/page.tsx    # Marine Metabase dashboard (marine_dashboard permission)
         new/page.tsx          # Marine New entries
         renewal/page.tsx      # Marine Renewal entries
       medical/

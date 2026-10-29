@@ -407,20 +407,15 @@ export function MarineNewEnquiryPage() {
   }, [apiSlug, page, pageSize, buildFilterParams]);
 
   // Server-built CSV / .xlsx of every enquiry matching the current filters.
-  const [isExportingEnquiries, setIsExportingEnquiries] = useState(false);
   const handleExportEnquiries = useCallback(async (fileFormat: EnquiryExportFormat) => {
-    setIsExportingEnquiries(true);
-    try {
-      const result = await exportEnquiries(apiSlug, buildFilterParams(), fileFormat);
-      if (result.error || !result.data) {
-        toast.error(result.error || 'Export failed');
-        return;
-      }
-      downloadBlob(result.data, `${moduleKey}_enquiries_${businessDateString(new Date())}.${fileFormat}`);
-      toast.success(`Enquiries exported (${fileFormat === 'csv' ? 'CSV' : 'Excel'})`);
-    } finally {
-      setIsExportingEnquiries(false);
+    const result = await exportEnquiries(apiSlug, buildFilterParams(), fileFormat);
+    if (result.error || !result.data) {
+      toast.error(result.error || 'Export failed');
+      return false;
     }
+    downloadBlob(result.data, `${moduleKey}_enquiries_${businessDateString(new Date())}.${fileFormat}`);
+    toast.success(`Enquiries exported (${fileFormat === 'csv' ? 'CSV' : 'Excel'})`);
+    return true;
   }, [apiSlug, moduleKey, buildFilterParams]);
 
   const fetchStats = useCallback(async () => {
@@ -967,7 +962,6 @@ export function MarineNewEnquiryPage() {
               moduleKey={moduleKey}
               moduleUsers={moduleUsers}
               onExportEnquiries={handleExportEnquiries}
-              exportingEnquiries={isExportingEnquiries}
             />
           )}
           {isRenewal && (

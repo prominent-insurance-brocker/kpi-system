@@ -7,18 +7,17 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ExportTrackerDialog, type ExportUser } from '@/app/components/ExportTrackerDialog';
+import { ExportEnquiriesDialog } from '@/app/components/ExportEnquiriesDialog';
 import type { EnquiryExportFormat } from '@/app/lib/api';
 
 interface ExportTrackerButtonProps {
   moduleKey: string;
   moduleUsers: ExportUser[];
-  /** When set, adds "Enquiries (CSV)" / "Enquiries (Excel)" items. */
-  onExportEnquiries?: (fileFormat: EnquiryExportFormat) => void;
-  exportingEnquiries?: boolean;
+  /** When set, adds an "Enquiries" item that opens the CSV / Excel format dialog. */
+  onExportEnquiries?: (fileFormat: EnquiryExportFormat) => Promise<boolean>;
 }
 
 /**
@@ -31,37 +30,36 @@ export function ExportTrackerButton({
   moduleKey,
   moduleUsers,
   onExportEnquiries,
-  exportingEnquiries = false,
 }: ExportTrackerButtonProps) {
   const [open, setOpen] = useState(false);
-  const itemClass = 'cursor-pointer px-3 py-2 text-sm text-[#09090B] rounded-md';
+  const [enquiriesOpen, setEnquiriesOpen] = useState(false);
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" disabled={exportingEnquiries}>
+          <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
-            {exportingEnquiries ? 'Exporting…' : 'Export'}
+            Export
             <ChevronDown className="h-4 w-4 ml-2 text-[#71717A]" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          className={`${onExportEnquiries ? 'w-[190px]' : 'w-[160px]'} bg-white border border-[#E4E4E4] rounded-lg p-1 shadow-md`}
+          className="w-[160px] bg-white border border-[#E4E4E4] rounded-lg p-1 shadow-md"
         >
-          <DropdownMenuItem onClick={() => setOpen(true)} className={itemClass}>
+          <DropdownMenuItem
+            onClick={() => setOpen(true)}
+            className="cursor-pointer px-3 py-2 text-sm text-[#09090B] rounded-md"
+          >
             Tracker
           </DropdownMenuItem>
           {onExportEnquiries && (
-            <>
-              <DropdownMenuSeparator className="bg-[#E4E4E4]" />
-              <DropdownMenuItem onClick={() => onExportEnquiries('csv')} className={itemClass}>
-                Enquiries (CSV)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onExportEnquiries('xlsx')} className={itemClass}>
-                Enquiries (Excel)
-              </DropdownMenuItem>
-            </>
+            <DropdownMenuItem
+              onClick={() => setEnquiriesOpen(true)}
+              className="cursor-pointer px-3 py-2 text-sm text-[#09090B] rounded-md"
+            >
+              Enquiries
+            </DropdownMenuItem>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
@@ -71,6 +69,13 @@ export function ExportTrackerButton({
         moduleKey={moduleKey}
         moduleUsers={moduleUsers}
       />
+      {onExportEnquiries && (
+        <ExportEnquiriesDialog
+          open={enquiriesOpen}
+          onOpenChange={setEnquiriesOpen}
+          onExport={onExportEnquiries}
+        />
+      )}
     </>
   );
 }

@@ -90,6 +90,8 @@ from .filters import (
     EntryFilter, ClaimEntryFilter, MotorEnquiryFilter, MotorClaimEntryFilter,
     SalesKPIEntryFilter, GeneralEnquiryFilter,
 )
+from .enquiry_export import MARINE_NEW_COLUMNS, export_response
+from .tracker_common import compute_can_see_all
 from roles.permissions import IsAdminUser, user_is_hod
 
 
@@ -1953,6 +1955,27 @@ class MarineNewEntryViewSet(BaseEntryViewSet):
         filterset = self.filterset_class(params, queryset=queryset)
         queryset = filterset.qs
         return Response(_build_enquiry_stats(queryset, success_status='converted'))
+
+    @action(detail=False, methods=['get'], url_path='export')
+    def export(self, request):
+        """GET /api/entries/marine-new/export/?file_format=csv|xlsx&<list filters>
+
+        Every enquiry matching the list endpoint's filters (no pagination),
+        built server-side as CSV or .xlsx. Limited to users who can see all
+        data (admin / HOD / 'all' roles) — the same audience as the Export menu.
+        """
+        if not compute_can_see_all(request.user):
+            raise PermissionDenied('You do not have permission to export enquiries.')
+        queryset = self.filter_queryset(self.get_queryset()).select_related(
+            'added_by', 'class_of_insurance', 'converted_insurer', 'voided_by',
+        )
+        return export_response(
+            request,
+            basename='marine_new_enquiries',
+            sheet_title='Marine New Enquiries',
+            columns=MARINE_NEW_COLUMNS,
+            rows=queryset.iterator(chunk_size=500),
+        )
 
 
 class MarineRenewalEntryViewSet(BaseEntryViewSet):

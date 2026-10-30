@@ -57,9 +57,11 @@ import { Progress } from '@/components/ui/progress';
 import { DataTable } from '@/app/components/DataTable';
 import { FilterBar } from '@/app/components/FilterBar';
 import { RemarksPanel } from '@/app/components/RemarksPanel';
+import { ClientSelect, clientLabel } from '@/app/components/ClientSelect';
 import { EnquiryStatusModal } from '@/app/components/EnquiryStatusModal';
 import { EnquiryConvertedPremiumModal } from '@/app/components/EnquiryConvertedPremiumModal';
 import { MarineSharedWithClientModal } from '@/app/components/MarineSharedWithClientModal';
+import { LinkClientDialog } from '@/app/components/LinkClientDialog';
 import { canModifyEntry, canVoidEntry } from '@/app/lib/permissions';
 import { VoidEntryDialog } from '@/app/components/VoidEntryDialog';
 import { VoidStatusBadge } from '@/app/components/VoidStatusBadge';
@@ -76,7 +78,7 @@ import {
 import { ExportTrackerButton } from '@/app/components/ExportTrackerButton';
 import { useAuth } from '@/app/context/AuthContext';
 import { useConfirm } from '@/app/components/ConfirmDialog';
-import { formatDate, businessToday } from '@/app/lib/date';
+import { formatDate, businessToday, businessDateString } from '@/app/lib/date';
 import { useTrackerCounts } from '@/app/lib/useTrackerCounts';
 import { formatPremium, formatNumber } from '@/app/lib/number';
 import { formatTatFromMinutes } from '@/app/lib/tat';
@@ -89,6 +91,7 @@ import {
   getInsuranceCompaniesPage,
   getInsuranceCompanies,
   getMarineClassOfInsurancePage,
+  listClients,
   getMotorEnquiryStats,
   updateMotorEnquiryStatus,
   updateMotorEnquiryRevisions,
@@ -100,6 +103,9 @@ import {
   REMARKS_MODEL_NAME_BY_API_SLUG,
   voidEntry,
   firstFieldError,
+  exportEnquiries,
+  downloadBlob,
+  type EnquiryExportFormat,
   type MotorRenewalMonthlyTarget,
   type MotorEnquiryEntry,
   type InsuranceCompany,
@@ -276,7 +282,10 @@ export function MarineNewEnquiryPage() {
   const [userId, setUserId] = useState('');     // who added the row
   const [agentId, setAgentId] = useState('');   // FK Source/Agent
   const [statusFilter, setStatusFilter] = useState('');
-  const [clientName, setClientName] = useState('');
+  // Search box (`q`): ID (exact, e.g. PIB-12), client name/@username,
+  // insurer ref or policy no. Client filter: a saved client's id.
+  const [searchQuery, setSearchQuery] = useState('');
+  const [clientFilter, setClientFilter] = useState('');
   const [insuranceCompanyFilter, setInsuranceCompanyFilter] = useState('');
   const [classOfInsuranceFilter, setClassOfInsuranceFilter] = useState('');
 
@@ -339,6 +348,8 @@ export function MarineNewEnquiryPage() {
   // Post-conversion converted-premium edit (mirrors Sales KPI "Deals").
   const [convertedPremiumEntry, setConvertedPremiumEntry] =
     useState<MotorEnquiryEntry | null>(null);
+  // Legacy row being linked to a saved client (Link client row action).
+  const [linkTarget, setLinkTarget] = useState<MotorEnquiryEntry | null>(null);
   // TED-594: void (write-off) confirmation target + in-flight flag.
   const [voidTarget, setVoidTarget] = useState<MotorEnquiryEntry | null>(null);
   const [isVoiding, setIsVoiding] = useState(false);
@@ -371,20 +382,28 @@ export function MarineNewEnquiryPage() {
   const [sheetInlineValues, setSheetInlineValues] = useState<Record<number, string>>({});
 
   // ── Fetchers ────────────────────────────────────────────────────────────────
+  // Enquiries-tab filters as list-endpoint query params (shared by the table
+  // fetch and the enquiries export, so the export matches what's on screen).
+  const buildFilterParams = useCallback(() => {
+    const qs = new URLSearchParams();
+    if (dateFrom) qs.set('date_from', dateFrom);
+    if (dateTo) qs.set('date_to', dateTo);
+    if (userId) qs.set('user_id', userId);
+    if (agentId) qs.set('agent_id', agentId);
+    applyStatusFilter(qs, statusFilter);
+    if (searchQuery) qs.set('q', searchQuery);
+    if (clientFilter) qs.set('client', clientFilter);
+    if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
+    if (classOfInsuranceFilter) qs.set('class_of_insurance', classOfInsuranceFilter);
+    return qs;
+  }, [dateFrom, dateTo, userId, agentId, statusFilter, searchQuery, clientFilter, insuranceCompanyFilter, classOfInsuranceFilter]);
+
   const fetchEntries = useCallback(async () => {
     setIsLoading(true);
     try {
-      const qs = new URLSearchParams();
+      const qs = buildFilterParams();
       qs.set('page', String(page));
       qs.set('page_size', String(pageSize));
-      if (dateFrom) qs.set('date_from', dateFrom);
-      if (dateTo) qs.set('date_to', dateTo);
-      if (userId) qs.set('user_id', userId);
-      if (agentId) qs.set('agent_id', agentId);
-      applyStatusFilter(qs, statusFilter);
-      if (clientName) qs.set('client_name', clientName);
-      if (insuranceCompanyFilter) qs.set('insurance_company', insuranceCompanyFilter);
-      if (classOfInsuranceFilter) qs.set('class_of_insurance', classOfInsuranceFilter);
 
       const result = await fetchApi<{ results: MotorEnquiryEntry[]; count: number }>(
         `/api/entries/${apiSlug}/?${qs}`
@@ -394,7 +413,19 @@ export function MarineNewEnquiryPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [apiSlug, page, pageSize, dateFrom, dateTo, userId, agentId, statusFilter, clientName, insuranceCompanyFilter, classOfInsuranceFilter]);
+  }, [apiSlug, page, pageSize, buildFilterParams]);
+
+  // Server-built CSV / .xlsx of every enquiry matching the current filters.
+  const handleExportEnquiries = useCallback(async (fileFormat: EnquiryExportFormat) => {
+    const result = await exportEnquiries(apiSlug, buildFilterParams(), fileFormat);
+    if (result.error || !result.data) {
+      toast.error(result.error || 'Export failed');
+      return false;
+    }
+    downloadBlob(result.data, `${moduleKey}_enquiries_${businessDateString(new Date())}.${fileFormat}`);
+    toast.success(`Enquiries exported (${fileFormat === 'csv' ? 'CSV' : 'Excel'})`);
+    return true;
+  }, [apiSlug, moduleKey, buildFilterParams]);
 
   const fetchStats = useCallback(async () => {
     const result = await getMotorEnquiryStats(apiSlug, {
@@ -571,7 +602,7 @@ export function MarineNewEnquiryPage() {
   };
 
   const handleSaveNew = async (payload: {
-    client_name: string;
+    client?: number;
     agent: number;
     remarks: string;
     quotes_compared: number;
@@ -600,7 +631,11 @@ export function MarineNewEnquiryPage() {
       toast.success(isEdit ? 'Enquiry updated' : 'Enquiry added');
       refreshAfterMutation();
     } else {
-      setModalError(result.error || 'Failed to save enquiry');
+      setModalError(
+        firstFieldError(result, ['client', 'non_field_errors', 'detail']) ||
+          result.error ||
+          'Failed to save enquiry'
+      );
     }
   };
 
@@ -728,7 +763,27 @@ export function MarineNewEnquiryPage() {
       header: 'ID',
       render: (item: MotorEnquiryEntry) => item.pib_id,
     },
-    { key: 'client_name', header: 'Client Name' },
+    {
+      key: 'client_name',
+      header: 'Client Name',
+      // Linked client's name with its @username underneath; legacy rows show
+      // the old typed text tagged "Not linked" (client_name is '' on new and
+      // linked rows).
+      render: (item: MotorEnquiryEntry) =>
+        item.client_detail ? (
+          <div className="flex flex-col">
+            <span>{item.client_detail.name}</span>
+            <span className="text-xs text-[#71717A]">{item.client_detail.username}</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span>{item.client_display || item.client_name}</span>
+            <span className="shrink-0 rounded border border-[#E4E4E7] bg-[#F4F4F5] px-1.5 py-0.5 text-[10px] font-medium text-[#71717A]">
+              Not linked
+            </span>
+          </div>
+        ),
+    },
     {
       key: 'status',
       header: 'Status',
@@ -924,7 +979,7 @@ export function MarineNewEnquiryPage() {
   ];
 
   const hasActiveFilters =
-    !!(dateFrom || dateTo || userId || agentId || statusFilter || clientName ||
+    !!(dateFrom || dateTo || userId || agentId || statusFilter || searchQuery || clientFilter ||
       insuranceCompanyFilter || classOfInsuranceFilter);
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -936,7 +991,11 @@ export function MarineNewEnquiryPage() {
         <h1 className="text-2xl font-bold">{title}</h1>
         <div className="flex items-center gap-2">
           {(isAdmin || isHodUser) && (
-            <ExportTrackerButton moduleKey={moduleKey} moduleUsers={moduleUsers} />
+            <ExportTrackerButton
+              moduleKey={moduleKey}
+              moduleUsers={moduleUsers}
+              onExportEnquiries={handleExportEnquiries}
+            />
           )}
           {isRenewal && (
             <Button variant="outline" onClick={() => setIsPanelOpen((o) => !o)}>
@@ -1149,13 +1208,15 @@ export function MarineNewEnquiryPage() {
           <div className="flex items-end justify-between gap-4 flex-wrap">
             <FilterBar
               search={{
-                value: clientName,
+                value: searchQuery,
                 onChange: (v) => {
-                  setClientName(v);
+                  setSearchQuery(v);
                   setPage(1);
                 },
-                placeholder: 'Search by client name…',
-                label: 'Client',
+                placeholder: 'ID, client, insurer ref, policy no…',
+                label: 'Search',
+                debounceMs: 300,
+                width: 'w-[280px]',
               }}
               dateRange={{
                 from: dateFrom,
@@ -1204,6 +1265,30 @@ export function MarineNewEnquiryPage() {
               }}
               extraSearchableFilters={[
                 {
+                  // Saved clients only (filter, never create). Legacy rows not
+                  // yet linked to a client won't match until they're linked.
+                  label: 'Client',
+                  value: clientFilter,
+                  onChange: (v) => {
+                    setClientFilter(v);
+                    setPage(1);
+                  },
+                  placeholder: 'All Clients',
+                  clearLabel: 'All Clients',
+                  showSubtitle: true,
+                  fetchPage: async ({ search, page }) => {
+                    const res = await listClients({ category: 'marine', search, page });
+                    return {
+                      results: (res.data?.results ?? []).map((c) => ({
+                        id: c.id,
+                        name: c.name,
+                        subtitle: c.username,
+                      })),
+                      hasMore: !!res.data?.next,
+                    };
+                  },
+                },
+                {
                   label: 'Insurance Company',
                   value: insuranceCompanyFilter,
                   onChange: (v) => {
@@ -1245,7 +1330,8 @@ export function MarineNewEnquiryPage() {
                 setUserId('');
                 setAgentId('');
                 setStatusFilter('');
-                setClientName('');
+                setSearchQuery('');
+                setClientFilter('');
                 setInsuranceCompanyFilter('');
                 setClassOfInsuranceFilter('');
                 setPage(1);
@@ -1294,7 +1380,29 @@ export function MarineNewEnquiryPage() {
                   (entry.status === 'new' || entry.status === 'shared_with_client')
                 }
                 rowActions={(entry) => {
-                  const actions: Array<{ label: string; onClick: () => void; danger?: boolean }> = [];
+                  const actions: Array<{
+                    label: string;
+                    onClick: () => void;
+                    danger?: boolean;
+                    disabled?: boolean;
+                    hint?: string;
+                  }> = [];
+                  // Link a legacy (free-text) row to a saved client. Shown on
+                  // every row; enabled only when the backend says this user may.
+                  actions.push({
+                    label: 'Link client',
+                    onClick: () => setLinkTarget(entry),
+                    disabled: !entry.can_link_client,
+                    hint: entry.can_link_client
+                      ? undefined
+                      : entry.client
+                        ? 'Already linked'
+                        : entry.is_voided
+                          ? 'Voided enquiry'
+                          : entry.added_by !== currentUserId
+                            ? 'Only the creator can link'
+                            : 'Not eligible',
+                  });
                   if (
                     !entry.is_voided &&
                     entry.status === config.successValue &&
@@ -1456,6 +1564,21 @@ export function MarineNewEnquiryPage() {
         onSaved={() => refreshAfterMutation()}
         allowZeroPremium
         editPolicyNumber
+      />
+
+      {/* ── Link a legacy enquiry to a saved client ──────────────────────── */}
+      <LinkClientDialog
+        entry={linkTarget}
+        onClose={() => setLinkTarget(null)}
+        onLinked={() => {
+          setLinkTarget(null);
+          refreshAfterMutation();
+        }}
+        onStale={(message) => {
+          toast.error(message);
+          setLinkTarget(null);
+          refreshAfterMutation();
+        }}
       />
 
       {/* ── Void (write-off) confirmation (TED-594) ──────────────────────── */}
@@ -1732,7 +1855,7 @@ function EnquiryForm({
 }: {
   entry: MotorEnquiryEntry | null;
   onSave: (payload: {
-    client_name: string;
+    client?: number;
     agent: number;
     remarks: string;
     quotes_compared: number;
@@ -1743,7 +1866,14 @@ function EnquiryForm({
   onClose: () => void;
   error: string;
 }) {
-  const [clientName, setClientName] = useState(entry?.client_name ?? '');
+  // Client comes from the saved Client list only (client_name is read-only in
+  // the API). Legacy unlinked rows start with no client and must pick one.
+  const [clientId, setClientId] = useState<number | null>(entry?.client ?? null);
+  // Editing a legacy row (no saved client yet): the client is not required or
+  // sent here; linking is a separate, permanent step via the row's
+  // "Link client" action (which warns first).
+  const isLegacyEdit = !!entry && !entry.client;
+  const clientMissing = !isLegacyEdit && !clientId;
   const [agentId, setAgentId] = useState<number | null>(entry?.agent ?? null);
   const [remarks, setRemarks] = useState('');
   const [quotesCompared, setQuotesCompared] = useState<string>(
@@ -1796,7 +1926,7 @@ function EnquiryForm({
   );
 
   useEffect(() => {
-    setClientName(entry?.client_name ?? '');
+    setClientId(entry?.client ?? null);
     setAgentId(entry?.agent ?? null);
     setRemarks('');
     setQuotesCompared(entry?.quotes_compared != null ? String(entry.quotes_compared) : '0');
@@ -1811,10 +1941,10 @@ function EnquiryForm({
     e.preventDefault();
     // Client Name, Source / Agent, Potential Premium, Class of Insurance and
     // at least one Compared Insurer are all required for Marine New.
-    if (!agentId || !(Number(potentialPremium) > 0) || !classOfInsuranceId || insurerIds.length === 0) return;
+    if (clientMissing || !agentId || !(Number(potentialPremium) > 0) || !classOfInsuranceId || insurerIds.length === 0) return;
     setIsSubmitting(true);
     onSave({
-      client_name: clientName,
+      ...(isLegacyEdit ? {} : { client: clientId! }),
       agent: agentId,
       remarks,
       quotes_compared: Math.max(0, Number(quotesCompared || 0)),
@@ -1835,13 +1965,22 @@ function EnquiryForm({
 
       <div className="space-y-2">
         <Label>Client Name *</Label>
-        <Input
-          type="text"
-          placeholder="Enter client name"
-          value={clientName}
-          onChange={(e) => setClientName(e.target.value)}
-          required
-        />
+        {isLegacyEdit ? (
+          <>
+            <Input value={entry?.client_display || entry?.client_name || ''} disabled readOnly />
+            <p className="text-xs text-muted-foreground">
+              Typed name from before the client list. Use the row&apos;s &quot;Link client&quot;
+              action to link it to a saved client.
+            </p>
+          </>
+        ) : (
+          <ClientSelect
+            category="marine"
+            value={clientId}
+            onChange={(c) => setClientId(c?.id ?? null)}
+            selectedLabel={entry?.client_detail ? clientLabel(entry.client_detail) : null}
+          />
+        )}
       </div>
 
       <div className="space-y-2">
@@ -1933,7 +2072,7 @@ function EnquiryForm({
           type="submit"
           disabled={
             isSubmitting ||
-            !clientName ||
+            clientMissing ||
             !agentId ||
             !(Number(potentialPremium) > 0) ||
             !classOfInsuranceId ||

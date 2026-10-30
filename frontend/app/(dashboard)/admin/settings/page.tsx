@@ -2,13 +2,17 @@
 
 /**
  * Settings — admin-only page for managing lookup tables used elsewhere in
- * the app (Type of Accident + Insurance Company for Motor Claim).
+ * the app (Type of Accident + Insurance Company for Motor Claim), plus the
+ * saved Client list (rename / category tags / notes / active / delete).
+ *
+ * The active tab and the Clients tab's search, category and page live in the
+ * URL so a refresh or shared link lands on the same view.
  *
  * Non-admin users are redirected away on mount.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Tabs,
   TabsList,
@@ -25,11 +29,36 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Pencil, Plus, Check, X as XIcon } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Pencil,
+  Plus,
+  Check,
+  X as XIcon,
+  Search,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useAuth } from '@/app/context/AuthContext';
 import { firstAccessibleRoute } from '@/app/lib/navigation';
+import { useConfirm } from '@/app/components/ConfirmDialog';
+import {
+  clientErrorMessage,
+  useClientCategories,
+  useClientUsernamePreview,
+} from '@/app/components/ClientSelect';
+import { ClientCreateDialog } from '@/app/components/ClientCreateDialog';
 import {
   getAccidentTypes,
   getInsuranceCompanies,
@@ -43,6 +72,11 @@ import {
   updateInsuranceCompany,
   updateClassOfInsurance,
   updateMarineClassOfInsurance,
+  listClients,
+  updateClient,
+  deleteClient,
+  CLIENT_NOTES_MAX_LENGTH,
+  type Client,
   type SettingsLookup,
   type ApiResponse,
 } from '@/app/lib/api';
@@ -95,9 +129,20 @@ const RESOURCES: Record<LookupResource, LookupResourceConfig> = {
   },
 };
 
+const CLIENTS_PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 300;
+
 export default function SettingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isLoading, canSeeAllData } = useAuth();
+  const activeTab = searchParams.get('tab') || 'accident-types';
+
+  const setActiveTab = (tab: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', tab);
+    router.replace(`?${params.toString()}`);
+  };
 
   // Gate non-admin users away from the page.
   useEffect(() => {
@@ -120,7 +165,7 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="accident-types">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="bg-[#F3F4F6] rounded-lg p-1 gap-0 w-fit">
           <TabsTrigger
             value="accident-types"
@@ -146,6 +191,12 @@ export default function SettingsPage() {
           >
             Marine Class of Insurance
           </TabsTrigger>
+          <TabsTrigger
+            value="clients"
+            className="rounded-md px-4 py-1.5 data-[state=active]:bg-white"
+          >
+            Clients
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="accident-types" className="mt-4">
@@ -159,6 +210,9 @@ export default function SettingsPage() {
         </TabsContent>
         <TabsContent value="marine-class-of-insurance" className="mt-4">
           <LookupTab resource="marine-class-of-insurance" />
+        </TabsContent>
+        <TabsContent value="clients" className="mt-4">
+          <ClientsTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -391,6 +445,487 @@ function LookupTab({ resource }: { resource: LookupResource }) {
               </Button>
               <Button type="submit" disabled={isSubmitting || !newName.trim()}>
                 {isSubmitting ? 'Saving…' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── Clients tab ─────────────────────────────────────────────────────────────
+
+function ClientsTab() {
+  const router = useRouter();
+  // HOD users (even with the Settings module) cannot edit clients; the backend
+  // returns 403, so hide Edit and Deactivate/Reactivate. Delete stays.
+  const { isHOD } = useAuth();
+  const canEditClients = !isHOD();
+  const searchParams = useSearchParams();
+  const confirm = useConfirm();
+  const categories = useClientCategories();
+  const categoryLabel = (key: string) =>
+    categories.find((c) => c.value === key)?.label ?? key;
+
+  // URL-synced filters (prefixed so they don't clash with other tabs).
+  const search = searchParams.get('client_search') || '';
+  const category = searchParams.get('client_category') || '';
+  const page = Math.max(1, Number(searchParams.get('client_page')) || 1);
+
+  const updateParams = useCallback(
+    (updates: Record<string, string | number>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      Object.entries(updates).forEach(([key, value]) => {
+        // Page 1 is the default, so it's left out of the URL.
+        if (value && !(key === 'client_page' && value === 1)) {
+          params.set(key, String(value));
+        } else {
+          params.delete(key);
+        }
+      });
+      router.replace(`?${params.toString()}`);
+    },
+    [searchParams, router]
+  );
+
+  // Debounced search box -> URL (resets to page 1).
+  const [searchInput, setSearchInput] = useState(search);
+  useEffect(() => {
+    if (searchInput.trim() === search) return;
+    const t = setTimeout(
+      () => updateParams({ client_search: searchInput.trim(), client_page: 1 }),
+      SEARCH_DEBOUNCE_MS
+    );
+    return () => clearTimeout(t);
+  }, [searchInput, search, updateParams]);
+
+  const [rows, setRows] = useState<Client[]>([]);
+  const [count, setCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  // Only the latest request may write state, so a slow response for an older
+  // search / page / category can't overwrite the current one.
+  const requestIdRef = useRef(0);
+
+  const reload = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    setIsLoading(true);
+    setLoadError('');
+    const result = await listClients({
+      search,
+      category: category || undefined,
+      page,
+      page_size: CLIENTS_PAGE_SIZE,
+      include_counts: true,
+    });
+    if (requestId !== requestIdRef.current) return;
+    if (result.data) {
+      setRows(result.data.results);
+      setCount(result.data.count);
+    } else if (page > 1) {
+      // Out-of-range page (e.g. after a delete or a stale link): go to page 1.
+      updateParams({ client_page: 1 });
+    } else {
+      setRows([]);
+      setCount(0);
+      setLoadError(result.error || 'Failed to load clients');
+    }
+    setIsLoading(false);
+  }, [search, category, page, updateParams]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const totalPages = Math.max(1, Math.ceil(count / CLIENTS_PAGE_SIZE));
+
+  // ── Edit dialog (rename + category tags) ──
+  const [editing, setEditing] = useState<Client | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editCategories, setEditCategories] = useState<string[]>([]);
+  const [editNotes, setEditNotes] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const openEdit = (row: Client) => {
+    setEditing(row);
+    setEditName(row.name);
+    setEditCategories(row.categories);
+    setEditNotes(row.notes ?? '');
+  };
+
+  const cleanedEditName = editName.trim().replace(/\s+/g, ' ');
+  const cleanedEditNotes = editNotes.trim();
+  const editUsername = useClientUsernamePreview(cleanedEditName, editing);
+  const editNotesTooLong = cleanedEditNotes.length > CLIENT_NOTES_MAX_LENGTH;
+
+  const saveEdit = async () => {
+    if (!editing || !cleanedEditName || editCategories.length === 0 || editNotesTooLong) return;
+    const data: { name?: string; categories?: string[]; notes?: string; username?: string } = {};
+    if (cleanedEditName !== editing.name) {
+      data.name = cleanedEditName;
+      if (editUsername) data.username = editUsername;
+    }
+    const sameCategories =
+      editCategories.length === editing.categories.length &&
+      editCategories.every((c) => editing.categories.includes(c));
+    if (!sameCategories) data.categories = editCategories;
+    if (cleanedEditNotes !== (editing.notes ?? '')) data.notes = cleanedEditNotes;
+    if (data.name === undefined && !data.categories && data.notes === undefined) {
+      setEditing(null);
+      return;
+    }
+    const linked = editing.linked_entries_count ?? 0;
+    if (data.name && linked > 0) {
+      const ok = await confirm({
+        title: 'Rename client?',
+        description: `"${editing.name}" becomes "${data.name}"${
+          editUsername && editUsername !== editing.username ? ` (${editUsername})` : ''
+        }. ${linked} linked ${linked === 1 ? 'enquiry shows' : 'enquiries show'} the new name.`,
+        confirmLabel: 'Rename',
+      });
+      if (!ok) return;
+    }
+    setIsSaving(true);
+    const result = await updateClient(editing.id, data);
+    setIsSaving(false);
+    if (result.data) {
+      toast.success('Client updated');
+      setEditing(null);
+      reload();
+    } else {
+      toast.error(clientErrorMessage(result, 'Failed to update client'));
+    }
+  };
+
+  const toggleActive = async (row: Client) => {
+    const result = await updateClient(row.id, { is_active: !row.is_active });
+    if (result.data) {
+      toast.success(row.is_active ? 'Deactivated' : 'Reactivated');
+      reload();
+    } else {
+      toast.error(clientErrorMessage(result, 'Failed to update client'));
+    }
+  };
+
+  const removeRow = async (row: Client) => {
+    const ok = await confirm({
+      title: 'Delete client?',
+      description: `Delete "${row.name}" (${row.username})? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    const result = await deleteClient(row.id);
+    if (!result.error) {
+      toast.success('Client deleted');
+      reload();
+    } else {
+      toast.error(clientErrorMessage(result, 'Failed to delete client'));
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-base font-semibold">Clients</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search name or username"
+              className="h-9 w-64 pl-8"
+            />
+          </div>
+          <Select
+            value={category || 'all'}
+            onValueChange={(v) =>
+              updateParams({ client_category: v === 'all' ? '' : v, client_page: 1 })
+            }
+          >
+            <SelectTrigger className="w-[180px] h-9 shadow-none">
+              <SelectValue placeholder="All categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {categories.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {canEditClients && (
+            <Button className="h-9" onClick={() => setIsCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" /> New client
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <ClientCreateDialog
+        open={isCreateOpen}
+        defaultCategory="marine"
+        onCreated={(created) => {
+          setIsCreateOpen(false);
+          toast.success(`Client created: ${created.name} · ${created.username}`);
+          reload();
+        }}
+        onCancel={() => setIsCreateOpen(false)}
+      />
+
+      <div className="bg-white border border-[#E4E4E4] rounded-2xl overflow-auto max-h-[calc(100vh-320px)]">
+        <table className="w-full min-w-max border-collapse">
+          <thead>
+            <tr className="bg-[#F3F3F3] h-11">
+              <th className="px-5 text-left text-sm font-medium text-[#71717A]">Name</th>
+              <th className="px-5 text-left text-sm font-medium text-[#71717A]">Username</th>
+              <th className="px-5 text-left text-sm font-medium text-[#71717A]">Categories</th>
+              <th className="px-5 text-left text-sm font-medium text-[#71717A]">Notes</th>
+              <th className="px-5 text-left text-sm font-medium text-[#71717A]">Created By</th>
+              <th className="px-5 text-left text-sm font-medium text-[#71717A] w-32">Status</th>
+              <th className="px-5 text-right text-sm font-medium text-[#71717A] w-40">
+                Linked Enquiries
+              </th>
+              <th className="px-5 text-right text-sm font-medium text-[#71717A] w-64">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td colSpan={8} className="h-16 text-center text-[#71717A]">
+                  Loading…
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="h-16 text-center text-[#71717A]">
+                  {loadError || (search || category ? 'No clients match.' : 'No clients yet.')}
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => {
+                const linked = row.linked_entries_count ?? 0;
+                return (
+                  <tr key={row.id} className="h-14 border-t border-[#EDEDED]">
+                    <td className="px-5">
+                      <span className={!row.is_active ? 'text-muted-foreground' : ''}>
+                        {row.name}
+                      </span>
+                    </td>
+                    <td className="px-5 text-sm text-[#71717A]">{row.username}</td>
+                    <td className="px-5">
+                      <div className="flex flex-wrap gap-1">
+                        {row.categories.map((c) => (
+                          <span
+                            key={c}
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-800"
+                          >
+                            {categoryLabel(c)}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-5 text-sm text-[#71717A]">
+                      {row.notes ? (
+                        <span className="block max-w-[240px] truncate" title={row.notes}>
+                          {row.notes}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-5 text-sm text-[#71717A]">
+                      {row.created_by_name || '—'}
+                    </td>
+                    <td className="px-5">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          row.is_active
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        {row.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-5 text-right tabular-nums">{linked}</td>
+                    <td className="px-5 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        {canEditClients && (
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEdit(row)}
+                            >
+                              <Pencil className="h-3 w-3 mr-1" /> Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => toggleActive(row)}
+                            >
+                              {row.is_active ? 'Deactivate' : 'Reactivate'}
+                            </Button>
+                          </>
+                        )}
+                        {/* Delete is only offered for clients no enquiry uses. */}
+                        {linked === 0 && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => removeRow(row)}
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" /> Delete
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-between text-sm text-[#71717A]">
+        <span>
+          {count} {count === 1 ? 'client' : 'clients'}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={page <= 1 || isLoading}
+            onClick={() => updateParams({ client_page: page - 1 })}
+          >
+            <ChevronLeft className="h-4 w-4" /> Previous
+          </Button>
+          <span>
+            Page {Math.min(page, totalPages)} of {totalPages}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={page >= totalPages || isLoading}
+            onClick={() => updateParams({ client_page: page + 1 })}
+          >
+            Next <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      <Dialog open={!!editing} onOpenChange={(open) => { if (!open) setEditing(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Client</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveEdit();
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label>Name *</Label>
+              <Input
+                autoFocus
+                value={editName}
+                maxLength={200}
+                onChange={(e) => setEditName(e.target.value)}
+                required
+              />
+              {editing && (editing.linked_entries_count ?? 0) > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {editing.linked_entries_count} linked{' '}
+                  {editing.linked_entries_count === 1 ? 'enquiry shows' : 'enquiries show'} the
+                  new name after a rename.
+                </p>
+              )}
+            </div>
+            {editing && (
+              <div className="space-y-2">
+                <Label>Username</Label>
+                <Input
+                  readOnly
+                  tabIndex={-1}
+                  value={editUsername}
+                  placeholder="Generating…"
+                  className="bg-[#F4F4F5] text-[#52525B] font-mono"
+                />
+                {editUsername !== editing.username && (
+                  <p className="text-xs text-[#A1A1AA]">was {editing.username}</p>
+                )}
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Categories *</Label>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {categories.map((c) => (
+                  <label key={c.value} className="inline-flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={editCategories.includes(c.value)}
+                      onCheckedChange={(checked) =>
+                        setEditCategories((prev) =>
+                          checked === true
+                            ? prev.includes(c.value)
+                              ? prev
+                              : [...prev, c.value]
+                            : prev.filter((k) => k !== c.value)
+                        )
+                      }
+                    />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+              {editCategories.length === 0 && (
+                <p className="text-xs text-red-600">Pick at least one category.</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="settings-client-notes">Notes</Label>
+              <Textarea
+                id="settings-client-notes"
+                value={editNotes}
+                maxLength={CLIENT_NOTES_MAX_LENGTH}
+                rows={3}
+                placeholder="Optional"
+                onChange={(e) => setEditNotes(e.target.value)}
+              />
+              {editNotesTooLong && (
+                <p className="text-xs text-red-600">
+                  Notes must be {CLIENT_NOTES_MAX_LENGTH} characters or fewer.
+                </p>
+              )}
+              {editing?.created_by_name && (
+                <p className="text-xs text-muted-foreground">
+                  Created by {editing.created_by_name}
+                </p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  isSaving || !cleanedEditName || editCategories.length === 0 || editNotesTooLong
+                }
+              >
+                {isSaving ? 'Saving…' : 'Save'}
               </Button>
             </DialogFooter>
           </form>

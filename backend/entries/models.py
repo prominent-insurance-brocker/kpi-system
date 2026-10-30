@@ -1,6 +1,10 @@
+import random
+import re
+import string
+import unicodedata
 from decimal import Decimal
 
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType  # noqa: F401  (re-exported for callers)
@@ -1237,6 +1241,226 @@ class InsuranceCompany(models.Model):
         return self.name
 
 
+# ─── Clients (Marine New client list) ─────────────────────────────────────────
+
+# Client tags = the sidebar's parent categories. A client can carry several;
+# each module's client picker lists only its own category.
+CLIENT_CATEGORIES = [
+    ('general', 'General'),
+    ('motor', 'Motor'),
+    ('sales', 'Sales'),
+    ('marine', 'Marine'),
+    ('medical', 'Medical'),
+]
+
+# Category -> RoleModulePermission module keys, mirroring the sidebar groups.
+# A user "can access" a category when their role grants any of its modules.
+CATEGORY_MODULES = {
+    'general': ('general_new', 'general_renewal', 'general_claim'),
+    'motor': (
+        'motor_new', 'motor_renewal', 'motor_claim',
+        'motor_fleet_new', 'motor_fleet_renewal',
+    ),
+    'sales': ('sales_kpi',),
+    'marine': ('marine_new', 'marine_renewal'),
+    'medical': (
+        'medical_claim',
+        'medical_individual_new', 'medical_individual_renewal',
+        'medical_sme_new', 'medical_sme_renewal',
+        'medical_corporate_new', 'medical_corporate_renewal',
+    ),
+}
+
+# Module key -> its category (reverse of CATEGORY_MODULES).
+MODULE_CATEGORY = {
+    module: category
+    for category, modules in CATEGORY_MODULES.items()
+    for module in modules
+}
+
+# Category key -> its boolean column on Client (e.g. 'marine' -> 'is_marine').
+CATEGORY_FIELDS = {key: f'is_{key}' for key, _ in CLIENT_CATEGORIES}
+
+CLIENT_USERNAME_MAX_LENGTH = 200
+# Usernames are stored as handles: '@' + slug + '_' + code.
+CLIENT_USERNAME_PREFIX = '@'
+# `slug_` + a 4-char code of exactly 2 digits and 2 lowercase letters in a
+# random order, e.g. 'k47q'.
+_CLIENT_CODE_DIGITS = 2
+_CLIENT_CODE_LETTERS = 2
+_CLIENT_CODE_LENGTH = _CLIENT_CODE_DIGITS + _CLIENT_CODE_LETTERS
+_client_rng = random.SystemRandom()
+
+
+def normalise_client_name(name):
+    """Comparison key for client names: trimmed, inner whitespace collapsed,
+    lower-cased. Two names with the same key are "the same client name"."""
+    return ' '.join((name or '').split()).lower()
+
+
+def _client_username_slug(name):
+    ascii_name = (
+        unicodedata.normalize('NFKD', name or '')
+        .encode('ascii', 'ignore').decode('ascii').lower()
+    )
+    slug = re.sub(r'[^a-z0-9]+', '_', ascii_name).strip('_')
+    # Leave room for '@' + '_' + the 4-char code inside the column's 200 chars.
+    slug = slug[:CLIENT_USERNAME_MAX_LENGTH - (_CLIENT_CODE_LENGTH + 2)].rstrip('_')
+    return slug or 'client'
+
+
+def _client_username_code():
+    chars = (
+        [_client_rng.choice(string.digits) for _ in range(_CLIENT_CODE_DIGITS)]
+        + [_client_rng.choice(string.ascii_lowercase) for _ in range(_CLIENT_CODE_LETTERS)]
+    )
+    _client_rng.shuffle(chars)
+    return ''.join(chars)
+
+
+def generate_client_username(name):
+    """A unique username for a client called `name`, e.g. '@abc_ltd_k47q'.
+    Draws a new code whenever the candidate is already taken."""
+    slug = _client_username_slug(name)
+    for _ in range(50):
+        candidate = f'{CLIENT_USERNAME_PREFIX}{slug}_{_client_username_code()}'
+        if not Client.objects.filter(username=candidate).exists():
+            return candidate
+    raise RuntimeError('Could not generate a unique client username.')
+
+
+def client_username_matches_name(name, username):
+    """True when `username`'s name part is already the slug of `name`, so a
+    rename that keeps the same slug (e.g. 'ABC Ltd' -> 'ABC Ltd.') can keep
+    the existing username."""
+    prefix = f'{CLIENT_USERNAME_PREFIX}{_client_username_slug(name)}_'
+    return (
+        isinstance(username, str) and username.startswith(prefix)
+        and len(username) == len(prefix) + _CLIENT_CODE_LENGTH
+    )
+
+
+def is_valid_client_username(name, username):
+    """True when `username` has the generated shape for `name`: '@' + the
+    name's slug + '_' + exactly 2 digits and 2 lowercase letters. Used to
+    accept the live-preview username the form sends on create."""
+    prefix = f'{CLIENT_USERNAME_PREFIX}{_client_username_slug(name)}_'
+    if not isinstance(username, str) or not username.startswith(prefix):
+        return False
+    code = username[len(prefix):]
+    return (
+        len(code) == _CLIENT_CODE_LENGTH
+        and code.isascii() and code.isalnum() and code == code.lower()
+        and sum(ch.isdigit() for ch in code) == _CLIENT_CODE_DIGITS
+    )
+
+
+def client_category_q(categories):
+    """Q matching clients tagged with any of `categories` (category keys).
+    Unknown keys are ignored; no valid key matches nothing."""
+    q = models.Q(pk__in=[])
+    for key in categories:
+        field = CATEGORY_FIELDS.get(key)
+        if field:
+            q |= models.Q(**{field: True})
+    return q
+
+
+class Client(models.Model):
+    """A saved client, shared across modules and tagged with one or more
+    parent categories (the is_<category> boolean columns). Names may repeat;
+    `username` is the unique, human-readable handle shown next to the name
+    in pickers."""
+    name = models.CharField(max_length=200, db_index=True)
+    username = models.CharField(max_length=CLIENT_USERNAME_MAX_LENGTH, unique=True)
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True, default='')
+    # Category tags (see CLIENT_CATEGORIES / CATEGORY_FIELDS).
+    is_general = models.BooleanField(default=False, db_index=True)
+    is_motor = models.BooleanField(default=False, db_index=True)
+    is_sales = models.BooleanField(default=False, db_index=True)
+    is_marine = models.BooleanField(default=False, db_index=True)
+    is_medical = models.BooleanField(default=False, db_index=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name='clients_created',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name', 'id']
+
+    def __str__(self):
+        return f"{self.name} ({self.username})" if self.username else self.name
+
+    def save(self, *args, **kwargs):
+        if self.username:
+            return super().save(*args, **kwargs)
+        # Generated usernames are checked before use, but a concurrent insert
+        # can still take the same one; draw a fresh code and retry.
+        for attempt in range(5):
+            self.username = generate_client_username(self.name)
+            try:
+                with transaction.atomic():
+                    return super().save(*args, **kwargs)
+            except IntegrityError:
+                if attempt == 4:
+                    raise
+        return None
+
+    @property
+    def category_keys(self):
+        """Tag keys in CLIENT_CATEGORIES order."""
+        return [
+            key for key, _ in CLIENT_CATEGORIES
+            if getattr(self, CATEGORY_FIELDS[key])
+        ]
+
+    def set_categories(self, categories):
+        """Set the is_<category> columns from a list of keys (does not save)."""
+        wanted = set(categories)
+        for key, field in CATEGORY_FIELDS.items():
+            setattr(self, field, key in wanted)
+
+
+def clients_matching_name(name, categories, active_only=True):
+    """Clients tagged with any of `categories` whose normalised name equals
+    `name`'s, oldest first. A case-insensitive regex narrows the rows in SQL;
+    the exact comparison is then done in Python with normalise_client_name."""
+    key = normalise_client_name(name)
+    if not key:
+        return []
+    pattern = r'^\s*' + r'\s+'.join(re.escape(word) for word in key.split(' ')) + r'\s*$'
+    qs = Client.objects.filter(client_category_q(categories), name__iregex=pattern)
+    if active_only:
+        qs = qs.filter(is_active=True)
+    return [
+        client for client in qs.order_by('id')
+        if normalise_client_name(client.name) == key
+    ]
+
+
+def marine_client_link_cutoff():
+    """settings.MARINE_CLIENT_LINK_CUTOFF ('YYYY-MM-DD') as an aware datetime:
+    midnight of that date in settings.TIME_ZONE (Asia/Dubai). Marine New rows
+    added before it may be linked to a saved client by their creator."""
+    from datetime import date as _date, datetime as _datetime
+    from zoneinfo import ZoneInfo
+
+    try:
+        cutoff = _date.fromisoformat(str(settings.MARINE_CLIENT_LINK_CUTOFF).strip())
+    except ValueError:
+        # settings.py already validates the env value; this only guards a
+        # runtime override so a typo can never 500 the module.
+        cutoff = _date(2026, 11, 1)
+    return timezone.make_aware(
+        _datetime.combine(cutoff, _datetime.min.time()), ZoneInfo(settings.TIME_ZONE),
+    )
+
+
 class MotorClaimEntry(BaseEntry):
     """Motor Claim — one row per claim, with status state machine + lookup FKs."""
     STATUS_CHOICES = [
@@ -1557,7 +1781,19 @@ class MarineNewEntry(StoredQualityMixin, BaseEntry):
 
     ACCURACY_DECAY = Decimal('0.9')
 
+    # Legacy free-text name. Only rows added before the saved client list
+    # (and not yet linked) hold text here; new rows and linked rows store ''
+    # and read the name from `client`. Use `client_display` to show it.
     client_name = models.CharField(max_length=200)
+    # The saved client this enquiry is for. Required for new rows (by the
+    # serializer); null on legacy rows until their creator links one with the
+    # link-client action. PROTECT keeps a linked client from being deleted.
+    client = models.ForeignKey(
+        'Client',
+        on_delete=models.PROTECT,
+        related_name='marine_new_entries',
+        null=True, blank=True,
+    )
     agent = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -1618,13 +1854,67 @@ class MarineNewEntry(StoredQualityMixin, BaseEntry):
     # Optional insurer reference IDs captured on Shared With Client, keyed by
     # str(InsuranceCompany id) of a compared insurer -> reference string.
     insurer_references = models.JSONField(default=dict, blank=True)
+    # Derived, search-only copy of the insurer reference *values* (space
+    # joined), kept in sync by save(). Searching the JSON directly would also
+    # match the insurer-id keys, and SQLite / Postgres store JSON differently.
+    insurer_references_text = models.TextField(blank=True, default='', editable=False)
 
     class Meta(BaseEntry.Meta):
         verbose_name = 'Marine New Entry'
         verbose_name_plural = 'Marine New Entries'
 
     def __str__(self):
-        return f"Marine New Enquiry - {self.client_name} ({self.status})"
+        return f"Marine New Enquiry - {self.client_display} ({self.status})"
+
+    @staticmethod
+    def build_insurer_references_text(refs):
+        """The searchable text for an `insurer_references` dict: its values."""
+        if not isinstance(refs, dict):
+            return ''
+        values = (str(v).strip() for v in refs.values() if v is not None)
+        return ' '.join(v for v in values if v)
+
+    def save(self, *args, **kwargs):
+        self.insurer_references_text = self.build_insurer_references_text(
+            self.insurer_references
+        )
+        # A partial save of the refs (update-status) must write the copy too.
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None and 'insurer_references' in update_fields:
+            update_fields = list(update_fields)
+            if 'insurer_references_text' not in update_fields:
+                update_fields.append('insurer_references_text')
+            kwargs['update_fields'] = update_fields
+        super().save(*args, **kwargs)
+
+    @property
+    def client_display(self):
+        """The linked client's name, else the legacy typed `client_name`."""
+        if self.client_id is not None:
+            return self.client.name
+        return self.client_name
+
+    def link_client_block_reason(self, user):
+        """Why `user` cannot link this row to a saved client (None = can).
+        Returns (http_status, message). Only the creator may link, once, on a
+        non-voided row added before marine_client_link_cutoff(); HODs never.
+        The 30-minute edit window does not apply."""
+        from roles.permissions import user_is_hod
+
+        if user is None or not user.is_authenticated or self.added_by_id != user.id:
+            return 403, 'Only the creator of this enquiry can link it to a client.'
+        if user_is_hod(user):
+            return 403, 'HOD users cannot link enquiries to clients.'
+        if self.is_voided:
+            return 403, 'This entry has been voided and can no longer be modified.'
+        if self.client_id is not None:
+            return 409, 'This enquiry is already linked to a client.'
+        if self.added_at is None or self.added_at >= marine_client_link_cutoff():
+            return 400, 'Only enquiries added before the client list can be linked.'
+        return None
+
+    def can_link_client(self, user):
+        return self.link_client_block_reason(user) is None
 
     @classmethod
     def get_allowed_transitions(cls, current_status):

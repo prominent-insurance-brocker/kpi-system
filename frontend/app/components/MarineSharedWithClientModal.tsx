@@ -75,7 +75,7 @@ export function MarineSharedWithClientModal({
         <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
           <p className="text-sm text-[#71717A]">
             Optionally record the quote / reference ID each insurer issued for{' '}
-            {entry.client_name} · {entry.pib_id}.
+            {entry.client_display || entry.client_name} · {entry.pib_id}.
           </p>
 
           {insurerIds.length === 0 ? (

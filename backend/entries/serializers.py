@@ -3,6 +3,9 @@ from decimal import Decimal
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
 from .models import (
+    CATEGORY_FIELDS,
+    CLIENT_CATEGORIES,
+    Client,
     EntryRemark,
     GeneralNewEntry,
     GeneralNewStatusTransition,
@@ -676,6 +679,73 @@ class MotorClaimEntrySerializer(BaseEntrySerializer):
         return obj.is_terminal
 
 
+class ClientSerializer(serializers.ModelSerializer):
+    """Saved client (Marine New client list). `categories` is the list of tag
+    keys (stored as the is_<category> columns); `linked_entries_count` is
+    included only when the viewset annotates it (Settings list,
+    ?include_counts=1). A rename does not touch linked Marine New enquiries:
+    they read the name from the client."""
+    NOTES_MAX_LENGTH = 1000
+
+    categories = serializers.ListField(
+        child=serializers.ChoiceField(choices=CLIENT_CATEGORIES),
+        allow_empty=False, required=False, write_only=True,
+    )
+    notes = serializers.CharField(
+        required=False, allow_blank=True, trim_whitespace=True,
+        max_length=NOTES_MAX_LENGTH,
+    )
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Client
+        fields = [
+            'id', 'name', 'username', 'categories', 'notes', 'is_active',
+            'created_by', 'created_by_name', 'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'username', 'created_by', 'created_at', 'updated_at',
+        ]
+
+    def get_created_by_name(self, obj):
+        user = obj.created_by if obj.created_by_id else None
+        return user.full_name if user is not None else None
+
+    def validate_name(self, value):
+        cleaned = (value or '').strip()
+        if not cleaned:
+            raise serializers.ValidationError("Name cannot be blank.")
+        return cleaned
+
+    def validate_notes(self, value):
+        return (value or '').strip()
+
+    def validate_categories(self, value):
+        # De-duplicate, keeping the canonical category order.
+        chosen = set(value)
+        return [key for key, _ in CLIENT_CATEGORIES if key in chosen]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['categories'] = instance.category_keys
+        if hasattr(instance, 'linked_entries_count'):
+            data['linked_entries_count'] = instance.linked_entries_count
+        return data
+
+    def create(self, validated_data):
+        categories = validated_data.pop('categories', None) or ['marine']
+        client = Client(**validated_data)
+        client.set_categories(categories)
+        client.save()
+        return client
+
+    def update(self, instance, validated_data):
+        categories = validated_data.pop('categories', None)
+        if categories is not None:
+            instance.set_categories(categories)
+        return super().update(instance, validated_data)
+
+
 class TypeOfAccidentSerializer(serializers.ModelSerializer):
     class Meta:
         model = TypeOfAccident
@@ -1249,12 +1319,27 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
     insurer_references_display = serializers.SerializerMethodField()
     # Write-only: when present on POST, perform_create seeds it as the first EntryRemark on the new entry.
     initial_remark = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
+    # The saved client picked in the form. Required on create (validate());
+    # optional on PATCH. Never null: a link cannot be removed.
+    client = serializers.PrimaryKeyRelatedField(
+        queryset=Client.objects.all(), required=False,
+    )
+    client_detail = serializers.SerializerMethodField()
+    # The name to show: the linked client's, else the legacy typed text.
+    client_display = serializers.ReadOnlyField()
+    # Whether the requesting user may use the link-client action on this row.
+    can_link_client = serializers.SerializerMethodField()
+
+    # Category whose clients this module may pick.
+    CLIENT_CATEGORY = 'marine'
 
     class Meta:
         model = MarineNewEntry
         fields = [
             'id', 'pib_id', 'date',
-            'client_name', 'agent', 'agent_name', 'initial_remark',
+            'client_name', 'client', 'client_detail', 'client_display',
+            'can_link_client',
+            'agent', 'agent_name', 'initial_remark',
             'status', 'revisions', 'quotes_compared', 'status_changed_at',
             'shared_with_client_at', 'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
@@ -1271,6 +1356,8 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
         ]
         read_only_fields = [
             'id', 'pib_id', 'added_by', 'on_behalf_of',
+            # Legacy typed name: '' on new rows, cleared by link-client.
+            'client_name',
             'status', 'status_changed_at',
             'shared_with_client_at', 'tat_minutes', 'accuracy',
             'tat_display', 'accuracy_pct',
@@ -1286,6 +1373,55 @@ class MarineNewEntrySerializer(BaseEntrySerializer):
 
     def get_agent_name(self, obj):
         return obj.agent.get_full_name()
+
+    def get_client_detail(self, obj):
+        if obj.client_id is None:
+            return None
+        client = obj.client
+        return {'id': client.id, 'name': client.name, 'username': client.username}
+
+    def get_can_link_client(self, obj):
+        request = self.context.get('request')
+        return obj.can_link_client(getattr(request, 'user', None))
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        client = attrs.get('client')
+        if client is None:
+            if self.instance is None:
+                raise serializers.ValidationError(
+                    {'client': ['This field is required.']}
+                )
+            return attrs
+        already_linked = (
+            self.instance is not None and self.instance.client_id == client.pk
+        )
+        if not client.is_active and not already_linked:
+            raise serializers.ValidationError(
+                {'client': 'This client is inactive.'}
+            )
+        # An already-linked client stays valid after it is deactivated or
+        # loses its Marine tag, so the enquiry's other fields stay editable.
+        if (
+            not already_linked
+            and not getattr(client, CATEGORY_FIELDS[self.CLIENT_CATEGORY])
+        ):
+            raise serializers.ValidationError(
+                {'client': 'This client is not available in Marine.'}
+            )
+        return attrs
+
+    def create(self, validated_data):
+        # The linked client is the only source of the name on new rows.
+        validated_data['client_name'] = ''
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        # Picking a client (in the 30-minute edit window) also drops any
+        # legacy typed name, as link-client does.
+        if 'client' in validated_data:
+            validated_data['client_name'] = ''
+        return super().update(instance, validated_data)
 
     def get_insurer_references_display(self, obj):
         """[{insurer_id, insurer_name, reference}] for each stored reference,
@@ -1423,6 +1559,19 @@ class MarineNewStatusUpdateSerializer(serializers.Serializer):
 
 class MarineNewRevisionsUpdateSerializer(serializers.Serializer):
     revisions = serializers.IntegerField(min_value=0)
+
+
+class MarineClientLinkSerializer(serializers.Serializer):
+    """Body of POST marine-new/{id}/link-client/: an active client tagged
+    'marine'."""
+    client = serializers.PrimaryKeyRelatedField(queryset=Client.objects.all())
+
+    def validate_client(self, client):
+        if not client.is_active:
+            raise serializers.ValidationError('This client is inactive.')
+        if not getattr(client, CATEGORY_FIELDS[MarineNewEntrySerializer.CLIENT_CATEGORY]):
+            raise serializers.ValidationError('This client is not available in Marine.')
+        return client
 
 
 class MarineClassOfInsuranceSerializer(serializers.ModelSerializer):

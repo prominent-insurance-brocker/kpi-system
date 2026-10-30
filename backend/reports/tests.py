@@ -510,7 +510,7 @@ class ReportSettingAPITests(TestCase):
     METABASE_SECRET_KEY='test-embedding-secret',
     METABASE_DASHBOARDS={
         'overview': ('1', ()),
-        'marine': ('2', ('marine_new', 'marine_renewal')),
+        'marine': ('2', ('marine_dashboard',)),
         'unset': ('', ()),
     },
 )
@@ -520,6 +520,7 @@ class MetabaseEmbedTests(TestCase):
     def setUp(self):
         self.admin = CustomUser.objects.create(email='admin@x.com', full_name='A', is_staff=True)
         marine_role = Role.objects.create(name='Marine', data_visibility='own')
+        RoleModulePermission.objects.create(role=marine_role, module='marine_dashboard')
         RoleModulePermission.objects.create(role=marine_role, module='marine_renewal')
         self.marine_user = CustomUser.objects.create(email='m@x.com', full_name='M', role=marine_role)
         motor_role = Role.objects.create(name='Motor', data_visibility='own')
@@ -549,6 +550,22 @@ class MetabaseEmbedTests(TestCase):
     def test_user_without_marine_module_forbidden(self):
         self.client.force_authenticate(self.motor_user)
         self.assertEqual(self.client.get('/api/reports/metabase-embed/marine/').status_code, 403)
+
+    def test_marine_entry_modules_alone_do_not_grant_dashboard(self):
+        role = Role.objects.create(name='Marine entry', data_visibility='own')
+        RoleModulePermission.objects.create(role=role, module='marine_new')
+        RoleModulePermission.objects.create(role=role, module='marine_renewal')
+        user = CustomUser.objects.create(email='me@x.com', full_name='ME', role=role)
+        self.client.force_authenticate(user)
+        self.assertEqual(self.client.get('/api/reports/metabase-embed/marine/').status_code, 403)
+
+    def test_dashboard_permission_alone_grants_marine_only(self):
+        role = Role.objects.create(name='Marine viewer', data_visibility='own')
+        RoleModulePermission.objects.create(role=role, module='marine_dashboard')
+        user = CustomUser.objects.create(email='mv@x.com', full_name='MV', role=role)
+        self.client.force_authenticate(user)
+        self.assertEqual(self.client.get('/api/reports/metabase-embed/marine/').status_code, 200)
+        self.assertEqual(self.client.get('/api/reports/metabase-embed/overview/').status_code, 403)
 
     def test_admin_gets_any_configured_dashboard(self):
         self.client.force_authenticate(self.admin)

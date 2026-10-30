@@ -128,7 +128,9 @@ export function EnquiryConvertedPremiumModal({
               autoFocus
             />
             <p className="text-xs text-muted-foreground">
-              {entry.client_name} · {entry.pib_id}
+              {/* client_display is set by Marine New only (linked client name,
+                  else the legacy text); other modules fall back to client_name. */}
+              {entry.client_display || entry.client_name} · {entry.pib_id}
             </p>
           </div>
 

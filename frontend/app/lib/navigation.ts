@@ -12,11 +12,12 @@ const MODULE_ROUTES: Array<[string, string]> = [
   ['sales_kpi', '/sales/kpi'],
   ['marine_new', '/marine/new'],
   ['marine_renewal', '/marine/renewal'],
+  ['marine_dashboard', '/marine/dashboard'],
   ['medical_claim', '/medical/claim'],
 ];
 
 // Any of these grants the Marine dashboard (mirrors METABASE_DASHBOARDS on the backend).
-export const MARINE_DASHBOARD_MODULES = ['marine_new', 'marine_renewal'];
+export const MARINE_DASHBOARD_MODULES = ['marine_dashboard'];
 
 export function firstAccessibleRoute(user: User | null): string | null {
   if (!user) return null;

@@ -60,7 +60,15 @@ interface DataTableProps<T> {
   canEdit?: (item: T) => boolean;
   canDelete?: (item: T) => boolean;
   // Extra per-row actions appended to the actions dropdown (after Edit/Delete).
-  rowActions?: (item: T) => Array<{ label: string; onClick: () => void; danger?: boolean }>;
+  // Optional `disabled` greys the item out; `hint` is a short reason shown
+  // under its label (both opt-in; omitted = unchanged behaviour).
+  rowActions?: (item: T) => Array<{
+    label: string;
+    onClick: () => void;
+    danger?: boolean;
+    disabled?: boolean;
+    hint?: string;
+  }>;
   isLoading?: boolean;
   height?: string;
 }
@@ -193,9 +201,13 @@ export function DataTable<T extends { id: number }>({
                                   <DropdownMenuItem
                                     key={i}
                                     onClick={a.onClick}
-                                    className={`cursor-pointer px-3 py-2 text-sm rounded-md whitespace-nowrap ${a.danger ? 'text-red-600 hover:bg-red-50' : 'text-[#09090B] hover:bg-[#F3F3F3]'}`}
+                                    disabled={a.disabled}
+                                    className={`cursor-pointer px-3 py-2 text-sm rounded-md whitespace-nowrap ${a.danger ? 'text-red-600 hover:bg-red-50' : 'text-[#09090B] hover:bg-[#F3F3F3]'}${a.hint ? ' flex-col items-start gap-0.5' : ''}`}
                                   >
                                     {a.label}
+                                    {a.hint && (
+                                      <span className="text-xs font-normal text-[#71717A]">{a.hint}</span>
+                                    )}
                                   </DropdownMenuItem>
                                 ))}
                               </DropdownMenuContent>

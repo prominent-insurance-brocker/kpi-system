@@ -193,7 +193,6 @@ MARINE_NEW_COLUMNS = [
     ('Converted Insurer', lambda e: e.converted_insurer.name if e.converted_insurer else None, 'text'),
     ('Policy/Certificate No.', lambda e: e.policy_number, 'text'),
     ('Added on', lambda e: _local(e.added_at), 'datetime'),
-    ('Date', lambda e: e.date, 'date'),
     ('Shared With Client At', lambda e: _local(e.shared_with_client_at), 'datetime'),
     ('Closed At', lambda e: _local(e.status_changed_at), 'datetime'),
     ('Last Updated', lambda e: _local(e.updated_at), 'datetime'),

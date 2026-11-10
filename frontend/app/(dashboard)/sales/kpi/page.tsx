@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Plus,
@@ -501,28 +502,27 @@ export default function SalesKPIPage() {
         ? 'Add / Edit'
         : 'Edit';
 
-  // Display-only: a 0 target (team view returns 0 for unset) counts as
-  // "Not set". The button label above still reads the raw nulls.
-  const newTarget = premiumTarget != null && premiumTarget > 0 ? premiumTarget : null;
-  const renewalTarget =
-    renewalPremiumTarget != null && renewalPremiumTarget > 0 ? renewalPremiumTarget : null;
   // Total = New + Renewal; target sums whichever are set, null if neither.
   const totalActual = cardPremiumActual + cardRenewalPremiumActual;
   const totalTarget =
-    newTarget == null && renewalTarget == null ? null : (newTarget ?? 0) + (renewalTarget ?? 0);
+    premiumTarget === null && renewalPremiumTarget === null
+      ? null
+      : (premiumTarget ?? 0) + (renewalPremiumTarget ?? 0);
 
-  // Bars scale to 1.5× target (target sits at ~67%); clamped to 100.
   const TARGET_MULTIPLIER = 1.5;
-  const barPct = (actual: number, target: number | null) =>
-    target != null ? Math.min(100, (actual / (target * TARGET_MULTIPLIER)) * 100) : 0;
-  const premiumPct = barPct(cardPremiumActual, newTarget);
-  const renewalPremiumPct = barPct(cardRenewalPremiumActual, renewalTarget);
-  // Total stack: both segments against the Total max, sum clamped to 100.
-  const totalNewSegPct = barPct(cardPremiumActual, totalTarget);
-  const totalRenewalSegPct = Math.min(
-    100 - totalNewSegPct,
-    barPct(cardRenewalPremiumActual, totalTarget),
-  );
+  const totalMax = totalTarget ? totalTarget * TARGET_MULTIPLIER : 0;
+  const totalPct = totalMax ? Math.min(100, (totalActual / totalMax) * 100) : 0;
+  const totalMarkerPct = totalMax ? (totalTarget! / totalMax) * 100 : 0;
+  const premiumMax = premiumTarget ? premiumTarget * TARGET_MULTIPLIER : 0;
+  const renewalPremiumMax = renewalPremiumTarget ? renewalPremiumTarget * TARGET_MULTIPLIER : 0;
+  const premiumPct = premiumMax ? Math.min(100, (cardPremiumActual / premiumMax) * 100) : 0;
+  const renewalPremiumPct = renewalPremiumMax
+    ? Math.min(100, (cardRenewalPremiumActual / renewalPremiumMax) * 100)
+    : 0;
+  const premiumMarkerPct = premiumMax ? (premiumTarget! / premiumMax) * 100 : 0;
+  const renewalPremiumMarkerPct = renewalPremiumMax
+    ? (renewalPremiumTarget! / renewalPremiumMax) * 100
+    : 0;
 
   const isCurrentMonthCard =
     cardYear === today.getFullYear() && cardMonth === today.getMonth() + 1;
@@ -824,8 +824,9 @@ export default function SalesKPIPage() {
 
         {/* Monthly Target progress card */}
         {/* TED-496: card widened so the amount + "New Premium" label have
-            visual breathing room. Widened again for the third (Total) column. */}
-        <div className="border rounded-lg p-4 space-y-2 bg-white w-[940px] max-w-full">
+            visual breathing room — previously the label was butted up
+            against the number. Widened again for the Total column. */}
+        <div className="border rounded-lg p-4 space-y-2 bg-white w-[840px] max-w-full">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Monthly Target</h2>
             {isAggregator && (
@@ -842,28 +843,27 @@ export default function SalesKPIPage() {
               />
             )}
           </div>
-          {/* Total | New | Renewal. Total's bar stacks New (dark) + Renewal (grey). */}
-          <div className="grid grid-cols-3 gap-8">
-            <TargetMetric
+          <div className="grid grid-cols-3 gap-6">
+            <TargetProgress
               label="Total Premium"
               actual={totalActual}
               target={totalTarget}
-              segments={[
-                { pct: totalNewSegPct, className: 'bg-zinc-900' },
-                { pct: totalRenewalSegPct, className: 'bg-zinc-500' },
-              ]}
+              pct={totalPct}
+              markerPct={totalMarkerPct}
             />
-            <TargetMetric
+            <TargetProgress
               label="New Premium"
               actual={cardPremiumActual}
-              target={newTarget}
-              segments={[{ pct: premiumPct, className: 'bg-zinc-900' }]}
+              target={premiumTarget}
+              pct={premiumPct}
+              markerPct={premiumMarkerPct}
             />
-            <TargetMetric
+            <TargetProgress
               label="Renewal Premium"
               actual={cardRenewalPremiumActual}
-              target={renewalTarget}
-              segments={[{ pct: renewalPremiumPct, className: 'bg-zinc-500' }]}
+              target={renewalPremiumTarget}
+              pct={renewalPremiumPct}
+              markerPct={renewalPremiumMarkerPct}
             />
           </div>
           <h3 className="text-xl font-semibold">{MONTH_NAMES[cardMonth - 1]}</h3>
@@ -1491,40 +1491,57 @@ function StatCard({
   );
 }
 
-// ─── Monthly target metric ─────────────────────────────────────────────────
+// ─── Monthly target progress ───────────────────────────────────────────────
 
-// Booked / target × 100, uncapped (120% shows as 120.0%); null target → "—".
-function pctBooked(actual: number, target: number | null): number | null {
-  return target != null ? (actual / target) * 100 : null;
-}
-
-// One column of the Monthly Target card: label, booked amount, bar, then
-// target (left) and % booked (right). Segments stack left-to-right so Total
-// can show New + Renewal in one bar; widths are pre-clamped by the caller.
-function TargetMetric({
+// One column of the Monthly Target card: amount + label, a bar that turns
+// green once the target is met, and a ▲ marker under the target position.
+function TargetProgress({
   label,
   actual,
   target,
-  segments,
+  pct,
+  markerPct,
 }: {
   label: string;
   actual: number;
   target: number | null;
-  segments: { pct: number; className: string }[];
+  pct: number;
+  markerPct: number;
 }) {
-  const pct = pctBooked(actual, target);
   return (
-    <div className="space-y-2">
-      <div className="text-sm text-muted-foreground">{label}</div>
-      <div className="text-2xl font-bold">{formatPremium(actual)}</div>
-      <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden flex">
-        {segments.map((s, i) => (
-          <div key={i} className={`h-full ${s.className}`} style={{ width: `${s.pct}%` }} />
-        ))}
+    <div className="space-y-1">
+      <div className="flex items-baseline justify-between gap-6">
+        <span className="text-xl font-bold">{formatPremium(actual)}</span>
+        <span className="text-sm text-muted-foreground">{label}</span>
       </div>
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>{target != null ? formatPremium(target) : 'Not set'}</span>
-        <span>{pct != null ? `${pct.toFixed(1)}% booked` : '—'}</span>
+      <div className="relative">
+        <div
+          className={
+            target !== null && actual >= target
+              ? '[&_[data-slot=progress-indicator]]:bg-green-500'
+              : '[&_[data-slot=progress-indicator]]:bg-red-400'
+          }
+        >
+          <Progress value={pct} className="h-2 bg-gray-100" />
+        </div>
+        {target !== null && (
+          <div
+            className="absolute top-0 h-2 w-0.5 bg-gray-400 rounded-full"
+            style={{ left: `${markerPct}%` }}
+          />
+        )}
+      </div>
+      <div className="relative">
+        <span className="text-xs text-muted-foreground">0</span>
+        {target !== null && (
+          <div
+            className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
+            style={{ left: `${markerPct}%` }}
+          >
+            <span className="text-blue-500 leading-none">▲</span>
+            <span className="text-muted-foreground">{formatPremium(target)}</span>
+          </div>
+        )}
       </div>
     </div>
   );

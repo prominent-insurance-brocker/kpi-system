@@ -30,7 +30,7 @@ EXPECTED_HEADERS = [
     'Converted Premium', 'Revisions', 'No. of Quotes Compared', 'TAT (minutes)',
     'Accuracy (%)', 'Added by', 'Agent Name', 'Class of Insurance',
     'Compared Insurers', 'Converted Insurer', 'Policy/Certificate No.',
-    'Added on', 'Date', 'Shared With Client At', 'Closed At', 'Last Updated',
+    'Added on', 'Shared With Client At', 'Closed At', 'Last Updated',
     'Voided', 'Voided At', 'Voided By', 'Void Reason',
 ]
 
@@ -128,6 +128,7 @@ class HeaderTests(_Base):
         self.assertTrue(text.startswith('﻿'))
         header = next(csv.reader(StringIO(text[1:])))
         self.assertEqual(header, EXPECTED_HEADERS)
+        self.assertNotIn('Date', header)
 
     def test_xlsx_headers_and_content_type(self):
         resp = self.client.get(URL, {'file_format': 'xlsx'})
@@ -142,6 +143,7 @@ class HeaderTests(_Base):
         )
         headers, rows, ws = parse_xlsx(resp)
         self.assertEqual(headers, EXPECTED_HEADERS)
+        self.assertNotIn('Date', headers)
         self.assertEqual(rows, [])
         self.assertEqual(ws.title, 'Marine New Enquiries')
         self.assertEqual(ws.freeze_panes, 'A2')
@@ -268,7 +270,6 @@ class GoldenRowTests(_Base):
             'Converted Insurer': 'Acme Marine',
             'Policy/Certificate No.': 'POL-123',
             'Added on': '2026-07-05 00:30',
-            'Date': '2026-07-05',
             'Shared With Client At': '2026-07-05 10:00',
             'Closed At': '2026-07-06 12:15',
             'Last Updated': '2026-07-06 12:16',
@@ -354,7 +355,6 @@ class GoldenRowTests(_Base):
             'Converted Insurer': 'Acme Marine',
             'Policy/Certificate No.': 'POL-123',
             'Added on': datetime(2026, 7, 5, 0, 30),
-            'Date': datetime(2026, 7, 5),
             'Shared With Client At': datetime(2026, 7, 5, 10, 0),
             'Closed At': datetime(2026, 7, 6, 12, 15),
             'Last Updated': datetime(2026, 7, 6, 12, 16),
@@ -370,8 +370,7 @@ class GoldenRowTests(_Base):
         self.assertEqual(ws.cell(2, col['Potential Premium']).number_format, '#,##0.00')
         self.assertEqual(ws.cell(2, col['Revisions']).data_type, 'n')
         self.assertEqual(ws.cell(2, col['Added on']).number_format, 'yyyy-mm-dd hh:mm')
-        self.assertEqual(ws.cell(2, col['Date']).number_format, 'yyyy-mm-dd')
-        self.assertEqual(ws.auto_filter.ref, f'A1:Z{len(rows) + 1}')
+        self.assertEqual(ws.auto_filter.ref, f'A1:Y{len(rows) + 1}')
 
         self.assertEqual(by['Shared Co']['Converted Premium'], None)
         self.assertEqual(by['Shared Co']['Accuracy (%)'], None)

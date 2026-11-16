@@ -390,10 +390,18 @@ export default function SalesKPIPage() {
     // Match the target scope: team-aggregated rows pair with team-wide
     // actuals, personal targets pair with personal actuals.
     const userFilter = cardViewUserId ? `&user_id=${cardViewUserId}` : '';
-    const result = await fetchApi<{ results: SalesKPIEntry[] }>(
-      `/api/entries/sales-kpi/?created_from=${firstDay}&created_to=${lastDay}${userFilter}&page_size=1000`,
-    );
-    setCardEntries(result.data?.results ?? []);
+    // Server caps page_size at 100, so walk every page. Only non-voided Won
+    // deals feed the card; the 50-page cap is a runaway guard.
+    const all: SalesKPIEntry[] = [];
+    for (let page = 1; page <= 50; page++) {
+      const result = await fetchApi<{ results: SalesKPIEntry[]; next: string | null }>(
+        `/api/entries/sales-kpi/?created_from=${firstDay}&created_to=${lastDay}${userFilter}` +
+          `&status=won&is_voided=false&page_size=100&page=${page}`,
+      );
+      all.push(...(result.data?.results ?? []));
+      if (!result.data?.next) break;
+    }
+    setCardEntries(all);
   }, [cardYear, cardMonth, currentUserId, cardViewUserId]);
 
   const fetchSheetTargets = useCallback(async () => {
@@ -494,7 +502,17 @@ export default function SalesKPIPage() {
         ? 'Add / Edit'
         : 'Edit';
 
+  // Total = New + Renewal; target sums whichever are set, null if neither.
+  const totalActual = cardPremiumActual + cardRenewalPremiumActual;
+  const totalTarget =
+    premiumTarget === null && renewalPremiumTarget === null
+      ? null
+      : (premiumTarget ?? 0) + (renewalPremiumTarget ?? 0);
+
   const TARGET_MULTIPLIER = 1.5;
+  const totalMax = totalTarget ? totalTarget * TARGET_MULTIPLIER : 0;
+  const totalPct = totalMax ? Math.min(100, (totalActual / totalMax) * 100) : 0;
+  const totalMarkerPct = totalMax ? (totalTarget! / totalMax) * 100 : 0;
   const premiumMax = premiumTarget ? premiumTarget * TARGET_MULTIPLIER : 0;
   const renewalPremiumMax = renewalPremiumTarget ? renewalPremiumTarget * TARGET_MULTIPLIER : 0;
   const premiumPct = premiumMax ? Math.min(100, (cardPremiumActual / premiumMax) * 100) : 0;
@@ -807,8 +825,8 @@ export default function SalesKPIPage() {
         {/* Monthly Target progress card */}
         {/* TED-496: card widened so the amount + "New Premium" label have
             visual breathing room — previously the label was butted up
-            against the number. */}
-        <div className="border rounded-lg p-4 space-y-2 bg-white w-[560px]">
+            against the number. Widened again for the Total column. */}
+        <div className="border rounded-lg p-4 space-y-2 bg-white w-[840px] max-w-full">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Monthly Target</h2>
             {isAggregator && (
@@ -825,79 +843,28 @@ export default function SalesKPIPage() {
               />
             )}
           </div>
-          <div className="grid grid-cols-2 gap-6">
-            <div className="space-y-1">
-              <div className="flex items-baseline justify-between gap-6">
-                <span className="text-xl font-bold">{formatPremium(cardPremiumActual)}</span>
-                <span className="text-sm text-muted-foreground">New Premium</span>
-              </div>
-              <div className="relative">
-                <div
-                  className={
-                    premiumTarget !== null && cardPremiumActual >= premiumTarget
-                      ? '[&_[data-slot=progress-indicator]]:bg-green-500'
-                      : '[&_[data-slot=progress-indicator]]:bg-red-400'
-                  }
-                >
-                  <Progress value={premiumPct} className="h-2 bg-gray-100" />
-                </div>
-                {premiumTarget !== null && (
-                  <div
-                    className="absolute top-0 h-2 w-0.5 bg-gray-400 rounded-full"
-                    style={{ left: `${premiumMarkerPct}%` }}
-                  />
-                )}
-              </div>
-              <div className="relative">
-                <span className="text-xs text-muted-foreground">0</span>
-                {premiumTarget !== null && (
-                  <div
-                    className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
-                    style={{ left: `${premiumMarkerPct}%` }}
-                  >
-                    <span className="text-blue-500 leading-none">▲</span>
-                    <span className="text-muted-foreground">{formatPremium(premiumTarget)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-baseline justify-between gap-6">
-                <span className="text-xl font-bold">{formatPremium(cardRenewalPremiumActual)}</span>
-                <span className="text-sm text-muted-foreground">Renewal Premium</span>
-              </div>
-              <div className="relative">
-                <div
-                  className={
-                    renewalPremiumTarget !== null && cardRenewalPremiumActual >= renewalPremiumTarget
-                      ? '[&_[data-slot=progress-indicator]]:bg-green-500'
-                      : '[&_[data-slot=progress-indicator]]:bg-red-400'
-                  }
-                >
-                  <Progress value={renewalPremiumPct} className="h-2 bg-gray-100" />
-                </div>
-                {renewalPremiumTarget !== null && (
-                  <div
-                    className="absolute top-0 h-2 w-0.5 bg-gray-400 rounded-full"
-                    style={{ left: `${renewalPremiumMarkerPct}%` }}
-                  />
-                )}
-              </div>
-              <div className="relative">
-                <span className="text-xs text-muted-foreground">0</span>
-                {renewalPremiumTarget !== null && (
-                  <div
-                    className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
-                    style={{ left: `${renewalPremiumMarkerPct}%` }}
-                  >
-                    <span className="text-blue-500 leading-none">▲</span>
-                    <span className="text-muted-foreground">
-                      {formatPremium(renewalPremiumTarget)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+          <div className="grid grid-cols-3 gap-6">
+            <TargetProgress
+              label="Total Premium"
+              actual={totalActual}
+              target={totalTarget}
+              pct={totalPct}
+              markerPct={totalMarkerPct}
+            />
+            <TargetProgress
+              label="New Premium"
+              actual={cardPremiumActual}
+              target={premiumTarget}
+              pct={premiumPct}
+              markerPct={premiumMarkerPct}
+            />
+            <TargetProgress
+              label="Renewal Premium"
+              actual={cardRenewalPremiumActual}
+              target={renewalPremiumTarget}
+              pct={renewalPremiumPct}
+              markerPct={renewalPremiumMarkerPct}
+            />
           </div>
           <h3 className="text-xl font-semibold">{MONTH_NAMES[cardMonth - 1]}</h3>
           <div className="flex items-center gap-2">
@@ -1521,6 +1488,62 @@ function StatCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ─── Monthly target progress ───────────────────────────────────────────────
+
+// One column of the Monthly Target card: amount + label, a bar that turns
+// green once the target is met, and a ▲ marker under the target position.
+function TargetProgress({
+  label,
+  actual,
+  target,
+  pct,
+  markerPct,
+}: {
+  label: string;
+  actual: number;
+  target: number | null;
+  pct: number;
+  markerPct: number;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-baseline justify-between gap-6">
+        <span className="text-xl font-bold">{formatPremium(actual)}</span>
+        <span className="text-sm text-muted-foreground">{label}</span>
+      </div>
+      <div className="relative">
+        <div
+          className={
+            target !== null && actual >= target
+              ? '[&_[data-slot=progress-indicator]]:bg-green-500'
+              : '[&_[data-slot=progress-indicator]]:bg-red-400'
+          }
+        >
+          <Progress value={pct} className="h-2 bg-gray-100" />
+        </div>
+        {target !== null && (
+          <div
+            className="absolute top-0 h-2 w-0.5 bg-gray-400 rounded-full"
+            style={{ left: `${markerPct}%` }}
+          />
+        )}
+      </div>
+      <div className="relative">
+        <span className="text-xs text-muted-foreground">0</span>
+        {target !== null && (
+          <div
+            className="absolute top-0 -translate-x-1/2 flex flex-col items-center text-xs"
+            style={{ left: `${markerPct}%` }}
+          >
+            <span className="text-blue-500 leading-none">▲</span>
+            <span className="text-muted-foreground">{formatPremium(target)}</span>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

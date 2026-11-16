@@ -118,6 +118,26 @@ def _user_can_aggregate(user):
     return bool(user and (user.is_staff or user_is_hod(user)))
 
 
+_INT32_MAX = 2**31 - 1   # year / month (PositiveIntegerField)
+_INT64_MAX = 2**63 - 1   # user ids (BigAutoField)
+
+
+def _int_query_param(request, name, max_abs=_INT64_MAX):
+    """Whole-number query param, or None when absent/empty. A non-numeric or
+    out-of-range value is a 400 (same shape as filter errors) instead of a 500
+    from the ORM."""
+    raw = request.query_params.get(name)
+    if raw in (None, ''):
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise drf_serializers.ValidationError({name: ['Enter a whole number.']})
+    if abs(value) > max_abs:
+        raise drf_serializers.ValidationError({name: ['Number is out of range.']})
+    return value
+
+
 class HodAwareMonthlyTargetMixin:
     """Shared HOD / admin behavior for monthly-target viewsets.
 
@@ -150,25 +170,25 @@ class HodAwareMonthlyTargetMixin:
         # Aggregator viewers (HOD / admin) can either drill into one user
         # (`?user_id=N`) or fall through to the team-aggregated `list`.
         if _user_can_aggregate(self.request.user):
-            user_id = self.request.query_params.get('user_id')
-            if user_id:
+            user_id = _int_query_param(self.request, 'user_id')
+            if user_id is not None:
                 qs = self.model_class.objects.filter(user_id=user_id)
             else:
                 qs = self.model_class.objects.all()
         else:
             qs = self.model_class.objects.filter(user=self.request.user)
-        year = self.request.query_params.get('year')
-        month = self.request.query_params.get('month')
-        if year:
+        year = _int_query_param(self.request, 'year', _INT32_MAX)
+        month = _int_query_param(self.request, 'month', _INT32_MAX)
+        if year is not None:
             qs = qs.filter(year=year)
-        if month:
+        if month is not None:
             qs = qs.filter(month=month)
         return qs
 
     def list(self, request, *args, **kwargs):
         # Per-user views (regular user, or aggregator scoped to one user_id)
         # fall through to the standard serializer-driven response.
-        if not _user_can_aggregate(request.user) or request.query_params.get('user_id'):
+        if not _user_can_aggregate(request.user) or _int_query_param(request, 'user_id') is not None:
             return super().list(request, *args, **kwargs)
         qs = self.filter_queryset(self.get_queryset())
         annotations = {f: Sum(f) for f in self.aggregate_fields}
@@ -201,8 +221,8 @@ class HodAwareMonthlyTargetMixin:
         Model = self.model_class
 
         if _user_can_aggregate(request.user):
-            user_id = request.query_params.get('user_id')
-            if user_id:
+            user_id = _int_query_param(request, 'user_id')
+            if user_id is not None:
                 # Drill into a specific user (TED-464 individual toggle).
                 # Returns the real per-user row if it exists; null otherwise.
                 try:
@@ -319,8 +339,9 @@ class BaseEntryViewSet(viewsets.ModelViewSet):
         if not can_see_all:
             queryset = queryset.filter(Q(added_by=user) | Q(on_behalf_of=user))
 
-        user_filter = self.request.query_params.get('user_id')
-        if user_filter and can_see_all:
+        # Only "see all" viewers use user_id here; "own" users keep ignoring it.
+        user_filter = _int_query_param(self.request, 'user_id') if can_see_all else None
+        if user_filter is not None:
             # Filter to records where the target user is the effective owner.
             queryset = queryset.filter(
                 Q(on_behalf_of_id=user_filter)
